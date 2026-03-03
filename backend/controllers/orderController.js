@@ -1,5 +1,7 @@
 const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
+const { sendReson8Message } = require('../services/reson8Service');
+const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -207,7 +209,54 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
 
   await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, id]);
 
-  const [updated] = await pool.query('SELECT * FROM orders WHERE id = ?', [id]);
+  const [updated] = await pool.query(`
+    SELECT o.*, c.name as customer_name, c.phone as customer_phone,
+           c.vehicle_plate, c.vehicle_type, c.id as customer_id_ref
+    FROM orders o
+    LEFT JOIN customers c ON o.customer_id = c.id
+    WHERE o.id = ?
+  `, [id]);
+
+  // Send SMS notifications when order is marked as completed
+  if (status === 'completed' && updated.length > 0) {
+    const order = updated[0];
+    const rawPhone = order.customer_phone;
+    const formattedPhone = formatPhoneNumber(rawPhone);
+
+    if (formattedPhone) {
+      // Build feedback URL using existing utility
+      const feedbackUrl = buildFeedbackUrl({
+        vehicleType: order.vehicle_type || 'Saloon',
+        customerId: order.customer_id_ref,
+        plate: order.vehicle_plate,
+        orderId: order.id,
+      });
+
+      // Completion SMS
+      try {
+        await sendReson8Message({
+          to: formattedPhone,
+          message: 'Your service is completed. You may collect your vehicle. Thank you for choosing Sniper Cars Care.',
+          campaignName: 'ORDER_COMPLETED',
+        });
+      } catch (err) {
+        console.error('[SMS] Completion SMS failed:', err.message);
+      }
+
+      // Feedback SMS
+      try {
+        await sendReson8Message({
+          to: formattedPhone,
+          message: `Thank you for visiting Sniper Cars Care. Please provide your feedback: ${feedbackUrl}`,
+          campaignName: 'ORDER_FEEDBACK',
+        });
+      } catch (err) {
+        console.error('[SMS] Feedback SMS failed:', err.message);
+      }
+    } else {
+      console.warn(`[SMS] Skipping completion/feedback SMS for order ${id} – no valid phone number.`);
+    }
+  }
 
   res.json({ message: 'Order status updated successfully', order: updated[0] });
 });
@@ -238,10 +287,10 @@ const deleteOrder = asyncHandler(async (req, res) => {
 
     // Delete order items
     await connection.query('DELETE FROM order_items WHERE order_id = ?', [id]);
-    
+
     // Delete payments
     await connection.query('DELETE FROM payments WHERE order_id = ?', [id]);
-    
+
     // Delete order
     await connection.query('DELETE FROM orders WHERE id = ?', [id]);
 
