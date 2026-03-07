@@ -1,7 +1,7 @@
 const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
-const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
+const { formatPhoneNumber, buildFeedbackUrl, buildPaymentUrl } = require('../utils/customerLinkUtils');
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -224,37 +224,28 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     const formattedPhone = formatPhoneNumber(rawPhone);
 
     if (formattedPhone) {
-      // Build feedback URL using existing utility
-      const feedbackUrl = buildFeedbackUrl({
+      // Build payment URL for the customer to pay online
+      const paymentUrl = buildPaymentUrl({
         vehicleType: order.vehicle_type || 'Saloon',
-        customerId: order.customer_id_ref,
         plate: order.vehicle_plate,
         orderId: order.id,
       });
 
-      // Completion SMS
+      // Completion & Payment Request SMS
       try {
         await sendReson8Message({
           to: formattedPhone,
-          message: 'Your service is completed. You may collect your vehicle. Thank you for choosing Sniper Cars Care.',
-          campaignName: 'ORDER_COMPLETED',
+          message: `Your service is completed. You may collect your vehicle. Please complete your payment here: ${paymentUrl}`,
+          campaignName: 'ORDER_COMPLETED_PAYMENT',
         });
+        console.log(`[SMS] Completion & Payment SMS sent to ${formattedPhone} for order ${id}`);
       } catch (err) {
         console.error('[SMS] Completion SMS failed:', err.message);
       }
 
-      // Feedback SMS
-      try {
-        await sendReson8Message({
-          to: formattedPhone,
-          message: `Thank you for visiting Sniper Cars Care. Please provide your feedback: ${feedbackUrl}`,
-          campaignName: 'ORDER_FEEDBACK',
-        });
-      } catch (err) {
-        console.error('[SMS] Feedback SMS failed:', err.message);
-      }
+      // FEEDBACK SMS IS NOW SENT AFTER PAYMENT SUCCESS, NOT HERE
     } else {
-      console.warn(`[SMS] Skipping completion/feedback SMS for order ${id} – no valid phone number.`);
+      console.warn(`[SMS] Skipping completion SMS for order ${id} – no valid phone number.`);
     }
   }
 

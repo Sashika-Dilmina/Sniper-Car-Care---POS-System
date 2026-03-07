@@ -19,7 +19,7 @@ const Orders = () => {
       if (filter.payment_status) params.append('payment_status', filter.payment_status);
       if (filter.date) params.append('date', filter.date);
       if (filter.service_time) params.append('service_time', filter.service_time);
-      
+
       const response = await axios.get(`/api/orders?${params.toString()}`);
       setOrders(response.data.orders);
     } catch (error) {
@@ -132,83 +132,79 @@ const Orders = () => {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {orders.length > 0 ? (
-            orders.map((order) => {
-              const serviceTime = calculateServiceTime(order);
-              const serviceTimeColor = getServiceTimeColor(serviceTime);
-              const isCompleted = order.status === 'completed';
-              
-              return (
-              <tr 
-                key={order.id} 
-                className={`hover:bg-gray-50 ${
-                  isCompleted && serviceTimeColor === 'green' ? 'bg-green-50' : 
-                  isCompleted && serviceTimeColor === 'red' ? 'bg-red-50' : 
-                  ''
-                }`}
-              >
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    #{order.id}
-                    {order.source === 'customer_website' && (
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full" title="Customer Website Order">
-                        🌐
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">{order.customer_name || 'Walk-in'}</td>
-                <td className="px-6 py-4 whitespace-nowrap font-mono">{order.vehicle_plate || 'N/A'}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  Rs. {parseFloat(order.total).toLocaleString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {order.status === 'completed' ? (
-                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                      serviceTimeColor === 'green' 
-                        ? 'bg-green-500 text-white' 
-                        : 'bg-red-500 text-white'
-                    }`}>
-                      {formatServiceTime(serviceTime)}
-                    </span>
-                  ) : (
-                    <span className="px-3 py-1 text-xs rounded-full bg-gray-100 text-gray-600">
-                      {order.status === 'processing' ? 'In Progress' : 'N/A'}
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    order.status === 'completed' ? 'bg-green-100 text-green-800' :
-                    order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                    order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
-                    order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {order.payment_status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {new Date(order.created_at).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <Link
-                    to={`/orders/${order.id}`}
-                    className="text-primary-600 hover:underline"
+              orders.map((order) => {
+                const serviceTime = calculateServiceTime(order);
+                const serviceTimeColor = getServiceTimeColor(serviceTime);
+                const isCompleted = order.status === 'completed';
+
+                return (
+                  <tr
+                    key={order.id}
+                    className={`hover:bg-gray-50 ${isCompleted && serviceTimeColor === 'green' ? 'bg-green-50' :
+                        isCompleted && serviceTimeColor === 'red' ? 'bg-red-50' :
+                          ''
+                      }`}
                   >
-                    View
-                  </Link>
-                </td>
-              </tr>
-              );
-            })
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        #{order.id}
+                        {order.source === 'customer_website' && (
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full" title="Customer Website Order">
+                            🌐
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">{order.customer_name || 'Walk-in'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap font-mono">{order.vehicle_plate || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      AED {parseFloat(order.total).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {order.status === 'completed' ? (
+                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${serviceTimeColor === 'green'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-red-500 text-white'
+                          }`}>
+                          {formatServiceTime(serviceTime)}
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 text-xs rounded-full bg-gray-100 text-gray-600">
+                          {order.status === 'processing' ? 'In Progress' : 'N/A'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs rounded-full ${order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                            order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                        }`}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                          order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                        }`}>
+                        {order.payment_status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {new Date(order.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Link
+                        to={`/orders/${order.id}`}
+                        className="text-primary-600 hover:underline"
+                      >
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
                 <td colSpan="9" className="px-6 py-12 text-center">

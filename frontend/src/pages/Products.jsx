@@ -25,14 +25,14 @@ const Products = () => {
     // Check for low stock products and show alert
     const lowStockProducts = products.filter(product => product.stock <= 5 && product.stock > 0);
     const outOfStockProducts = products.filter(product => product.stock === 0);
-    
+
     if (lowStockProducts.length > 0) {
       toast.error(`⚠️ Low Stock Alert: ${lowStockProducts.length} product(s) have 5 or fewer items in stock!`, {
         duration: 6000,
         id: 'low-stock-alert'
       });
     }
-    
+
     if (outOfStockProducts.length > 0) {
       toast.error(`🚨 Out of Stock: ${outOfStockProducts.length} product(s) are out of stock!`, {
         duration: 6000,
@@ -54,19 +54,19 @@ const Products = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validate stock is not negative
     if (formData.stock < 0) {
       toast.error('Stock cannot be negative');
       return;
     }
-    
+
     // Validate price is not negative
     if (formData.price < 0) {
       toast.error('Price cannot be negative');
       return;
     }
-    
+
     try {
       if (editingProduct) {
         await axios.put(`/api/products/${editingProduct.id}`, formData);
@@ -106,7 +106,7 @@ const Products = () => {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this product?')) return;
-    
+
     try {
       await axios.delete(`/api/products/${id}`);
       toast.success('Product deleted successfully');
@@ -119,7 +119,7 @@ const Products = () => {
   const exportToExcel = () => {
     try {
       // Create CSV content from filtered products
-      const headers = ['ID', 'Name', 'Category', 'Price (Rs.)', 'Stock', 'Description'];
+      const headers = ['ID', 'Name', 'Category', 'Price (AED)', 'Stock', 'Description'];
       const csvContent = [
         headers.join(','),
         ...filteredProducts.map(product => [
@@ -142,7 +142,7 @@ const Products = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       toast.success('Products exported to CSV successfully');
     } catch (error) {
       toast.error('Failed to export products');
@@ -265,79 +265,78 @@ const Products = () => {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filteredProducts.length > 0 ? (
-            filteredProducts.map((product) => (
-              <tr key={product.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {product.image_url ? (
-                    <img 
-                      src={product.image_url} 
-                      alt={product.name}
-                      className="w-16 h-16 object-cover rounded-lg border border-gray-200"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'https://via.placeholder.com/64?text=No+Image';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+              filteredProducts.map((product) => (
+                <tr key={product.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {product.image_url ? (
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = 'https://via.placeholder.com/64?text=No+Image';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div>
+                      <p className="font-semibold">{product.name}</p>
+                      {product.description && (
+                        <p className="text-sm text-gray-500">{product.description}</p>
+                      )}
                     </div>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div>
-                    <p className="font-semibold">{product.name}</p>
-                    {product.description && (
-                      <p className="text-sm text-gray-500">{product.description}</p>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                    {product.category}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  Rs. {parseFloat(product.price).toLocaleString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                      product.stock > 10 ? 'bg-green-100 text-green-800' :
-                      product.stock > 5 ? 'bg-yellow-100 text-yellow-800' :
-                      product.stock > 0 ? 'bg-red-100 text-red-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {product.stock}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                      {product.category}
                     </span>
-                    {product.stock <= 5 && product.stock > 0 && (
-                      <svg className="w-4 h-4 text-red-500 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                    )}
-                    {product.stock === 0 && (
-                      <span className="text-xs text-red-600 font-semibold">OUT</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap space-x-2">
-                  <button
-                    onClick={() => handleEdit(product)}
-                    className="text-primary-600 hover:underline"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(product.id)}
-                    className="text-red-600 hover:underline"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    AED {parseFloat(product.price).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${product.stock > 10 ? 'bg-green-100 text-green-800' :
+                          product.stock > 5 ? 'bg-yellow-100 text-yellow-800' :
+                            product.stock > 0 ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                        }`}>
+                        {product.stock}
+                      </span>
+                      {product.stock <= 5 && product.stock > 0 && (
+                        <svg className="w-4 h-4 text-red-500 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                      {product.stock === 0 && (
+                        <span className="text-xs text-red-600 font-semibold">OUT</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap space-x-2">
+                    <button
+                      onClick={() => handleEdit(product)}
+                      className="text-primary-600 hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(product.id)}
+                      className="text-red-600 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))
             ) : (
               <tr>
                 <td colSpan="6" className="px-6 py-12 text-center">
@@ -402,8 +401,8 @@ const Products = () => {
                 />
                 {formData.image_url && (
                   <div className="mt-2">
-                    <img 
-                      src={formData.image_url} 
+                    <img
+                      src={formData.image_url}
                       alt="Preview"
                       className="w-24 h-24 object-cover rounded-lg border border-gray-200"
                       onError={(e) => {

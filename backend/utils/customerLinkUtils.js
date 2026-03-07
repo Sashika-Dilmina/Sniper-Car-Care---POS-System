@@ -46,6 +46,27 @@ function buildFeedbackUrl({ vehicleType = 'Saloon', customerId, plate, orderId }
   return params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
 }
 
+function buildPaymentUrl({ vehicleType = 'Saloon', plate, orderId }) {
+  const saloonBase =
+    process.env.CUSTOMER_WEBSITE_SALOON_URL ||
+    process.env.CUSTOMER_WEBSITE_URL ||
+    'http://localhost:5174';
+
+  const fourByFourBase =
+    process.env.CUSTOMER_WEBSITE_4X4_URL ||
+    process.env.CUSTOMER_WEBSITE_URL_4X4 ||
+    process.env.CUSTOMER_WEBSITE_URL ||
+    'http://localhost:4000';
+
+  const baseUrl = (isFourByFour(vehicleType) ? fourByFourBase : saloonBase) + '/payment';
+
+  const params = new URLSearchParams();
+  if (plate) params.append('plate', plate);
+  if (orderId) params.append('order_id', orderId);
+
+  return `${baseUrl}?${params.toString()}`;
+}
+
 function formatPhoneNumber(rawPhone) {
   if (!rawPhone) return null;
 
@@ -74,6 +95,7 @@ function formatPhoneNumber(rawPhone) {
 module.exports = {
   buildCustomerWebsiteUrl,
   buildFeedbackUrl,
+  buildPaymentUrl,
   formatPhoneNumber,
   isFourByFour,
 };

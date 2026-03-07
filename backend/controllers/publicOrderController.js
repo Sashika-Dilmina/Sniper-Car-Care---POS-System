@@ -1,6 +1,8 @@
 const pool = require('../config/database');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const asyncHandler = require('../utils/asyncHandler');
+const { sendReson8Message } = require('../services/reson8Service');
+const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
 
 // @desc    Create order from customer website
 // @route   POST /api/public/orders
@@ -23,7 +25,7 @@ const createOrder = asyncHandler(async (req, res) => {
   try {
     // If vehicle_plate provided but no customer_id, try to find or create customer
     let finalCustomerId = customer_id;
-    
+
     if (!finalCustomerId && vehicle_plate) {
       const [customers] = await connection.query(
         'SELECT id FROM customers WHERE vehicle_plate = ?',
@@ -41,7 +43,7 @@ const createOrder = asyncHandler(async (req, res) => {
     if (notes && (notes.toLowerCase().includes('4x4') || notes.toLowerCase().includes('(4x4)'))) {
       vehicleType = '4x4';
     }
-    
+
     // If customer already exists, use their vehicle type
     if (finalCustomerId) {
       const [existingCustomer] = await connection.query(
@@ -52,14 +54,14 @@ const createOrder = asyncHandler(async (req, res) => {
         vehicleType = existingCustomer[0].vehicle_type;
       }
     }
-    
+
     if (!finalCustomerId && customer_name && customer_phone && vehicle_plate) {
       try {
-      const [newCustomer] = await connection.query(
+        const [newCustomer] = await connection.query(
           'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type) VALUES (?, ?, ?, ?)',
           [customer_name, customer_phone, vehicle_plate, vehicleType]
-      );
-      finalCustomerId = newCustomer.insertId;
+        );
+        finalCustomerId = newCustomer.insertId;
       } catch (error) {
         // If customer already exists (duplicate vehicle_plate), try to fetch it
         if (error.code === 'ER_DUP_ENTRY') {
@@ -87,11 +89,11 @@ const createOrder = asyncHandler(async (req, res) => {
     const [orderResult] = await connection.query(
       'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [
-        finalCustomerId || null, 
-        total, 
-        0, 
-        status || 'pending', 
-        payment_status || 'pending', 
+        finalCustomerId || null,
+        total,
+        0,
+        status || 'pending',
+        payment_status || 'pending',
         source || 'customer_website',
         orderNotes || null
       ]
@@ -101,28 +103,28 @@ const createOrder = asyncHandler(async (req, res) => {
 
     // Create order items and update stock (only if items provided)
     if (items && items.length > 0) {
-    for (let item of items) {
-      await connection.query(
-        'INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)',
-        [orderId, item.product_id, item.quantity, item.price]
-      );
+      for (let item of items) {
+        await connection.query(
+          'INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)',
+          [orderId, item.product_id, item.quantity, item.price]
+        );
 
-      // Update product stock
-      await connection.query(
-        'UPDATE products SET stock = stock - ? WHERE id = ?',
-        [item.quantity, item.product_id]
-      );
+        // Update product stock
+        await connection.query(
+          'UPDATE products SET stock = stock - ? WHERE id = ?',
+          [item.quantity, item.product_id]
+        );
       }
     }
 
     await connection.commit();
-    
+
     const [newOrder] = await connection.query('SELECT * FROM orders WHERE id = ?', [orderId]);
     connection.release();
 
-    res.status(201).json({ 
-      message: 'Order created successfully', 
-      order: newOrder[0] 
+    res.status(201).json({
+      message: 'Order created successfully',
+      order: newOrder[0]
     });
   } catch (error) {
     await connection.rollback();
@@ -157,7 +159,7 @@ const getOrder = asyncHandler(async (req, res) => {
     [id]
   );
 
-  res.json({ 
+  res.json({
     order: {
       ...order,
       items
@@ -192,7 +194,7 @@ const createPaymentIntent = asyncHandler(async (req, res) => {
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100),
-      currency: 'pkr',
+      currency: 'aed',
       payment_method_types: payment_method ? [payment_method] : ['card'],
       metadata: {
         order_id: order_id.toString()
@@ -237,6 +239,38 @@ const confirmPayment = asyncHandler(async (req, res) => {
           'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
           ['paid', 'processing', order_id]
         );
+
+        // Send Feedback SMS
+        const [orderData] = await connection.query(`
+          SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
+          FROM orders o
+          JOIN customers c ON o.customer_id = c.id
+          WHERE o.id = ?
+        `, [order_id]);
+
+        if (orderData.length > 0) {
+          const order = orderData[0];
+          const phone = formatPhoneNumber(order.phone);
+          const feedbackUrl = buildFeedbackUrl({
+            vehicleType: order.vehicle_type || 'Saloon',
+            customerId: order.customer_id,
+            plate: order.vehicle_plate,
+            orderId: order.id
+          });
+
+          if (phone) {
+            try {
+              await sendReson8Message({
+                to: phone,
+                message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
+                campaignName: 'PUBLIC_PAYMENT_FEEDBACK'
+              });
+              console.log(`[SMS] Feedback SMS sent to ${phone} after public payment for order ${order_id}`);
+            } catch (err) {
+              console.error('[SMS] Feedback SMS failed:', err.message);
+            }
+          }
+        }
 
         await connection.commit();
         connection.release();

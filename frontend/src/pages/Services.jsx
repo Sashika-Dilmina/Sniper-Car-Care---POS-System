@@ -23,7 +23,7 @@ const Services = () => {
     try {
       const params = new URLSearchParams();
       if (filter.vehicle_type) params.append('vehicle_type', filter.vehicle_type);
-      
+
       const response = await axios.get(`/api/services?${params.toString()}`);
       setServices(response.data.services);
     } catch (error) {
@@ -112,17 +112,16 @@ const Services = () => {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  Rs. {parseFloat(service.price).toLocaleString()}
+                  AED {parseFloat(service.price).toLocaleString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <select
                     value={service.status}
                     onChange={(e) => handleStatusUpdate(service.id, e.target.value)}
-                    className={`px-2 py-1 text-xs rounded-full border ${
-                      service.status === 'completed' ? 'bg-green-100 text-green-800' :
-                      service.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}
+                    className={`px-2 py-1 text-xs rounded-full border ${service.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        service.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                      }`}
                   >
                     <option value="in_progress">In Progress</option>
                     <option value="completed">Completed</option>
