@@ -1,6 +1,8 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
+const { sendReson8Message } = require('../services/reson8Service');
+const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
 
 // @desc    Create payment intent
 // @route   POST /api/payments/create-intent
@@ -15,7 +17,7 @@ const createPaymentIntent = asyncHandler(async (req, res) => {
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert to cents
-      currency: 'pkr',
+      currency: 'aed',
       payment_method_types: payment_method ? [payment_method] : ['card'],
       metadata: {
         order_id: order_id.toString()
@@ -76,6 +78,40 @@ const confirmPayment = asyncHandler(async (req, res) => {
             'UPDATE orders SET payment_status = ? WHERE id = ?',
             [newPaymentStatus, order_id]
           );
+
+          // If payment status becomes "paid", send Feedback SMS
+          if (newPaymentStatus === 'paid') {
+            const [orderData] = await connection.query(`
+              SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
+              FROM orders o
+              JOIN customers c ON o.customer_id = c.id
+              WHERE o.id = ?
+            `, [order_id]);
+
+            if (orderData.length > 0) {
+              const order = orderData[0];
+              const phone = formatPhoneNumber(order.phone);
+              const feedbackUrl = buildFeedbackUrl({
+                vehicleType: order.vehicle_type || 'Saloon',
+                customerId: order.customer_id,
+                plate: order.vehicle_plate,
+                orderId: order.id
+              });
+
+              if (phone) {
+                try {
+                  await sendReson8Message({
+                    to: phone,
+                    message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
+                    campaignName: 'PAYMENT_FEEDBACK'
+                  });
+                  console.log(`[SMS] Feedback SMS sent to ${phone} after payment for order ${order_id}`);
+                } catch (err) {
+                  console.error('[SMS] Feedback SMS failed:', err.message);
+                }
+              }
+            }
+          }
         }
 
         await connection.commit();
@@ -152,6 +188,40 @@ const processManualPayment = asyncHandler(async (req, res) => {
         'UPDATE orders SET payment_status = ? WHERE id = ?',
         [newPaymentStatus, order_id]
       );
+
+      // If payment status becomes "paid", send Feedback SMS
+      if (newPaymentStatus === 'paid') {
+        const [orderData] = await connection.query(`
+          SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
+          FROM orders o
+          JOIN customers c ON o.customer_id = c.id
+          WHERE o.id = ?
+        `, [order_id]);
+
+        if (orderData.length > 0) {
+          const order = orderData[0];
+          const phone = formatPhoneNumber(order.phone);
+          const feedbackUrl = buildFeedbackUrl({
+            vehicleType: order.vehicle_type || 'Saloon',
+            customerId: order.customer_id,
+            plate: order.vehicle_plate,
+            orderId: order.id
+          });
+
+          if (phone) {
+            try {
+              await sendReson8Message({
+                to: phone,
+                message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
+                campaignName: 'PAYMENT_FEEDBACK'
+              });
+              console.log(`[SMS] Feedback SMS sent to ${phone} after manual payment for order ${order_id}`);
+            } catch (err) {
+              console.error('[SMS] Feedback SMS failed:', err.message);
+            }
+          }
+        }
+      }
     }
 
     await connection.commit();

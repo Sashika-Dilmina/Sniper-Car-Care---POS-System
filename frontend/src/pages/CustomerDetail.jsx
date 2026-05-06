@@ -56,8 +56,8 @@ const CustomerDetail = () => {
               {isEligibleForFree ? '🎉 FREE Service Available!' : '💛 Loyalty Rewards'}
             </h2>
             <p className="text-lg opacity-90">
-              {isEligibleForFree 
-                ? 'Customer has earned a free service!' 
+              {isEligibleForFree
+                ? 'Customer has earned a free service!'
                 : `${servicesCompleted} of 4 services completed`}
             </p>
           </div>
@@ -66,7 +66,7 @@ const CustomerDetail = () => {
             <div className="text-sm opacity-90">Loyalty Points</div>
           </div>
         </div>
-        
+
         {!isEligibleForFree && (
           <div className="mt-4">
             <div className="flex justify-between text-sm mb-1">
@@ -74,7 +74,7 @@ const CustomerDetail = () => {
               <span>{pointsToFreeService} points needed</span>
             </div>
             <div className="w-full bg-white bg-opacity-30 rounded-full h-3">
-              <div 
+              <div
                 className="bg-white h-3 rounded-full transition-all duration-500"
                 style={{ width: `${progressPercentage}%` }}
               ></div>
@@ -87,7 +87,7 @@ const CustomerDetail = () => {
 
         {isEligibleForFree && (
           <div className="mt-4 flex gap-3">
-            <button 
+            <button
               className="px-6 py-2 bg-white text-green-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
               onClick={() => {
                 toast.info('Redeem free service feature - Coming soon!');
@@ -158,12 +158,11 @@ const CustomerDetail = () => {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">Rs. {parseFloat(order.total).toLocaleString()}</p>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
-                        order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
+                      <p className="font-semibold">AED {parseFloat(order.total).toLocaleString()}</p>
+                      <span className={`px-2 py-1 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                          order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                        }`}>
                         {order.payment_status}
                       </span>
                     </div>

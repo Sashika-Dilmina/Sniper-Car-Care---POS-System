@@ -1,5 +1,7 @@
 const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
+const { sendReson8Message } = require('../services/reson8Service');
+const { formatPhoneNumber, buildFeedbackUrl, buildPaymentUrl } = require('../utils/customerLinkUtils');
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -207,7 +209,45 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
 
   await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, id]);
 
-  const [updated] = await pool.query('SELECT * FROM orders WHERE id = ?', [id]);
+  const [updated] = await pool.query(`
+    SELECT o.*, c.name as customer_name, c.phone as customer_phone,
+           c.vehicle_plate, c.vehicle_type, c.id as customer_id_ref
+    FROM orders o
+    LEFT JOIN customers c ON o.customer_id = c.id
+    WHERE o.id = ?
+  `, [id]);
+
+  // Send SMS notifications when order is marked as completed
+  if (status === 'completed' && updated.length > 0) {
+    const order = updated[0];
+    const rawPhone = order.customer_phone;
+    const formattedPhone = formatPhoneNumber(rawPhone);
+
+    if (formattedPhone) {
+      // Build payment URL for the customer to pay online
+      const paymentUrl = buildPaymentUrl({
+        vehicleType: order.vehicle_type || 'Saloon',
+        plate: order.vehicle_plate,
+        orderId: order.id,
+      });
+
+      // Completion & Payment Request SMS
+      try {
+        await sendReson8Message({
+          to: formattedPhone,
+          message: `Your service is completed. You may collect your vehicle. Please complete your payment here: ${paymentUrl}`,
+          campaignName: 'ORDER_COMPLETED_PAYMENT',
+        });
+        console.log(`[SMS] Completion & Payment SMS sent to ${formattedPhone} for order ${id}`);
+      } catch (err) {
+        console.error('[SMS] Completion SMS failed:', err.message);
+      }
+
+      // FEEDBACK SMS IS NOW SENT AFTER PAYMENT SUCCESS, NOT HERE
+    } else {
+      console.warn(`[SMS] Skipping completion SMS for order ${id} – no valid phone number.`);
+    }
+  }
 
   res.json({ message: 'Order status updated successfully', order: updated[0] });
 });
@@ -238,10 +278,10 @@ const deleteOrder = asyncHandler(async (req, res) => {
 
     // Delete order items
     await connection.query('DELETE FROM order_items WHERE order_id = ?', [id]);
-    
+
     // Delete payments
     await connection.query('DELETE FROM payments WHERE order_id = ?', [id]);
-    
+
     // Delete order
     await connection.query('DELETE FROM orders WHERE id = ?', [id]);
 

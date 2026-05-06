@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 
 const Reports = () => {
   const [activeTab, setActiveTab] = useState('daily');
-  
+
   // Daily Summary State
   const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
   const [dailyReport, setDailyReport] = useState(null);
@@ -280,11 +280,10 @@ const Reports = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 rounded-lg font-medium transition ${
-                  activeTab === tab.id
+                className={`px-4 py-2 rounded-lg font-medium transition ${activeTab === tab.id
                     ? 'bg-primary-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>
@@ -336,7 +335,7 @@ const Reports = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Revenue</p>
                   <p className="text-2xl font-bold text-primary-600">
-                    Rs. {parseFloat(dailyReport.orders?.total_revenue || 0).toLocaleString()}
+                    AED {parseFloat(dailyReport.orders?.total_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
@@ -346,7 +345,7 @@ const Reports = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Services Revenue</p>
                   <p className="text-2xl font-bold text-green-600">
-                    Rs. {parseFloat(dailyReport.services?.services_revenue || 0).toLocaleString()}
+                    AED {parseFloat(dailyReport.services?.services_revenue || 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -369,7 +368,7 @@ const Reports = () => {
                             <td className="px-4 py-2 capitalize">{pm.method}</td>
                             <td className="px-4 py-2 text-right">{pm.count}</td>
                             <td className="px-4 py-2 text-right">
-                              Rs. {parseFloat(pm.total_amount || 0).toLocaleString()}
+                              AED {parseFloat(pm.total_amount || 0).toLocaleString()}
                             </td>
                           </tr>
                         ))}
@@ -399,7 +398,7 @@ const Reports = () => {
                             <td className="px-4 py-2">{product.category}</td>
                             <td className="px-4 py-2 text-right">{product.quantity_sold}</td>
                             <td className="px-4 py-2 text-right">
-                              Rs. {parseFloat(product.revenue || 0).toLocaleString()}
+                              AED {parseFloat(product.revenue || 0).toLocaleString()}
                             </td>
                           </tr>
                         ))}
@@ -436,8 +435,8 @@ const Reports = () => {
                 onChange={(e) => setMonthlyMonth(parseInt(e.target.value))}
                 className="w-32 px-4 py-2 border rounded-lg"
               >
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                  <option key={m} value={m}>{new Date(2000, m-1).toLocaleString('default', { month: 'long' })}</option>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                  <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString('default', { month: 'long' })}</option>
                 ))}
               </select>
             </div>
@@ -466,7 +465,7 @@ const Reports = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Revenue</p>
                   <p className="text-2xl font-bold text-primary-600">
-                    Rs. {parseFloat(monthlyReport.totals?.total_revenue || 0).toLocaleString()}
+                    AED {parseFloat(monthlyReport.totals?.total_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
@@ -476,7 +475,7 @@ const Reports = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Services Revenue</p>
                   <p className="text-2xl font-bold text-green-600">
-                    Rs. {parseFloat(monthlyReport.totals?.total_services_revenue || 0).toLocaleString()}
+                    AED {parseFloat(monthlyReport.totals?.total_services_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
@@ -509,7 +508,7 @@ const Reports = () => {
                             <td className="px-4 py-2 text-right">{day.orders_count}</td>
                             <td className="px-4 py-2 text-right">{day.paid_orders}</td>
                             <td className="px-4 py-2 text-right">
-                              Rs. {parseFloat(day.daily_revenue || 0).toLocaleString()}
+                              AED {parseFloat(day.daily_revenue || 0).toLocaleString()}
                             </td>
                           </tr>
                         ))}
@@ -593,7 +592,7 @@ const Reports = () => {
                             <td className="px-4 py-2 text-right">{pm.pending_count}</td>
                             <td className="px-4 py-2 text-right">{pm.failed_count}</td>
                             <td className="px-4 py-2 text-right font-semibold">
-                              Rs. {parseFloat(pm.total_amount || 0).toLocaleString()}
+                              AED {parseFloat(pm.total_amount || 0).toLocaleString()}
                             </td>
                           </tr>
                         ))}
@@ -676,16 +675,16 @@ const Reports = () => {
                       <td className="px-4 py-2 text-right">{customer.total_orders}</td>
                       <td className="px-4 py-2 text-right">{customer.total_services}</td>
                       <td className="px-4 py-2 text-right font-semibold">
-                        Rs. {parseFloat(customer.total_spent || 0).toLocaleString()}
+                        AED {parseFloat(customer.total_spent || 0).toLocaleString()}
                       </td>
                       <td className="px-4 py-2 text-right">
-                        Rs. {parseFloat(customer.services_spent || 0).toLocaleString()}
+                        AED {parseFloat(customer.services_spent || 0).toLocaleString()}
                       </td>
                       <td className="px-4 py-2 text-right text-green-600">
-                        Rs. {parseFloat(customer.paid_amount || 0).toLocaleString()}
+                        AED {parseFloat(customer.paid_amount || 0).toLocaleString()}
                       </td>
                       <td className="px-4 py-2 text-right text-orange-600">
-                        Rs. {parseFloat(customer.pending_amount || 0).toLocaleString()}
+                        AED {parseFloat(customer.pending_amount || 0).toLocaleString()}
                       </td>
                     </tr>
                   ))}
@@ -764,7 +763,7 @@ const Reports = () => {
                       <td className="px-4 py-2 text-right">{supplier.orders_involved}</td>
                       <td className="px-4 py-2 text-right">{supplier.items_sold || 0}</td>
                       <td className="px-4 py-2 text-right font-semibold text-primary-600">
-                        Rs. {parseFloat(supplier.total_revenue_from_products || 0).toLocaleString()}
+                        AED {parseFloat(supplier.total_revenue_from_products || 0).toLocaleString()}
                       </td>
                     </tr>
                   ))}
@@ -830,7 +829,7 @@ const Reports = () => {
                         <p className="text-sm text-gray-600">{cat.category}</p>
                         <p className="text-xl font-bold">{cat.product_count} Products</p>
                         <p className="text-lg text-primary-600">
-                          Rs. {parseFloat(cat.category_revenue || 0).toLocaleString()}
+                          AED {parseFloat(cat.category_revenue || 0).toLocaleString()}
                         </p>
                         <p className="text-sm text-gray-500">{cat.total_quantity_sold} items sold</p>
                       </div>
@@ -864,10 +863,10 @@ const Reports = () => {
                             <td className="px-4 py-2 text-right">{item.quantity_sold}</td>
                             <td className="px-4 py-2 text-right">{item.order_count}</td>
                             <td className="px-4 py-2 text-right">
-                              Rs. {parseFloat(item.average_price || 0).toFixed(2)}
+                              AED {parseFloat(item.average_price || 0).toFixed(2)}
                             </td>
                             <td className="px-4 py-2 text-right font-semibold text-primary-600">
-                              Rs. {parseFloat(item.total_revenue || 0).toLocaleString()}
+                              AED {parseFloat(item.total_revenue || 0).toLocaleString()}
                             </td>
                           </tr>
                         ))}

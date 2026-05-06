@@ -15,7 +15,7 @@ const PaymentForm = ({ orderId, amount, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!stripe || !elements) return;
 
     setLoading(true);
@@ -96,7 +96,7 @@ const PaymentForm = ({ orderId, amount, onSuccess }) => {
         disabled={loading || !stripe}
         className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
       >
-        {loading ? 'Processing...' : `Pay Rs. ${parseFloat(amount).toLocaleString()}`}
+        {loading ? 'Processing...' : `Pay AED {parseFloat(amount).toLocaleString()}`}
       </button>
     </form>
   );
@@ -181,31 +181,29 @@ const OrderDetail = () => {
             <div>
               <p className="text-sm text-gray-600">Total Amount</p>
               <p className="text-2xl font-bold text-primary-600">
-                Rs. {parseFloat(order.total).toLocaleString()}
+                AED {parseFloat(order.total).toLocaleString()}
               </p>
             </div>
             {order.discount > 0 && (
               <div>
                 <p className="text-sm text-gray-600">Discount</p>
-                <p className="text-lg">Rs. {parseFloat(order.discount).toLocaleString()}</p>
+                <p className="text-lg">AED {parseFloat(order.discount).toLocaleString()}</p>
               </div>
             )}
             <div>
               <p className="text-sm text-gray-600">Payment Status</p>
-              <span className={`px-3 py-1 text-sm rounded-full ${
-                order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+              <span className={`px-3 py-1 text-sm rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
                 order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-red-100 text-red-800'
-              }`}>
+                  'bg-red-100 text-red-800'
+                }`}>
                 {order.payment_status}
               </span>
             </div>
             {order.source && (
               <div>
                 <p className="text-sm text-gray-600">Order Source</p>
-                <span className={`px-3 py-1 text-sm rounded-full ${
-                  order.source === 'customer_website' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-                }`}>
+                <span className={`px-3 py-1 text-sm rounded-full ${order.source === 'customer_website' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                  }`}>
                   {order.source === 'customer_website' ? '🌐 Customer Website' : '🖥️ POS System'}
                 </span>
               </div>
@@ -231,14 +229,14 @@ const OrderDetail = () => {
                   <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
                 </div>
                 <p className="font-semibold">
-                  Rs. {parseFloat(item.price * item.quantity).toLocaleString()}
+                  AED {parseFloat(item.price * item.quantity).toLocaleString()}
                 </p>
               </div>
             ))}
             <div className="pt-3 border-t">
               <div className="flex justify-between font-bold text-lg">
                 <span>Total:</span>
-                <span>Rs. {parseFloat(order.total).toLocaleString()}</span>
+                <span>AED {parseFloat(order.total).toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -246,30 +244,67 @@ const OrderDetail = () => {
       </div>
 
       {order.payment_status !== 'paid' && remainingAmount > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-bold mb-4">Payment</h2>
-          <p className="text-gray-600 mb-4">
-            Remaining Amount: <span className="font-bold text-lg">Rs. {remainingAmount.toLocaleString()}</span>
+        <div className="bg-white p-6 rounded-lg shadow border-2 border-primary-500">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <span className="text-2xl">💳</span> Customer Payment Required
+          </h2>
+          <p className="text-gray-700 mb-6">
+            The remaining balance is <span className="font-bold text-lg text-primary-600">AED {remainingAmount.toLocaleString()}</span>.
+            {order.status === 'completed' ? (
+              <span className="block mt-2 font-medium text-green-600">
+                ✅ A payment link has been sent to the customer via SMS.
+              </span>
+            ) : (
+              <span className="block mt-2 text-amber-600">
+                ℹ️ Once you mark the order as <b>Completed</b>, a payment link will be sent to the customer automatically.
+              </span>
+            )}
           </p>
-          {showPayment ? (
-            <Elements stripe={stripePromise}>
-              <PaymentForm
-                orderId={order.id}
-                amount={remainingAmount}
-                onSuccess={() => {
-                  setShowPayment(false);
-                  fetchOrder();
-                }}
-              />
-            </Elements>
-          ) : (
-            <button
-              onClick={() => setShowPayment(true)}
-              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-            >
-              Process Payment
-            </button>
-          )}
+
+          <div className="flex gap-4">
+            {showPayment ? (
+              <div className="w-full bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <h3 className="font-semibold mb-3">Record Manual Payment</h3>
+                <div className="flex gap-4 items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Method</label>
+                    <select id="manual_method" className="w-full p-2 border rounded-lg bg-white">
+                      <option value="cash">Cash</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const method = document.getElementById('manual_method').value;
+                      try {
+                        await axios.post('/api/payments/manual', {
+                          order_id: order.id,
+                          amount: remainingAmount,
+                          method: method
+                        });
+                        toast.success('Payment recorded successfully');
+                        setShowPayment(false);
+                        fetchOrder();
+                      } catch (err) {
+                        toast.error('Failed to record payment');
+                      }
+                    }}
+                    className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700 transition"
+                  >
+                    Confirm Amount: AED {remainingAmount.toLocaleString()}
+                  </button>
+                  <button onClick={() => setShowPayment(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowPayment(true)}
+                className="px-6 py-3 border-2 border-primary-600 text-primary-600 font-bold rounded-full hover:bg-primary-50 transition flex items-center gap-2"
+              >
+                Record Cash/Manual Payment
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -286,11 +321,10 @@ const OrderDetail = () => {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold">Rs. {parseFloat(payment.amount).toLocaleString()}</p>
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    payment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                  <p className="font-semibold">AED {parseFloat(payment.amount).toLocaleString()}</p>
+                  <span className={`px-2 py-1 text-xs rounded-full ${payment.status === 'completed' ? 'bg-green-100 text-green-800' :
                     'bg-red-100 text-red-800'
-                  }`}>
+                    }`}>
                     {payment.status}
                   </span>
                 </div>

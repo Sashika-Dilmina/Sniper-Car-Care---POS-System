@@ -112,7 +112,7 @@ const products = [
   {
     name: 'Trail-Grade Cabin Pods',
     description: 'Long-lasting fragrance capsules that clip onto vents and refresh the cabin after dusty desert runs.',
-    price: '$12',
+    price: '12 AED',
     accent: 'Best Seller',
     art: (props) => (
       <svg viewBox="0 0 320 220" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
@@ -146,7 +146,7 @@ const products = [
   {
     name: 'Armor Seat Cover Duo',
     description: 'Form-fitting neoprene covers shrug off mud, sweat, and seawater while keeping the cabin cool and breathable.',
-    price: '$89',
+    price: '89 AED',
     accent: 'Trail Ready',
     art: (props) => (
       <svg viewBox="0 0 320 220" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
@@ -178,7 +178,7 @@ const products = [
   {
     name: 'Recovery Mat Bundle',
     description: 'Laser-cut mats with raised edges trap mud, sand, and slush before it reaches the carpet.',
-    price: '$129',
+    price: '129 AED',
     accent: 'Limited Drop',
     art: (props) => (
       <svg viewBox="0 0 320 220" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
@@ -220,13 +220,6 @@ const LandingPage = () => {
     vehicle_plate: '',
     notes: ''
   });
-  const [lastOrderId, setLastOrderId] = useState(null);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [feedbackForm, setFeedbackForm] = useState({
-    rating: 0,
-    comment: ''
-  });
-  const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
   const vehiclePlate = searchParams.get('plate') || '';
 
@@ -234,7 +227,7 @@ const LandingPage = () => {
   useEffect(() => {
     const fetchCustomerInfo = async () => {
       if (!vehiclePlate) return;
-      
+
       try {
         const response = await axios.get(`/api/public/customer/by-plate?plate=${vehiclePlate}`);
         if (response.data.customer) {
@@ -254,56 +247,28 @@ const LandingPage = () => {
     fetchCustomerInfo();
   }, [vehiclePlate]);
 
-  const handleServiceClick = (service) => {
-    setSelectedService(service);
-    setShowBookingModal(true);
-    // Pre-fill form if customer info exists
-    if (customerInfo) {
-      setBookingForm({
-        name: customerInfo.name || '',
-        phone: customerInfo.phone || '',
-        vehicle_plate: vehiclePlate || customerInfo.vehicle_plate || '',
-        notes: ''
-      });
-    }
-  };
-
-  const handleBookingSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!selectedService) return;
-
-    if (!bookingForm.name || !bookingForm.phone) {
-      toast.error('Please fill in your name and phone number');
-      return;
-    }
-
+  const submitBooking = async (service, form) => {
     try {
-      // Extract price from selectedService.price (format: "20 AED" or "Rs. 15,000")
-      const priceMatch = selectedService.price.match(/[\d,]+/);
+      // Extract price from service.price (format: "20 AED" or "Rs. 15,000")
+      const priceMatch = service.price.match(/[\d,]+/);
       const servicePrice = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
 
       // Create order with service details
       const orderData = {
         customer_id: customerInfo?.id || null,
-        customer_name: bookingForm.name,
-        customer_phone: bookingForm.phone,
-        vehicle_plate: bookingForm.vehicle_plate || null,
+        customer_name: form.name,
+        customer_phone: form.phone,
+        vehicle_plate: form.vehicle_plate || null,
         items: [], // Empty items array since we're booking a service, not a product
         total: servicePrice,
         source: 'customer_website',
         status: 'pending',
         payment_status: 'pending',
-        notes: bookingForm.notes || `Booked via customer website (4x4) - ${selectedService.name}`
+        notes: form.notes || `One-Tap Booking via Website (4x4) - ${service.name}`
       };
 
-      const response = await axios.post('/api/public/orders', orderData);
-      
-      // Store order ID for feedback linking
-      if (response.data?.order?.id) {
-        setLastOrderId(response.data.order.id);
-      }
-      
+      await axios.post('/api/public/orders', orderData);
+
       toast.success('Service booked successfully! We will contact you soon.');
       setShowBookingModal(false);
       setSelectedService(null);
@@ -313,53 +278,56 @@ const LandingPage = () => {
         vehicle_plate: '',
         notes: ''
       });
-      
-      // Show feedback modal after successful booking
-      setTimeout(() => {
-        setShowFeedbackModal(true);
-      }, 500);
     } catch (error) {
       console.error('Booking error:', error);
       toast.error(error.response?.data?.message || 'Failed to book service. Please try again.');
     }
   };
 
-  const handleFeedbackSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!feedbackForm.rating || feedbackForm.rating === 0) {
-      toast.error('Please select a rating');
+  const handleServiceClick = (service) => {
+    // If we have customer info from the plate, do ONE-TAP BOOKING
+    if (customerInfo) {
+      const autoForm = {
+        name: customerInfo.name || 'Existing Customer',
+        phone: customerInfo.phone || '',
+        vehicle_plate: vehiclePlate || customerInfo.vehicle_plate || '',
+        notes: `Quick Book via Plate Link (4x4): ${vehiclePlate}`
+      };
+
+      // Show a loading toast for immediate feedback
+      const loadingToast = toast.loading('Booking your service...');
+
+      submitBooking(service, autoForm).finally(() => {
+        toast.dismiss(loadingToast);
+      });
       return;
     }
 
-    setSubmittingFeedback(true);
-    try {
-      const feedbackData = {
-        customer_id: customerInfo?.id || null,
-        customer_name: customerInfo?.name || bookingForm.name || null,
-        customer_phone: customerInfo?.phone || bookingForm.phone || null,
-        order_id: lastOrderId || null,
-        service_id: null,
-        rating: feedbackForm.rating,
-        comment: feedbackForm.comment || null
-      };
-
-      await axios.post('/api/feedback', feedbackData);
-      
-      toast.success('Thank you for your feedback! We appreciate it.');
-      setShowFeedbackModal(false);
-      setFeedbackForm({
-        rating: 0,
-        comment: ''
-      });
-      setLastOrderId(null);
-    } catch (error) {
-      console.error('Feedback error:', error);
-      toast.error(error.response?.data?.message || 'Failed to submit feedback. Please try again.');
-    } finally {
-      setSubmittingFeedback(false);
-    }
+    // Otherwise, show the manual booking modal
+    setSelectedService(service);
+    setShowBookingModal(true);
+    setBookingForm({
+      name: '',
+      phone: '',
+      vehicle_plate: vehiclePlate || '',
+      notes: ''
+    });
   };
+
+  const handleBookingSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!selectedService) return;
+
+    if (!bookingForm.name || !bookingForm.phone) {
+      toast.error('Please fill in your name and phone number');
+      return;
+    }
+
+    await submitBooking(selectedService, bookingForm);
+  };
+
+
 
   return (
     <div className="bg-slate-950 text-white overflow-hidden">
@@ -447,9 +415,8 @@ const LandingPage = () => {
           {packages.map((pkg, idx) => (
             <Reveal key={pkg.name} delay={idx * 120}>
               <div
-                className={`glass-card relative flex h-full flex-col justify-between rounded-3xl p-8 transition duration-500 hover:-translate-y-2 hover:shadow-[0_50px_120px_-50px_rgba(56,189,248,0.4)] ${
-                  pkg.featured ? 'border-primary-500/40 bg-gradient-to-br from-primary-500/20 via-indigo-500/10 to-transparent' : ''
-                }`}
+                className={`glass-card relative flex h-full flex-col justify-between rounded-3xl p-8 transition duration-500 hover:-translate-y-2 hover:shadow-[0_50px_120px_-50px_rgba(56,189,248,0.4)] ${pkg.featured ? 'border-primary-500/40 bg-gradient-to-br from-primary-500/20 via-indigo-500/10 to-transparent' : ''
+                  }`}
               >
                 <div className="space-y-4 flex flex-col items-center justify-center text-center">
                   <h3 className="text-2xl font-semibold">{pkg.name}</h3>
@@ -647,95 +614,7 @@ const LandingPage = () => {
         </div>
       )}
 
-      {/* Feedback Modal */}
-      {showFeedbackModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-md rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 shadow-2xl">
-            <button
-              onClick={() => {
-                setShowFeedbackModal(false);
-                setFeedbackForm({ rating: 0, comment: '' });
-              }}
-              className="absolute right-4 top-4 p-2 text-slate-400 hover:text-white transition"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
 
-            <h3 className="text-2xl font-semibold text-white mb-2">Share Your Feedback</h3>
-            <p className="text-sm text-slate-400 mb-6">How was your experience with us?</p>
-
-            <form onSubmit={handleFeedbackSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-3">
-                  Rating *
-                </label>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setFeedbackForm({ ...feedbackForm, rating: star })}
-                      className={`p-2 rounded-lg transition ${
-                        feedbackForm.rating >= star
-                          ? 'text-yellow-400 bg-yellow-400/20'
-                          : 'text-slate-500 hover:text-yellow-400 hover:bg-yellow-400/10'
-                      }`}
-                    >
-                      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    </button>
-                  ))}
-                </div>
-                {feedbackForm.rating > 0 && (
-                  <p className="text-xs text-slate-400 mt-2">
-                    {feedbackForm.rating === 5 && 'Excellent!'}
-                    {feedbackForm.rating === 4 && 'Great!'}
-                    {feedbackForm.rating === 3 && 'Good'}
-                    {feedbackForm.rating === 2 && 'Fair'}
-                    {feedbackForm.rating === 1 && 'Poor'}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Comment (Optional)
-                </label>
-                <textarea
-                  value={feedbackForm.comment}
-                  onChange={(e) => setFeedbackForm({ ...feedbackForm, comment: e.target.value })}
-                  rows={4}
-                  className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                  placeholder="Tell us about your experience..."
-                />
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowFeedbackModal(false);
-                    setFeedbackForm({ rating: 0, comment: '' });
-                  }}
-                  className="flex-1 px-4 py-3 rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-                >
-                  Skip
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingFeedback || feedbackForm.rating === 0}
-                  className="flex-1 px-4 py-3 rounded-full bg-primary-500 text-white hover:bg-primary-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submittingFeedback ? 'Submitting...' : 'Submit Feedback'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

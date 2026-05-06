@@ -44,9 +44,9 @@ async function sendReson8Message({ to, message, sender, campaignName, metadata }
   // Note: "from" address must be pre-registered with Reson8
   // Phone numbers should be in international format without + prefix
   const fromAddress = sender || process.env.RESON8_SENDER_ID || 'SniperCarCare';
-  
+
   const payload = {
-    to: to.replace(/^\+/, ''), // Remove + prefix, Reson8 expects international format without +
+    to: [to.replace(/^\+/, '')], // Reson8 /message/campaign expects an array of recipients
     text: message, // Reson8 uses "text" not "message"
     from: fromAddress,
   };
@@ -84,13 +84,13 @@ async function sendReson8Message({ to, message, sender, campaignName, metadata }
   };
 
   try {
-    console.log('[Reson8] Sending message:', { 
-      to: payload.to, 
+    console.log('[Reson8] Sending message:', {
+      to: payload.to,
       from: payload.from,
       messageLength: message.length,
-      url 
+      url
     });
-    
+
     // Debug: Log request details (without exposing full tokens)
     console.log('[Reson8] Request details:', {
       url,
@@ -100,9 +100,9 @@ async function sendReson8Message({ to, message, sender, campaignName, metadata }
       'Content-Type': headers['Content-Type'],
       payload: { ...payload, text: payload.text ? payload.text.substring(0, 50) + '...' : 'missing' }
     });
-    
+
     const response = await axios.post(url, payload, { headers, timeout });
-    
+
     // Check errorLevel in response (Reson8 error handling)
     // errorLevel 0 = Success, 9000+ = Various errors
     if (response.data && response.data.errorLevel !== undefined) {
@@ -123,21 +123,21 @@ async function sendReson8Message({ to, message, sender, campaignName, metadata }
           procResponse: errorMsg,
           requestID: response.data.requestID
         });
-        
+
         // Check for common errors
         if (errorMsg.includes('Unregistered from-address') || errorMsg.includes('464')) {
           throw new Error('Reson8 Error: Sender ID/from address is not registered. Please register "' + payload.from + '" in Reson8 dashboard first.');
         }
-        
+
         throw new Error(`Reson8 API error (${response.data.errorLevel}): ${errorMsg}`);
       }
     }
-    
+
     // If no errorLevel field, assume success
     console.log('[Reson8] ✅ Message sent successfully!');
     console.log('[Reson8] Response:', response.data);
     return response.data;
-    
+
   } catch (error) {
     const errorData = error.response?.data;
     const errorDetails = {
@@ -146,37 +146,37 @@ async function sendReson8Message({ to, message, sender, campaignName, metadata }
       data: errorData,
       message: error.message
     };
-    
+
     console.error('[Reson8] ❌ Message send failed:', errorDetails);
-    
+
     // Handle specific Reson8 error codes
     if (errorData && errorData.errorLevel !== undefined) {
       const errorMsg = errorData.procResponse || `Error level: ${errorData.errorLevel}`;
-      
+
       // Check for common errors
       if (errorData.procResponse && (
-          errorData.procResponse.includes('Unregistered from-address') || 
-          errorData.procResponse.includes('464'))) {
+        errorData.procResponse.includes('Unregistered from-address') ||
+        errorData.procResponse.includes('464'))) {
         throw new Error('Reson8 Error: Sender ID/from address is not registered. Please register it in Reson8 dashboard first.');
       }
-      
+
       // Handle rate limiting (HTTP 429)
       if (error.response?.status === 429) {
         throw new Error('Reson8 Error: Rate limit exceeded. Please retry with exponential backoff.');
       }
-      
+
       throw new Error(`Reson8 API error (${errorData.errorLevel}): ${errorMsg}`);
     }
-    
+
     // Handle HTTP errors
     if (error.response?.status === 401) {
       throw new Error('Reson8 Authentication failed. Please check RESON8_ID, RESON8_TOKEN, and RESON8_API_KEY in .env file.');
     }
-    
+
     if (error.response?.status === 429) {
       throw new Error('Reson8 Error: Rate limit exceeded. Please retry later.');
     }
-    
+
     // Fallback mode: If RESON8_FALLBACK_MODE is enabled, log instead of throwing
     if (process.env.RESON8_FALLBACK_MODE === 'true' || process.env.RESON8_FALLBACK_MODE === '1') {
       console.warn('[Reson8] ⚠️  FALLBACK MODE: Logging message instead of sending');
@@ -196,12 +196,12 @@ async function sendReson8Message({ to, message, sender, campaignName, metadata }
         }
       };
     }
-    
-    const errorMsg = errorData?.procResponse || 
-                     errorData?.message || 
-                     error.message || 
-                     'Failed to send message via Reson8.';
-    
+
+    const errorMsg = errorData?.procResponse ||
+      errorData?.message ||
+      error.message ||
+      'Failed to send message via Reson8.';
+
     throw new Error(errorMsg);
   }
 }

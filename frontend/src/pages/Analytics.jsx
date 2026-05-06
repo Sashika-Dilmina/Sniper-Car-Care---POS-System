@@ -53,7 +53,7 @@ const Analytics = () => {
         <div className="bg-white p-6 rounded-lg shadow">
           <p className="text-gray-600 text-sm">Total Sales</p>
           <p className="text-3xl font-bold text-primary-600">
-            Rs. {analytics.summary.total_sales.toLocaleString()}
+            AED {analytics.summary.total_sales.toLocaleString()}
           </p>
         </div>
         <div className="bg-white p-6 rounded-lg shadow">

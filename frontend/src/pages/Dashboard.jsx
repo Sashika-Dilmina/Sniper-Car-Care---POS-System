@@ -117,7 +117,7 @@ const Dashboard = () => {
           <div>
             <p className="text-gray-600 text-sm">Total Card Payments</p>
             <p className="text-2xl font-bold text-blue-600">
-              Rs. {(summary.total_card_payments || 0).toLocaleString()}
+              AED {(summary.total_card_payments || 0).toLocaleString()}
             </p>
           </div>
         </div>
@@ -126,25 +126,25 @@ const Dashboard = () => {
           <div>
             <p className="text-gray-600 text-sm">Total Cash Payments</p>
             <p className="text-2xl font-bold text-green-600">
-              Rs. {(summary.total_cash_payments || 0).toLocaleString()}
+              AED {(summary.total_cash_payments || 0).toLocaleString()}
             </p>
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
-            <div>
+          <div>
             <p className="text-gray-600 text-sm">Total Profit</p>
-              <p className="text-2xl font-bold text-gray-800">
-              Rs. {(summary.total_profit || 0).toLocaleString()}
-              </p>
-            </div>
+            <p className="text-2xl font-bold text-gray-800">
+              AED {(summary.total_profit || 0).toLocaleString()}
+            </p>
+          </div>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
           <div>
             <p className="text-gray-600 text-sm">Pending Payments</p>
             <p className="text-2xl font-bold text-orange-600">
-              Rs. {(summary.pending_amount || 0).toLocaleString()}
+              AED {(summary.pending_amount || 0).toLocaleString()}
             </p>
             <p className="text-xs text-gray-500 mt-1">
               {summary.pending_count || 0} orders
@@ -153,12 +153,12 @@ const Dashboard = () => {
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
-            <div>
+          <div>
             <p className="text-gray-600 text-sm">Total 4-Wheel Vehicle Orders</p>
-              <p className="text-2xl font-bold text-gray-800">
+            <p className="text-2xl font-bold text-gray-800">
               {summary.four_wheel_orders || 0}
-              </p>
-            </div>
+            </p>
+          </div>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
@@ -171,20 +171,20 @@ const Dashboard = () => {
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
-            <div>
-              <p className="text-gray-600 text-sm">Services Completed</p>
-              <p className="text-2xl font-bold text-gray-800">
-                {summary.completed_services || 0}
-              </p>
+          <div>
+            <p className="text-gray-600 text-sm">Services Completed</p>
+            <p className="text-2xl font-bold text-gray-800">
+              {summary.completed_services || 0}
+            </p>
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
-            <div>
-              <p className="text-gray-600 text-sm">Total Customers</p>
-              <p className="text-2xl font-bold text-gray-800">
-                {summary.total_customers || 0}
-              </p>
+          <div>
+            <p className="text-gray-600 text-sm">Total Customers</p>
+            <p className="text-2xl font-bold text-gray-800">
+              {summary.total_customers || 0}
+            </p>
           </div>
         </div>
       </div>
@@ -251,15 +251,15 @@ const Dashboard = () => {
             <tbody>
               {topCustomers.length > 0 ? (
                 topCustomers.map((customer) => (
-                <tr key={customer.id} className="border-b hover:bg-gray-50">
-                  <td className="p-2">{customer.name}</td>
-                  <td className="p-2">{customer.vehicle_plate}</td>
-                  <td className="p-2 text-right">{customer.order_count}</td>
-                  <td className="p-2 text-right">
-                    Rs. {parseFloat(customer.total_spent).toLocaleString()}
-                  </td>
-                </tr>
-              ))
+                  <tr key={customer.id} className="border-b hover:bg-gray-50">
+                    <td className="p-2">{customer.name}</td>
+                    <td className="p-2">{customer.vehicle_plate}</td>
+                    <td className="p-2 text-right">{customer.order_count}</td>
+                    <td className="p-2 text-right">
+                      AED {parseFloat(customer.total_spent).toLocaleString()}
+                    </td>
+                  </tr>
+                ))
               ) : (
                 <tr>
                   <td colSpan="4" className="p-4 text-center text-gray-500">
@@ -294,14 +294,14 @@ const Dashboard = () => {
             <tbody>
               {newCustomers.length > 0 ? (
                 newCustomers.map((customer) => (
-                <tr key={customer.id} className="border-b hover:bg-gray-50">
-                  <td className="p-2">{customer.name}</td>
-                  <td className="p-2">{customer.phone}</td>
-                  <td className="p-2">{customer.vehicle_model || 'N/A'}</td>
-                  <td className="p-2">{customer.vehicle_plate || 'N/A'}</td>
-                  <td className="p-2 text-right">{customer.joined_date}</td>
-                </tr>
-              ))
+                  <tr key={customer.id} className="border-b hover:bg-gray-50">
+                    <td className="p-2">{customer.name}</td>
+                    <td className="p-2">{customer.phone}</td>
+                    <td className="p-2">{customer.vehicle_model || 'N/A'}</td>
+                    <td className="p-2">{customer.vehicle_plate || 'N/A'}</td>
+                    <td className="p-2 text-right">{customer.joined_date}</td>
+                  </tr>
+                ))
               ) : (
                 <tr>
                   <td colSpan="5" className="p-4 text-center text-gray-500">
@@ -344,11 +344,10 @@ const Dashboard = () => {
                         </div>
                         <span className="text-xs text-gray-500">({feedback.rating}/5)</span>
                       </div>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        feedback.status === 'approved' ? 'bg-green-100 text-green-800' :
-                        feedback.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
+                      <span className={`px-2 py-1 text-xs rounded-full ${feedback.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          feedback.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                        }`}>
                         {feedback.status}
                       </span>
                     </div>
@@ -364,9 +363,9 @@ const Dashboard = () => {
                     )}
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <span>
-                        {feedback.vehicle_plate ? `Plate: ${feedback.vehicle_plate}` : 
-                         feedback.customer_phone ? `Phone: ${feedback.customer_phone}` : 
-                         'Anonymous'}
+                        {feedback.vehicle_plate ? `Plate: ${feedback.vehicle_plate}` :
+                          feedback.customer_phone ? `Phone: ${feedback.customer_phone}` :
+                            'Anonymous'}
                       </span>
                       <span>{new Date(feedback.created_at).toLocaleDateString()}</span>
                     </div>

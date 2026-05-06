@@ -45,7 +45,7 @@ const Login = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="admin@sniper.com"
+              placeholder="Enter your email"
             />
           </div>
 
@@ -71,12 +71,6 @@ const Login = () => {
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
-
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg text-xs text-gray-600">
-          <p className="font-semibold mb-2">Demo Credentials:</p>
-          <p>Email: admin@sniper.com</p>
-          <p>Password: admin123</p>
-        </div>
       </div>
     </div>
   );

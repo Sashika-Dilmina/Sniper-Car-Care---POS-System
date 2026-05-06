@@ -37,7 +37,7 @@ const POS = () => {
 
   const addToCart = (product) => {
     const existingItem = cart.find(item => item.product_id === product.id);
-    
+
     if (existingItem) {
       setCart(cart.map(item =>
         item.product_id === product.id
@@ -52,7 +52,7 @@ const POS = () => {
         quantity: 1
       }]);
     }
-    
+
     toast.success(`${product.name} added to cart`);
   };
 
@@ -85,7 +85,7 @@ const POS = () => {
 
     try {
       const total = calculateTotal();
-      
+
       const orderData = {
         customer_id: selectedCustomer?.id || null,
         items: cart.map(item => ({
@@ -98,7 +98,7 @@ const POS = () => {
       };
 
       const response = await axios.post('/api/orders', orderData);
-      
+
       toast.success('Order created successfully');
       setCart([]);
       setDiscount(0);
@@ -140,7 +140,7 @@ const POS = () => {
                 <h3 className="font-semibold text-sm">{product.name}</h3>
                 <p className="text-xs text-gray-600">{product.category}</p>
                 <p className="text-lg font-bold text-primary-600 mt-2">
-                  Rs. {parseFloat(product.price).toLocaleString()}
+                  AED {parseFloat(product.price).toLocaleString()}
                 </p>
                 <p className="text-xs text-gray-500">Stock: {product.stock}</p>
               </div>
@@ -172,7 +172,7 @@ const POS = () => {
 
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold mb-4">Cart</h2>
-          
+
           {cart.length === 0 ? (
             <p className="text-gray-500 text-center py-8">Cart is empty</p>
           ) : (
@@ -182,7 +182,7 @@ const POS = () => {
                   <div key={item.product_id} className="flex items-center justify-between border-b pb-3">
                     <div className="flex-1">
                       <p className="font-semibold text-sm">{item.name}</p>
-                      <p className="text-xs text-gray-600">Rs. {parseFloat(item.price).toLocaleString()} each</p>
+                      <p className="text-sm text-gray-600">AED {parseFloat(item.price).toLocaleString()} each</p>
                     </div>
                     <div className="flex items-center space-x-2">
                       <button
@@ -212,7 +212,7 @@ const POS = () => {
               <div className="space-y-2 border-t pt-4">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span>Rs. {cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString()}</span>
+                  <span>AED {cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString()}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Discount:</span>
@@ -226,7 +226,7 @@ const POS = () => {
                 </div>
                 <div className="flex justify-between font-bold text-lg border-t pt-2">
                   <span>Total:</span>
-                  <span>Rs. {calculateTotal().toLocaleString()}</span>
+                  <span>AED {calculateTotal().toLocaleString()}</span>
                 </div>
               </div>
 
