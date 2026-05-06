@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const apiUrl = 'https://nonisotropous-noncongruously-latoria.ngrok-free.dev';
 
 const api = axios.create({
-  baseURL: '', // Use relative paths to let Vite proxy handle it
+  baseURL: apiUrl,
   headers: {
     'Content-Type': 'application/json',
   },

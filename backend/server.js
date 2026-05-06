@@ -18,6 +18,9 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const mockRoutes = require('./routes/mockRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const { startFtpServer } = require('./services/ftpServer');
+const { startFileWatcher } = require('./services/anprWatcher');
+
 
 // Initialize app
 const app = express();
@@ -89,5 +92,14 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 API: http://localhost:${PORT}/api`);
+  
+  // Start ANPR FTP-based services
+  try {
+    startFtpServer();
+    startFileWatcher();
+  } catch (error) {
+    console.error('❌ Failed to start ANPR background services:', error);
+  }
 });
+
 
