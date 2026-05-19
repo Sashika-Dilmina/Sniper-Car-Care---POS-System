@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 // Configure axios defaults
-// Note: baseURL is not set to use Vite proxy for /api requests
-// The proxy in vite.config.js will forward /api/* to http://localhost:5000/api/*
+// In development, Vite proxy handles /api requests (see vite.config.js)
+// In production, baseURL points to the backend server directly
+axios.defaults.baseURL = 'http://72.62.254.128:5000';
 axios.defaults.headers.common['Content-Type'] = 'application/json';
 
 // Get token from localStorage and set it in axios defaults
