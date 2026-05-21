@@ -3,6 +3,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
+const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
 
 // @desc    Create order from customer website
 // @route   POST /api/public/orders
@@ -62,6 +63,13 @@ const createOrder = asyncHandler(async (req, res) => {
           [customer_name, customer_phone, vehicle_plate, vehicleType]
         );
         finalCustomerId = newCustomer.insertId;
+        try {
+          await ensureLoyaltyRow(connection, finalCustomerId);
+        } catch (loyaltyInitErr) {
+          if (loyaltyInitErr.code !== 'ER_BAD_FIELD_ERROR') {
+            throw loyaltyInitErr;
+          }
+        }
       } catch (error) {
         // If customer already exists (duplicate vehicle_plate), try to fetch it
         if (error.code === 'ER_DUP_ENTRY') {
@@ -117,6 +125,26 @@ const createOrder = asyncHandler(async (req, res) => {
       }
     }
 
+    let loyalty = null;
+
+    const isWebsiteServiceBooking =
+      finalCustomerId &&
+      (!items || items.length === 0) &&
+      (source === 'customer_website_saloon' ||
+        source === 'customer_website_4x4' ||
+        (source || '').includes('customer_website'));
+
+    if (isWebsiteServiceBooking) {
+      try {
+        await ensureLoyaltyRow(connection, finalCustomerId);
+        loyalty = await incrementWashStamp(connection, finalCustomerId);
+      } catch (loyaltyErr) {
+        if (loyaltyErr.code !== 'ER_BAD_FIELD_ERROR') {
+          throw loyaltyErr;
+        }
+      }
+    }
+
     await connection.commit();
 
     const [newOrder] = await connection.query('SELECT * FROM orders WHERE id = ?', [orderId]);
@@ -124,7 +152,14 @@ const createOrder = asyncHandler(async (req, res) => {
 
     res.status(201).json({
       message: 'Order created successfully',
-      order: newOrder[0]
+      order: newOrder[0],
+      loyalty: loyalty
+        ? {
+            wash_stamps: loyalty.wash_stamps,
+            free_wash_ready: loyalty.wash_stamps >= 5,
+            free_wash_earned: loyalty.free_wash_earned,
+          }
+        : null,
     });
   } catch (error) {
     await connection.rollback();

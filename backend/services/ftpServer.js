@@ -10,7 +10,10 @@ const root = path.resolve(process.cwd(), process.env.FTP_ROOT || './uploads');
 const ftpServer = new FtpSrv({
   url: `ftp://0.0.0.0:${port}`,
   anonymous: false,
-  greeting: 'Sniper Car Care ANPR FTP Server'
+  greeting: 'Sniper Car Care ANPR FTP Server',
+  pasv_url: process.env.FTP_PASV_URL || '72.62.254.128',
+  pasv_min: parseInt(process.env.FTP_PASV_MIN || 65500),
+  pasv_max: parseInt(process.env.FTP_PASV_MAX || 65515)
 });
 
 ftpServer.on('login', ({ connection, username, password }, resolve, reject) => {

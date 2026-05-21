@@ -8,19 +8,19 @@ export default {
     extend: {
       colors: {
         primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
+          50: '#fff5f5',
+          100: '#ffe3e3',
+          200: '#ffc9c9',
+          300: '#ffa8a8',
+          400: '#ff6b6b',
+          500: '#fa5252',
+          600: '#e03131',
+          700: '#c92a2a',
         }
       },
       backgroundImage: {
-        'hero-grid': "radial-gradient(circle at top left, rgba(79, 70, 229, 0.15), transparent 55%), radial-gradient(circle at top right, rgba(129, 140, 248, 0.15), transparent 60%), radial-gradient(circle at bottom, rgba(56, 189, 248, 0.18), transparent 65%)",
-        'section-glow': 'linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(59, 130, 246, 0.05) 38%, rgba(129, 140, 248, 0.08) 100%)'
+        'hero-grid': "radial-gradient(circle at top left, rgba(220, 38, 38, 0.15), transparent 55%), radial-gradient(circle at top right, rgba(239, 68, 68, 0.15), transparent 60%), radial-gradient(circle at bottom, rgba(248, 113, 113, 0.18), transparent 65%)",
+        'section-glow': 'linear-gradient(135deg, rgba(220, 38, 38, 0.08) 0%, rgba(239, 68, 68, 0.05) 38%, rgba(248, 113, 113, 0.08) 100%)'
       },
       keyframes: {
         float: {

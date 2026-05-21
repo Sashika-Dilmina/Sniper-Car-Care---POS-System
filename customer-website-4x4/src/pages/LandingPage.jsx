@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
-import hero4x4 from '../assets/black-jeep-climbing-rocks_1167344-39192.avif';
+import { images, getServiceImage } from '../config/siteImages';
 
 const Reveal = ({ children, delay = 0 }) => {
   const elementRef = useRef(null);
@@ -37,44 +37,172 @@ const Reveal = ({ children, delay = 0 }) => {
   );
 };
 
+const SniperBrandLogo = ({ variant = 'header' }) => {
+  if (variant === 'header') {
+    return (
+      <span className="text-center leading-tight block">
+        <span className="block text-[1.65rem] sm:text-3xl font-black italic tracking-tight text-black">SNIPER</span>
+        <span className="block text-xs sm:text-sm font-bold text-red-600 tracking-[0.2em] uppercase mt-0.5">Car Care</span>
+      </span>
+    );
+  }
+  return (
+    <h1 className="text-4xl sm:text-5xl md:text-[3.35rem] font-black uppercase tracking-tight text-gray-900 leading-tight">
+      <span className="block">Sniper</span>
+      <span className="block text-red-600">Car Care</span>
+    </h1>
+  );
+};
+
+const LoyaltyProgress = ({ washStamps = 0 }) => {
+  const filled = Math.min(Math.max(washStamps, 0), 5);
+  const freeReady = washStamps >= 5;
+
+  return (
+    <div className="mt-6 sm:mt-8 relative w-full">
+      <div
+        className="absolute left-[7%] right-[7%] top-[22px] sm:top-[28px] h-0.5 bg-gray-200 z-0"
+        aria-hidden="true"
+      />
+      <div className="relative z-10 grid grid-cols-6 w-full items-start">
+        {[1, 2, 3, 4, 5].map((n) => {
+          const isFilled = n <= filled;
+          return (
+            <div key={n} className="flex flex-col items-center justify-center w-full">
+              <div
+                className={`flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-full border-2 text-sm sm:text-lg shadow-sm mx-auto transition-all duration-300 ${
+                  isFilled
+                    ? 'border-red-600 bg-red-600 text-white scale-105'
+                    : 'border-gray-300 bg-white text-gray-400'
+                }`}
+              >
+                🚗
+              </div>
+              <span
+                className={`text-[10px] sm:text-xs font-bold mt-2 ${isFilled ? 'text-red-600' : 'text-gray-400'}`}
+              >
+                {n}
+              </span>
+            </div>
+          );
+        })}
+        <div className="flex flex-col items-center justify-center w-full">
+          <div
+            className={`flex h-11 w-11 sm:h-16 sm:w-16 items-center justify-center rounded-full text-lg sm:text-2xl mx-auto transition-all duration-300 ${
+              freeReady
+                ? 'bg-red-600 text-white shadow-lg shadow-red-600/40 ring-4 ring-red-200 scale-110 animate-pulse'
+                : 'bg-gray-100 text-gray-400 border-2 border-gray-300'
+            }`}
+          >
+            🎁
+          </div>
+          <span
+            className={`text-[10px] sm:text-xs font-black mt-2 uppercase ${freeReady ? 'text-red-600' : 'text-gray-400'}`}
+          >
+            Free
+          </span>
+        </div>
+      </div>
+      {freeReady && (
+        <p className="mt-4 text-center text-sm font-semibold text-red-600">
+          Your next wash is FREE! Book now to redeem.
+        </p>
+      )}
+    </div>
+  );
+};
+
+const CrownIcon = ({ className = 'w-16 h-16 text-red-600' }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M8 44h48l-6-28-10 12-8-16-8 16-10-12-6 28z" />
+    <path d="M10 46h44v4H10v-4z" opacity="0.85" />
+    <circle cx="32" cy="22" r="3" fill="#fbbf24" />
+    <circle cx="18" cy="28" r="2.5" fill="#fbbf24" />
+    <circle cx="46" cy="28" r="2.5" fill="#fbbf24" />
+  </svg>
+);
+
 const stats = [
-  { label: '4x4 Owners Served', value: '6.5k+' },
-  { label: 'Off-Road Details', value: '18k+' },
-  { label: 'Mud Recoveries', value: '2.1k' },
+  { label: 'Chauffeur Clients', value: '8.2k+' },
+  { label: 'Executive Details', value: '27k+' },
+  { label: 'Ceramic Finishes', value: '5.4k' },
   { label: 'Google Rating', value: '4.9/5' },
+];
+
+const vipServices = [
+  {
+    name: 'Interior Deep Clean',
+    icon: '🧹',
+    description: 'Complete interior detailing with premium products',
+    features: 'Deep vacuum, leather conditioning, window cleaning',
+    price: '150 AED',
+    duration: '120 minutes'
+  },
+  {
+    name: 'Paint Protection',
+    icon: '🛡️',
+    description: 'Professional paint protection and ceramic coating',
+    features: 'Scratch protection, UV protection, water beading',
+    price: '250 AED',
+    duration: '240 minutes'
+  },
+  {
+    name: 'Polish & Finishing',
+    icon: '✨',
+    description: 'Paint polishing and professional finishing',
+    features: 'Swirl mark removal, high gloss finish',
+    price: '200 AED',
+    duration: '180 minutes'
+  },
+  {
+    name: 'Trim Restoration',
+    icon: '⚙️',
+    description: 'Restore and finish trim pieces',
+    features: 'Trim coating, protective sealant',
+    price: '180 AED',
+    duration: '150 minutes'
+  },
+  {
+    name: 'Premium Finishing',
+    icon: '👑',
+    description: 'Complete premium car care package',
+    features: 'All services included, 2-day service',
+    price: '400 AED',
+    duration: '480 minutes'
+  }
 ];
 
 const packages = [
   {
-    name: 'Full Service',
-    price: '20 AED',
+    name: 'Full 4x4 Service',
+    price: '25 AED',
     accent: 'Complete refresh',
-    description: 'Complete interior and exterior detailing for your 4x4 vehicle.',
+    description: 'Complete interior and exterior detailing for your 4x4.',
     features: [
-      'Interior deep cleaning including cargo area',
+      'Deep interior cleaning with floor mat treatment',
       'Exterior foam wash and hand wash',
-      'Underbody and wheel well cleaning',
-      'Glass cleaning and final inspection',
+      'Wheel and tire cleaning',
+      'Undercarriage rinse and final inspection',
     ],
-    duration: '90-120 minutes',
+    duration: '120-150 minutes',
   },
   {
-    name: 'Full Body Wash with Shampoo',
+    name: 'Off-Road Refresh',
     price: '15 AED',
-    accent: 'Daily driver favorite',
+    accent: 'Off-road favorite',
     featured: true,
-    description: 'Comprehensive exterior wash with shampoo for regular maintenance.',
+    description: 'Mud and dirt removal wash for your 4x4 adventure vehicle.',
     features: [
-      'Foam shampoo wash',
+      'Heavy mud and dirt removal',
       'Hand wash and dry',
       'Wheel and tire cleaning',
-      'Light interior vacuum',
+      'Interior vacuum and wipe down',
     ],
-    duration: '45-60 minutes',
+    duration: '60-90 minutes',
   },
   {
-    name: 'Only Water Body Wash',
-    price: '10 AED',
+    name: 'Quick Water Wash',
+    price: '8 AED',
     accent: 'Quick rinse',
     description: 'Quick exterior wash with pure water.',
     features: [
@@ -83,35 +211,63 @@ const packages = [
       'Wheel cleaning',
       'Basic glass clean',
     ],
-    duration: '15-20 minutes',
+    duration: '20-25 minutes',
   },
+];
+
+const heroFeatures = [
+  { label: 'Safe Products', icon: '🛡️' },
+  { label: 'Expert Team', icon: '👥' },
+  { label: 'Fast Service', icon: '⚡' },
+];
+
+const howItWorks = [
+  { step: 1, title: 'BOOK SERVICE', description: 'Choose your package and book online or via your SMS link.', icon: '📅' },
+  { step: 2, title: 'WE ARRIVE', description: 'Our mobile team comes to your location fully equipped.', icon: '🚗' },
+  { step: 3, title: 'PREMIUM CARE', description: 'Professional interior and exterior detailing with premium products.', icon: '✨' },
+  { step: 4, title: 'DRIVE AWAY', description: 'Enjoy your spotless vehicle. Pay on completion or online.', icon: '🔑' },
+];
+
+const trustFeatures = [
+  { title: 'CUSTOMER SUPPORT', subtitle: '24/7 Available', icon: '📞' },
+  { title: 'COMPETITIVE PRICES', subtitle: 'Best quality at the best price', icon: '💰' },
+  { title: 'QUALITY GUARANTEE', subtitle: 'Satisfaction guaranteed', icon: '✅' },
+  { title: 'EXPERT TEAM', subtitle: 'Trained professionals you can trust', icon: '👥' },
+];
+
+const vipHighlights = [
+  'Interior Deep Clean',
+  'Paint Protection',
+  'Polish & Wax',
+  'Trim Restoration',
+  'Premium Finishing',
 ];
 
 const testimonials = [
   {
-    name: 'Maria L.',
-    location: 'SoHo, NYC',
-    quote: 'Sniper Car Care had my Defender spotless after a muddy trail day. The underbody rinse and interior reset were flawless!',
+    name: 'Ahmed M.',
+    location: 'Dubai Desert',
+    quote: 'After a weekend of off-roading, my Jeep looked muddy but Sniper brought it back to showroom condition! Impressive work.',
     rating: 5,
   },
   {
-    name: 'James R.',
-    location: 'Brooklyn, NYC',
-    quote: 'Booked between dune runs—my Bronco was foam washed, wheels dressed, and back to showroom shine before dinner.',
+    name: 'Fatima R.',
+    location: 'Abu Dhabi, UAE',
+    quote: "Best 4x4 detailing service I've tried. They handled the tough mud stains perfectly and my vehicle looks brand new!",
     rating: 5,
   },
   {
-    name: 'Chloe P.',
-    location: 'Upper East Side, NYC',
-    quote: 'The trail foam wash is worth every dirham. Sand vanished, interior smelled fresh, and the team was meticulous top to bottom.',
+    name: 'Hassan K.',
+    location: 'Sharjah, UAE',
+    quote: 'VIP premium service for my Land Cruiser was exceptional. Every detail was taken care of. Highly recommended!',
     rating: 5,
   },
 ];
 
 const products = [
   {
-    name: 'Trail-Grade Cabin Pods',
-    description: 'Long-lasting fragrance capsules that clip onto vents and refresh the cabin after dusty desert runs.',
+    name: 'Luxe Cabin Fragrance Pods',
+    description: 'Fragrance pods that clip to vents for fresh cabin scent.',
     price: '12 AED',
     accent: 'Best Seller',
     art: (props) => (
@@ -141,13 +297,13 @@ const products = [
         <path d="M160 98c14-10 16-24 10-34" stroke="#e0f2fe" strokeWidth="6" strokeLinecap="round" opacity="0.3" />
       </svg>
     ),
-    benefits: ['Clips securely to vents', 'Neutralises trail dust & odors', 'Adjustable fragrance dial']
+    benefits: ['Easy to install', 'Long-lasting scent', 'Adjustable']
   },
   {
-    name: 'Armor Seat Cover Duo',
-    description: 'Form-fitting neoprene covers shrug off mud, sweat, and seawater while keeping the cabin cool and breathable.',
+    name: 'Velvet Guard Seat Duo',
+    description: 'Soft seat covers to protect your luxury interior.',
     price: '89 AED',
-    accent: 'Trail Ready',
+    accent: 'Concierge pick',
     art: (props) => (
       <svg viewBox="0 0 320 220" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
         <defs>
@@ -173,11 +329,11 @@ const products = [
         <path d="M202 138h20" stroke="#e0f2fe" strokeWidth="4" strokeLinecap="round" opacity="0.3" />
       </svg>
     ),
-    benefits: ['Easy slip-on install', 'Water-resistant neoprene', 'Machine washable']
+    benefits: ['Easy to install', 'Water-resistant', 'Machine washable']
   },
   {
-    name: 'Recovery Mat Bundle',
-    description: 'Laser-cut mats with raised edges trap mud, sand, and slush before it reaches the carpet.',
+    name: 'Executive Mat Bundle',
+    description: 'Premium floor mats for luxury interiors.',
     price: '129 AED',
     accent: 'Limited Drop',
     art: (props) => (
@@ -205,21 +361,35 @@ const products = [
         <path d="M118 176h84" stroke="#38bdf8" strokeWidth="6" strokeLinecap="round" opacity="0.35" />
       </svg>
     ),
-    benefits: ['Edge-to-edge spill barrier', 'Anti-slip backing', 'Custom color stitching available']
+    benefits: ['Spill protection', 'Anti-slip', 'Premium quality']
   }
 ];
 
 const LandingPage = () => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchParams] = useSearchParams();
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [showVIPModal, setShowVIPModal] = useState(false);
+  const [vipStep, setVipStep] = useState(1);
   const [selectedService, setSelectedService] = useState(null);
   const [customerInfo, setCustomerInfo] = useState(null);
-  const [searchParams] = useSearchParams();
   const [bookingForm, setBookingForm] = useState({
     name: '',
     phone: '',
     vehicle_plate: '',
     notes: ''
   });
+  const [vipBookingForm, setVipBookingForm] = useState({
+    name: '',
+    phone: '',
+    vehicle_model: '',
+    vehicle_type: '4x4',
+    service_type: '',
+    appointment_date: '',
+    appointment_time: ''
+  });
+  const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
+  const [washStamps, setWashStamps] = useState(0);
 
   const vehiclePlate = searchParams.get('plate') || '';
 
@@ -232,6 +402,11 @@ const LandingPage = () => {
         const response = await axios.get(`/api/public/customer/by-plate?plate=${vehiclePlate}`);
         if (response.data.customer) {
           setCustomerInfo(response.data.customer);
+          setWashStamps(
+            response.data.loyalty?.wash_stamps ??
+              response.data.customer.wash_stamps ??
+              0
+          );
           setBookingForm({
             name: response.data.customer.name || '',
             phone: response.data.customer.phone || '',
@@ -247,9 +422,26 @@ const LandingPage = () => {
     fetchCustomerInfo();
   }, [vehiclePlate]);
 
+  // Fetch available time slots when date changes
+  useEffect(() => {
+    const fetchAvailableSlots = async () => {
+      if (!vipBookingForm.appointment_date) return;
+
+      try {
+        const response = await axios.get(`/api/vip/bookings/available-slots/${vipBookingForm.appointment_date}`);
+        setAvailableTimeSlots(response.data.available_slots || []);
+      } catch (error) {
+        console.log('Error fetching time slots:', error.message);
+        setAvailableTimeSlots(['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00']);
+      }
+    };
+
+    fetchAvailableSlots();
+  }, [vipBookingForm.appointment_date]);
+
   const submitBooking = async (service, form) => {
     try {
-      // Extract price from service.price (format: "20 AED" or "Rs. 15,000")
+      // Extract price from service.price (format: "15 AED" or "Rs. 15,000")
       const priceMatch = service.price.match(/[\d,]+/);
       const servicePrice = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
 
@@ -261,15 +453,27 @@ const LandingPage = () => {
         vehicle_plate: form.vehicle_plate || null,
         items: [], // Empty items array since we're booking a service, not a product
         total: servicePrice,
-        source: 'customer_website',
+        source: 'customer_website_4x4',
         status: 'pending',
         payment_status: 'pending',
-        notes: form.notes || `One-Tap Booking via Website (4x4) - ${service.name}`
+        notes: form.notes || `One-Tap Booking via Website - ${service.name}`
       };
 
-      await axios.post('/api/public/orders', orderData);
+      const response = await axios.post('/api/public/orders', orderData);
 
-      toast.success('Service booked successfully! We will contact you soon.');
+      if (response.data.loyalty?.wash_stamps !== undefined) {
+        setWashStamps(response.data.loyalty.wash_stamps);
+      }
+
+      if (response.data.loyalty?.free_wash_earned) {
+        toast.success('Service booked! You earned a FREE wash — enjoy your reward!');
+      } else if (response.data.loyalty) {
+        toast.success(
+          `Service booked! Loyalty progress: ${response.data.loyalty.wash_stamps}/5 washes.`
+        );
+      } else {
+        toast.success('Service booked successfully! We will contact you soon.');
+      }
       setShowBookingModal(false);
       setSelectedService(null);
       setBookingForm({
@@ -284,6 +488,74 @@ const LandingPage = () => {
     }
   };
 
+  const submitVIPBooking = async (e) => {
+    e.preventDefault();
+
+    if (!vipBookingForm.name || !vipBookingForm.phone || !vipBookingForm.vehicle_model || !vipBookingForm.service_type || !vipBookingForm.appointment_date || !vipBookingForm.appointment_time) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    try {
+      const response = await axios.post('/api/vip/bookings', {
+        name: vipBookingForm.name,
+        phone: vipBookingForm.phone,
+        vehicle_model: vipBookingForm.vehicle_model,
+        vehicle_type: vipBookingForm.vehicle_type,
+        service_type: vipBookingForm.service_type,
+        appointment_date: vipBookingForm.appointment_date,
+        appointment_time: vipBookingForm.appointment_time
+      });
+
+      toast.success('VIP booking confirmed! We will contact you soon.');
+      setShowVIPModal(false);
+      setVipStep(1);
+      setVipBookingForm({
+        name: '',
+        phone: '',
+        vehicle_model: '',
+        vehicle_type: '4x4',
+        service_type: '',
+        appointment_date: '',
+        appointment_time: ''
+      });
+      setAvailableTimeSlots([]);
+    } catch (error) {
+      console.error('VIP Booking error:', error);
+      toast.error(error.response?.data?.message || 'Failed to book VIP service. Please try again.');
+    }
+  };
+
+  const handleVipNextStep = () => {
+    if (vipStep === 1) {
+      if (!vipBookingForm.name || !vipBookingForm.phone) {
+        toast.error('Please fill in your name and phone number');
+        return;
+      }
+      setVipStep(2);
+    }
+  };
+
+  const handleVipPrevStep = () => {
+    if (vipStep === 2) {
+      setVipStep(1);
+    }
+  };
+
+  const openVIPModal = () => {
+    setVipStep(1);
+    setVipBookingForm({
+      name: customerInfo?.name || '',
+      phone: customerInfo?.phone || '',
+      vehicle_model: '',
+      vehicle_type: '4x4',
+      service_type: '',
+      appointment_date: '',
+      appointment_time: ''
+    });
+    setShowVIPModal(true);
+  };
+
   const handleServiceClick = (service) => {
     // If we have customer info from the plate, do ONE-TAP BOOKING
     if (customerInfo) {
@@ -291,7 +563,7 @@ const LandingPage = () => {
         name: customerInfo.name || 'Existing Customer',
         phone: customerInfo.phone || '',
         vehicle_plate: vehiclePlate || customerInfo.vehicle_plate || '',
-        notes: `Quick Book via Plate Link (4x4): ${vehiclePlate}`
+        notes: `Quick Book via Plate Link: ${vehiclePlate}`
       };
 
       // Show a loading toast for immediate feedback
@@ -330,282 +602,379 @@ const LandingPage = () => {
 
 
   return (
-    <div className="bg-slate-950 text-white overflow-hidden">
-      <div className="relative min-h-screen pb-20">
-        <div className="absolute inset-0 hero-glow opacity-70" aria-hidden="true" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.04),_transparent_65%)]" aria-hidden="true" />
-
-        <header className="relative z-10">
-          <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 pt-8">
-            <a href="#top" className="text-2xl font-semibold tracking-tight">
-              Sniper<span className="text-primary-400">CarCare</span>
-            </a>
-            <div className="hidden items-center gap-8 text-sm text-slate-200/80 md:flex">
-              <a href="#services" className="hover:text-white transition">Services</a>
-              <a href="#products" className="hover:text-white transition">Products</a>
-              <a href="#reviews" className="hover:text-white transition">Reviews</a>
+    <div className="bg-white text-gray-900 overflow-hidden pb-24">
+      <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm">
+        <nav className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 sm:py-4">
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 text-gray-800 hover:text-red-600 transition"
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? (
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+          <a href="#top" className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center max-w-[55%] sm:max-w-none">
+            {images.logo ? (
+              <img src={images.logo} alt="Sniper Car Care" className="h-14 sm:h-16 w-auto object-contain" />
+            ) : (
+              <SniperBrandLogo variant="header" />
+            )}
+          </a>
+          <div className="relative p-2 text-gray-800" aria-hidden="true">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
+          </div>
+        </nav>
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-gray-100 bg-white px-4 pb-4">
+            <div className="flex flex-col gap-3 pt-3">
+              <a href="#services" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-gray-700 hover:text-red-600">Services</a>
+              <a href="#vip" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-gray-700 hover:text-red-600">VIP Premium</a>
+              <a href="#products" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-gray-700 hover:text-red-600">Products</a>
+              <a href="#reviews" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-gray-700 hover:text-red-600">Reviews</a>
+              <button onClick={() => { setMobileMenuOpen(false); openVIPModal(); }} className="text-left text-sm font-semibold text-red-600">Register VIP</button>
             </div>
-          </nav>
-        </header>
+          </div>
+        )}
+      </header>
 
-        <main className="relative z-10">
-          <section id="top" className="mx-auto mt-14 grid max-w-6xl grid-cols-1 gap-16 px-6 md:grid-cols-2 md:items-center">
-            <Reveal>
-              <div className="space-y-8">
-                <div className="inline-flex items-center gap-3 rounded-full bg-white/5 px-5 py-2 text-xs uppercase tracking-[0.2em] text-slate-200/80">
-                  <span className="text-amber-300 text-lg">★★★★★</span>
-                  <span>Highly rated mobile detailing</span>
-                </div>
-                <h1 className="text-4xl font-semibold leading-tight tracking-[-0.02em] sm:text-5xl lg:text-6xl">
-                  Mobile 4x4 & SUV Detailing
-                </h1>
-                <p className="max-w-xl text-lg text-slate-200/80">
-                  Professional mobile car detailing service for your 4x4 vehicle. We come to you with everything needed for a perfect finish.
+      {customerInfo && (
+        <div className="mx-auto max-w-6xl px-4 pt-3">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            Welcome back, <strong>{customerInfo.name}</strong>! Select a service below for instant booking.
+          </div>
+        </div>
+      )}
+
+      <section id="top" className="relative w-full max-w-6xl mx-auto px-3 sm:px-4 pt-3 sm:pt-6">
+        <Reveal>
+          <div className="relative overflow-hidden rounded-2xl border border-gray-200 shadow-lg min-h-[320px] sm:min-h-[380px] w-full">
+            <img src={images.hero} alt="Sniper Car Care" className="hero-photo absolute inset-0 h-full w-full object-cover" loading="eager" />
+            <div className="relative z-10 flex min-h-[320px] sm:min-h-[380px] items-center justify-start p-0 h-full w-full">
+              <div className="hero-text-panel flex flex-col justify-center w-[92%] max-w-[300px] sm:max-w-[340px] md:w-[42%] md:max-w-[380px] shrink-0 ml-0">
+                <SniperBrandLogo variant="hero" />
+                <p className="hero-subtitle-text mt-2 text-sm sm:text-base text-gray-800 font-medium leading-snug max-w-[240px]">
+                  Professional 4x4 care, inside and out — after every adventure.
                 </p>
-                <div className="flex flex-col sm:flex-row">
-                  <a
-                    href="#services"
-                    className="flex items-center justify-center gap-2 rounded-full border border-white/20 px-8 py-4 text-sm font-semibold text-white/90 transition hover:border-white/40 hover:text-white"
-                  >
-                    View Packages
-                    <span className="text-lg">▸</span>
-                  </a>
-                </div>
-                <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-                  {stats.map((stat) => (
-                    <div key={stat.label} className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur">
-                      <p className="text-2xl font-semibold text-white">{stat.value}</p>
-                      <p className="text-xs uppercase tracking-wider text-slate-300/70">{stat.label}</p>
+                <div className="mt-4 flex flex-wrap gap-3 sm:gap-4 justify-start">
+                  {heroFeatures.map((f) => (
+                    <div key={f.label} className="flex flex-col items-center gap-1 min-w-[60px] sm:min-w-[68px]">
+                      <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full border-2 border-red-600 bg-white/90 text-base sm:text-lg">{f.icon}</div>
+                      <span className="text-[10px] sm:text-xs font-semibold text-gray-900 text-center drop-shadow-sm">{f.label}</span>
                     </div>
                   ))}
                 </div>
               </div>
-            </Reveal>
-            <Reveal delay={150}>
-              <div className="relative">
-                <div className="absolute -left-6 -top-6 h-24 w-24 rounded-full bg-primary-500/30 blur-2xl animate-pulseGlow" aria-hidden="true" />
-                <div className="absolute -right-10 bottom-10 h-28 w-28 rounded-full bg-indigo-500/30 blur-2xl animate-pulseGlow" aria-hidden="true" />
-                <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-slate-900/40 shadow-[0_40px_80px_-40px_rgba(15,23,42,0.85)]">
-                  <div className="relative h-[300px] md:h-[380px] lg:h-[400px]">
-                    <img
-                      src={hero4x4}
-                      alt="Jeep Wrangler conquering rocky off-road trail"
-                      className="h-full w-full object-cover object-center"
-                      loading="eager"
-                    />
-                  </div>
-                </div>
-              </div>
-            </Reveal>
-          </section>
-        </main>
-      </div>
-
-      <section id="services" className="relative z-10 mx-auto max-w-6xl px-6 pb-24">
-        <Reveal>
-          <div className="mb-14 text-center">
-            <p className="text-sm uppercase tracking-[0.3em] text-primary-300/70">Our Services</p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Choose Your Service Package</h2>
-            <p className="mt-3 max-w-2xl mx-auto text-base text-slate-300/80">
-              Professional mobile detailing services for your 4x4 vehicle.
-            </p>
+            </div>
           </div>
         </Reveal>
-        <div className="grid gap-8 md:grid-cols-3">
+      </section>
+
+      <section className="w-full px-3 sm:px-4 py-4 sm:py-5">
+        <Reveal>
+          <div className="w-full max-w-6xl mx-auto template-card border-red-100 bg-gradient-to-br from-white via-white to-red-50/40 p-6 sm:p-8 rounded-2xl shadow-md">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 w-full">
+              <div className="flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-full bg-red-600 text-white text-3xl sm:text-4xl shadow-lg shadow-red-600/25 mx-auto sm:mx-0">🎁</div>
+              <div className="flex-1 w-full text-center sm:text-left min-w-0">
+                <p className="font-black text-gray-900 text-lg sm:text-xl md:text-2xl uppercase tracking-wide leading-snug">
+                  5 Washes — <span className="text-red-600">6th Wash FREE!</span>
+                </p>
+                <p className="mt-2 text-sm sm:text-base text-gray-600">
+                  {customerInfo
+                    ? `Your progress: ${Math.min(washStamps, 5)}/5 washes toward a free service.`
+                    : 'Book a service to start earning stamps (scan alone does not add stamps).'}
+                </p>
+              </div>
+            </div>
+            <LoyaltyProgress washStamps={washStamps} />
+          </div>
+        </Reveal>
+      </section>
+
+      <section id="services" className="w-full max-w-6xl mx-auto px-3 sm:px-4 pb-10">
+        <Reveal>
+          <div className="text-center mb-6 sm:mb-8">
+            <p className="text-sm sm:text-base font-black uppercase tracking-[0.2em] text-gray-900">— Choose Service —</p>
+            <p className="mt-2 text-sm sm:text-base text-gray-600 font-medium">Select the service that suits your needs.</p>
+          </div>
+        </Reveal>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 w-full">
           {packages.map((pkg, idx) => (
-            <Reveal key={pkg.name} delay={idx * 120}>
-              <div
-                className={`glass-card relative flex h-full flex-col justify-between rounded-3xl p-8 transition duration-500 hover:-translate-y-2 hover:shadow-[0_50px_120px_-50px_rgba(56,189,248,0.4)] ${pkg.featured ? 'border-primary-500/40 bg-gradient-to-br from-primary-500/20 via-indigo-500/10 to-transparent' : ''
-                  }`}
-              >
-                <div className="space-y-4 flex flex-col items-center justify-center text-center">
-                  <h3 className="text-2xl font-semibold">{pkg.name}</h3>
-                  <p className="text-4xl font-bold text-white">{pkg.price}</p>
+            <Reveal key={pkg.name} delay={idx * 100}>
+              <div className={`template-card flex flex-col w-full h-full min-h-[440px] sm:min-h-[460px] overflow-hidden ${pkg.featured ? 'ring-2 ring-red-600 shadow-lg shadow-red-600/10' : ''}`}>
+                <div className="p-4 sm:p-5 text-center border-b border-gray-100 shrink-0">
+                  <h3 className="text-sm sm:text-base font-black uppercase tracking-wide text-gray-900">{pkg.name}</h3>
+                  <div className="mx-auto mt-3 flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-red-600 text-white text-xl sm:text-2xl font-bold">
+                    {pkg.price.replace(' AED', '')}
+                  </div>
+                  <p className="mt-1 text-sm font-bold text-red-600">{pkg.price}</p>
                 </div>
-                <button
-                  onClick={() => handleServiceClick(pkg)}
-                  className="mt-8 inline-flex items-center justify-center rounded-full border border-white/15 px-6 py-3 text-sm font-semibold text-white transition hover:border-primary-400 hover:bg-primary-400 hover:text-slate-900"
-                >
-                  Book Service
-                </button>
+                <div className="relative h-44 sm:h-48 bg-gray-900 overflow-hidden shrink-0">
+                  <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center scale-110" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/30 to-black/10 pointer-events-none" />
+                </div>
+                <div className="p-4 sm:p-5 flex flex-col flex-1">
+                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed flex-1">{pkg.description}</p>
+                  <button
+                    onClick={() => handleServiceClick(pkg)}
+                    className="mt-5 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-900 py-3 text-xs sm:text-sm font-bold uppercase tracking-wide text-white hover:bg-red-600 transition active:scale-[0.98]"
+                  >
+                    Select
+                    <span className="text-red-400">▸</span>
+                  </button>
+                </div>
               </div>
             </Reveal>
           ))}
         </div>
       </section>
 
-      <section id="products" className="relative z-10 mx-auto max-w-6xl px-6 pb-28">
-        <div className="relative mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="text-center">
-              <p className="text-sm uppercase tracking-[0.3em] text-primary-200/80">Detailing Essentials</p>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Bring the Sniper Car Care glow home.</h2>
-              <p className="mt-3 max-w-2xl mx-auto text-base text-slate-300/80">
-                Stock up on the premium products our pros trust between visits. Pick up curbside or have them packed with your next appointment.
-              </p>
-            </div>
-          </Reveal>
-          <div className="mt-16 grid gap-8 md:grid-cols-3">
-            {products.map((product, index) => (
-              <Reveal key={product.name} delay={index * 130}>
-                <div className="glass-card relative flex h-full flex-col justify-between overflow-hidden rounded-3xl">
-                  <div className="relative h-48 w-full overflow-hidden bg-slate-900/80">
-                    {product.art({ className: 'h-full w-full scale-[1.02] object-cover transition duration-700 ease-out hover:scale-105' })}
-                  </div>
-                  <div className="flex flex-1 flex-col justify-between p-7">
-                    <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-primary-200/80">
-                      <span>Sniper</span>
-                      <span className="rounded-full bg-primary-500/20 px-3 py-1 text-[10px] font-semibold text-primary-200 shadow-inner">
-                        {product.price}
-                      </span>
-                    </div>
-                    <h3 className="mt-5 text-2xl font-semibold text-white">{product.name}</h3>
-                    <p className="mt-3 text-sm text-slate-200/80">{product.description}</p>
-                    <ul className="mt-6 space-y-3 text-sm text-slate-200/70">
-                      {product.benefits.map((benefit) => (
-                        <li key={benefit} className="flex items-start gap-3">
-                          <span className="mt-0.5 text-primary-300">•</span>
-                          <span>{benefit}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <a
-                      href="tel:+12125550123"
-                      className="mt-8 inline-flex items-center justify-center rounded-full border border-white/15 px-6 py-3 text-sm font-semibold text-white transition hover:border-primary-400 hover:bg-primary-400 hover:text-slate-900"
-                    >
-                      Add to Appointment
-                    </a>
-                  </div>
+      <section id="vip" className="mx-auto max-w-6xl px-4 pb-10">
+        <Reveal>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={openVIPModal}
+            onKeyDown={(e) => e.key === 'Enter' && openVIPModal()}
+            className="relative overflow-hidden rounded-2xl bg-black cursor-pointer group hover:ring-2 hover:ring-red-600 transition-shadow"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
+              <div className="p-6 sm:p-10 relative z-10 flex flex-col justify-center">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <CrownIcon className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]" />
+                  <span className="text-4xl sm:text-5xl font-black uppercase text-red-600 vip-neon-text leading-none">
+                    VIP
+                  </span>
                 </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="reviews" className="relative z-10 bg-slate-900/30 py-24">
-        <div className="relative mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="text-center">
-              <p className="text-sm uppercase tracking-[0.3em] text-primary-200/80">Loved By Locals</p>
-              <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">5-star mobile detailing. Every visit.</h2>
-            </div>
-          </Reveal>
-          <div className="mt-16 grid gap-8 md:grid-cols-3">
-            {testimonials.map((testimonial, index) => (
-              <Reveal key={testimonial.name} delay={index * 140}>
-                <div className="glass-card h-full rounded-3xl p-8">
-                  <div className="mb-4 flex items-center gap-1 text-amber-300">
-                    {'★★★★★'.slice(0, testimonial.rating)}
-                  </div>
-                  <p className="text-sm text-slate-200/80">“{testimonial.quote}”</p>
-                  <div className="mt-6 text-sm font-semibold text-white">
-                    {testimonial.name}
-                    <span className="block text-xs font-normal uppercase tracking-[0.25em] text-slate-400/70">
-                      {testimonial.location}
+                <p className="mt-3 text-sm sm:text-base text-gray-300 font-medium tracking-wide">
+                  Premium Car Care Service
+                </p>
+                <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
+                  {vipHighlights.map((label) => (
+                    <span key={label} className="flex items-center gap-1.5 text-[10px] sm:text-xs text-gray-300">
+                      <span className="text-red-600">●</span> {label}
                     </span>
-                  </div>
+                  ))}
                 </div>
-              </Reveal>
-            ))}
+                <span className="mt-6 inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-3 text-xs sm:text-sm font-bold uppercase tracking-wide text-white group-hover:bg-red-700 transition w-full sm:w-auto">
+                  Discover VIP Service
+                  <span>▸</span>
+                </span>
+              </div>
+              <div className="relative min-h-[220px] sm:min-h-[260px] md:min-h-full">
+                <img src={images.vip} alt="" className="absolute inset-0 h-full w-full object-cover object-center opacity-75" />
+                <div className="absolute inset-0 bg-gradient-to-l from-black/40 to-transparent pointer-events-none" />
+              </div>
+            </div>
           </div>
+        </Reveal>
+      </section>
+
+      <section id="how-it-works" className="mx-auto max-w-6xl px-4 pb-10">
+        <Reveal>
+          <div className="text-center mb-8">
+            <p className="text-xs font-bold uppercase tracking-[0.35em] text-gray-400">— How It Works —</p>
+          </div>
+        </Reveal>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 relative">
+          <div className="hidden md:block absolute top-8 left-[12%] right-[12%] border-t border-dashed border-gray-300" aria-hidden="true" />
+          {howItWorks.map((item, idx) => (
+            <Reveal key={item.step} delay={idx * 80}>
+              <div className="flex flex-col items-center text-center">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white text-sm font-bold z-10">{item.step}</div>
+                <div className="mt-3 text-2xl">{item.icon}</div>
+                <h3 className="mt-2 text-xs sm:text-sm font-black uppercase text-gray-900">{item.title}</h3>
+                <p className="mt-1 text-[10px] sm:text-xs text-gray-500 leading-relaxed">{item.description}</p>
+              </div>
+            </Reveal>
+          ))}
         </div>
       </section>
 
-      <footer className="relative z-10 border-t border-white/10 bg-slate-950/80 py-10">
-        <div className="mx-auto flex max-w-6xl flex-col-reverse items-center justify-between gap-6 px-6 text-xs text-slate-400/70 md:flex-row">
+      <section className="mx-auto max-w-6xl px-4 pb-10">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {trustFeatures.map((item, idx) => (
+            <Reveal key={item.title} delay={idx * 60}>
+              <div className="flex flex-col items-center text-center p-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-red-600 text-lg">{item.icon}</div>
+                <p className="mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-900">{item.title}</p>
+                <p className="text-[9px] sm:text-[10px] text-gray-500">{item.subtitle}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      <section id="products" className="mx-auto max-w-6xl px-4 pb-10 bg-gray-50 py-10 -mx-0">
+        <Reveal>
+          <div className="text-center mb-8">
+            <p className="text-xs font-bold uppercase tracking-[0.35em] text-gray-400">— Car Care Products —</p>
+            <h2 className="mt-2 text-xl sm:text-2xl font-black text-gray-900">Premium Products</h2>
+            <p className="mt-2 text-sm text-gray-500">Professional-grade car care products available for purchase.</p>
+          </div>
+        </Reveal>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {products.map((product, index) => (
+            <Reveal key={product.name} delay={index * 100}>
+              <div className="template-card overflow-hidden flex flex-col h-full">
+                <div className="relative h-40 bg-gray-100">
+                  {product.art({ className: 'h-full w-full object-cover' })}
+                </div>
+                <div className="p-5 flex flex-col flex-1">
+                  <div className="flex justify-between text-[10px] uppercase tracking-widest text-red-600 font-bold">
+                    <span>Sniper</span>
+                    <span>{product.price}</span>
+                  </div>
+                  <h3 className="mt-3 text-lg font-bold text-gray-900">{product.name}</h3>
+                  <p className="mt-1 text-xs text-gray-600">{product.description}</p>
+                  <ul className="mt-3 space-y-1 text-xs text-gray-500">
+                    {product.benefits.map((benefit) => (
+                      <li key={benefit} className="flex gap-2"><span className="text-red-600">•</span>{benefit}</li>
+                    ))}
+                  </ul>
+                  <a href="tel:+12125550123" className="mt-5 inline-flex items-center justify-center rounded-lg border-2 border-gray-900 py-2.5 text-xs font-bold uppercase text-gray-900 hover:bg-gray-900 hover:text-white transition">
+                    Purchase
+                  </a>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      <section id="reviews" className="mx-auto max-w-6xl px-4 pb-10">
+        <Reveal>
+          <div className="text-center mb-8">
+            <p className="text-xs font-bold uppercase tracking-[0.35em] text-gray-400">— Loved By Locals —</p>
+            <h2 className="mt-2 text-xl sm:text-2xl font-black text-gray-900">5-star mobile detailing. Every visit.</h2>
+          </div>
+        </Reveal>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {testimonials.map((testimonial, index) => (
+            <Reveal key={testimonial.name} delay={index * 100}>
+              <div className="template-card p-6 h-full">
+                <div className="text-amber-500 text-sm mb-3">{'★'.repeat(testimonial.rating)}</div>
+                <p className="text-sm text-gray-600 leading-relaxed">&ldquo;{testimonial.quote}&rdquo;</p>
+                <div className="mt-4 text-sm font-bold text-gray-900">{testimonial.name}</div>
+                <div className="text-[10px] uppercase tracking-widest text-gray-400">{testimonial.location}</div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      <footer className="border-t border-gray-200 bg-white py-8">
+        <div className="mx-auto flex max-w-6xl flex-col-reverse items-center justify-between gap-4 px-4 text-xs text-gray-500 md:flex-row">
           <p>© {new Date().getFullYear()} Sniper Car Care. All rights reserved.</p>
           <div className="flex items-center gap-6">
-            <a href="#services" className="hover:text-white transition">
-              Services
-            </a>
-            <a href="#reviews" className="hover:text-white transition">
-              Reviews
-            </a>
-            <a href="#products" className="hover:text-white transition">
-              Products
-            </a>
+            <a href="#services" className="hover:text-red-600 transition">Services</a>
+            <a href="#reviews" className="hover:text-red-600 transition">Reviews</a>
+            <a href="#products" className="hover:text-red-600 transition">Products</a>
           </div>
         </div>
       </footer>
 
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 bottom-nav-shadow md:hidden">
+        <div className="flex items-end justify-around px-2 pt-2 pb-3 max-w-lg mx-auto">
+          <a href="#top" className="flex flex-col items-center gap-0.5 text-red-600 min-w-[56px]">
+            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
+            <span className="text-[10px] font-semibold">Home</span>
+          </a>
+          <a href="#services" className="flex flex-col items-center gap-0.5 text-gray-600 min-w-[56px]">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+            <span className="text-[10px] font-medium">Services</span>
+          </a>
+          <a href="#services" className="flex flex-col items-center -mt-6 min-w-[72px]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-red-600/40">
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            </div>
+            <span className="text-[10px] font-bold text-red-600 mt-1">Book Now</span>
+          </a>
+          <a href="#vip" className="flex flex-col items-center gap-0.5 text-gray-600 min-w-[56px]">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            <span className="text-[10px] font-medium">Bookings</span>
+          </a>
+          <a href="#reviews" className="flex flex-col items-center gap-0.5 text-gray-600 min-w-[56px]">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            <span className="text-[10px] font-medium">Profile</span>
+          </a>
+        </div>
+      </nav>
+
       {/* Booking Modal */}
       {showBookingModal && selectedService && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-md rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 shadow-2xl">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-md rounded-2xl bg-white border border-gray-200 p-6 sm:p-8 shadow-2xl">
             <button
               onClick={() => {
                 setShowBookingModal(false);
                 setSelectedService(null);
               }}
-              className="absolute right-4 top-4 p-2 text-slate-400 hover:text-white transition"
+              className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-900 transition"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
 
-            <h3 className="text-2xl font-semibold text-white mb-2">Book {selectedService.name}</h3>
-            <p className="text-lg text-primary-300 mb-6">{selectedService.price}</p>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Book {selectedService.name}</h3>
+            <p className="text-lg text-red-600 font-semibold mb-6">{selectedService.price}</p>
 
             <form onSubmit={handleBookingSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Name *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
                 <input
                   type="text"
                   required
                   value={bookingForm.name}
                   onChange={(e) => setBookingForm({ ...bookingForm, name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="Your full name"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Phone Number *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
                 <input
                   type="tel"
                   required
                   value={bookingForm.phone}
                   onChange={(e) => setBookingForm({ ...bookingForm, phone: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="03001234567"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Vehicle Plate
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Plate</label>
                 <input
                   type="text"
                   value={bookingForm.vehicle_plate}
                   onChange={(e) => setBookingForm({ ...bookingForm, vehicle_plate: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="ABC-123"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Special Requests (Optional)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Special Requests (Optional)</label>
                 <textarea
                   value={bookingForm.notes}
                   onChange={(e) => setBookingForm({ ...bookingForm, notes: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
                   placeholder="Any special instructions or preferences..."
                 />
               </div>
-
               <button
                 type="submit"
-                className="w-full mt-6 inline-flex items-center justify-center rounded-full bg-primary-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary-600"
+                className="w-full mt-6 inline-flex items-center justify-center rounded-lg bg-red-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-red-700"
               >
                 Confirm Booking
               </button>
@@ -614,6 +983,171 @@ const LandingPage = () => {
         </div>
       )}
 
+      {/* VIP Booking Modal - Step 1: Basic Info */}
+      {showVIPModal && vipStep === 1 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-md rounded-2xl bg-white border border-red-200 p-6 sm:p-8 shadow-2xl my-8">
+            <button
+              onClick={() => { setShowVIPModal(false); setVipStep(1); }}
+              className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-900 transition"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center text-sm font-bold">1</span>
+                <span className="text-xs text-gray-500">Details</span>
+              </div>
+              <div className="h-px w-8 bg-gray-300" />
+              <div className="flex items-center gap-2 opacity-50">
+                <span className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-sm font-bold">2</span>
+                <span className="text-xs text-gray-400">Schedule</span>
+              </div>
+            </div>
+
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">VIP Service Booking</h3>
+            <p className="text-gray-600 mb-6">Enter your details to get started</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={vipBookingForm.name}
+                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, name: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="Your full name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Telephone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  value={vipBookingForm.phone}
+                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, phone: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="971501234567"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Model *</label>
+                <input
+                  type="text"
+                  required
+                  value={vipBookingForm.vehicle_model}
+                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, vehicle_model: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="e.g., BMW 7 Series, Mercedes S-Class"
+                />
+              </div>
+              <button
+                onClick={handleVipNextStep}
+                className="w-full mt-6 inline-flex items-center justify-center rounded-lg bg-red-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-red-700"
+              >
+                Book Appointment →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVIPModal && vipStep === 2 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-md rounded-2xl bg-white border border-red-200 p-6 sm:p-8 shadow-2xl my-8">
+            <button
+              onClick={() => { setShowVIPModal(false); setVipStep(1); }}
+              className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-900 transition"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 opacity-50">
+                <span className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold">✓</span>
+                <span className="text-xs text-gray-400">Details</span>
+              </div>
+              <div className="h-px w-8 bg-gray-300" />
+              <div className="flex items-center gap-2">
+                <span className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center text-sm font-bold">2</span>
+                <span className="text-xs text-gray-500">Schedule</span>
+              </div>
+            </div>
+
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Schedule Your Appointment</h3>
+            <p className="text-gray-600 mb-6">Choose your service, date and time</p>
+
+            <form onSubmit={submitVIPBooking} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select VIP Service *</label>
+                <select
+                  required
+                  value={vipBookingForm.service_type}
+                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, service_type: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">Choose a service...</option>
+                  {vipServices.map((service) => (
+                    <option key={service.name} value={service.name}>
+                      {service.name} - {service.price}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={vipBookingForm.appointment_date}
+                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, appointment_date: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Time *</label>
+                <select
+                  required
+                  value={vipBookingForm.appointment_time}
+                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, appointment_time: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">Select a time...</option>
+                  {availableTimeSlots.length > 0 ? (
+                    availableTimeSlots.map((slot) => (
+                      <option key={slot} value={slot}>{slot}</option>
+                    ))
+                  ) : (
+                    <option disabled>No slots available - select another date</option>
+                  )}
+                </select>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleVipPrevStep}
+                  className="flex-1 inline-flex items-center justify-center rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 inline-flex items-center justify-center rounded-lg bg-red-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-red-700"
+                >
+                  Confirm VIP Booking
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

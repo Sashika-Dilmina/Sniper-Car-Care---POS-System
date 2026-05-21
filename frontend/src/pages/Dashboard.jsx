@@ -8,12 +8,28 @@ import { useAuth } from '../context/AuthContext';
 const Dashboard = () => {
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState(null);
+  const [vipAppointments, setVipAppointments] = useState([]);
+  const [vipLoading, setVipLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     fetchAnalytics();
+    fetchVIPAppointments();
   }, []);
+
+  const fetchVIPAppointments = async () => {
+    try {
+      const response = await axios.get('/api/vip/bookings/today', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      setVipAppointments(response.data.data || []);
+    } catch (error) {
+      console.error('Error fetching VIP appointments:', error);
+    } finally {
+      setVipLoading(false);
+    }
+  };
 
   const fetchAnalytics = async () => {
     try {
@@ -188,6 +204,53 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* VIP Today's Appointments */}
+      {!vipLoading && vipAppointments.length > 0 && (
+        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">👑</span>
+              <h2 className="text-xl font-bold text-gray-900">VIP Appointments Today</h2>
+            </div>
+            <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-semibold">
+              {vipAppointments.length} appointment{vipAppointments.length > 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {vipAppointments.map((appt) => (
+              <div key={appt.id} className="border border-red-200 rounded-lg p-4 bg-red-50/30 hover:shadow-md transition">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="font-bold text-gray-900 text-lg">{appt.name}</p>
+                    <p className="text-sm text-gray-600">{appt.phone}</p>
+                  </div>
+                  <span className="text-xs font-bold text-red-600 bg-white px-2 py-1 rounded-full border border-red-200">
+                    VIP
+                  </span>
+                </div>
+                <div className="border-t border-red-100 pt-2 mt-2">
+                  <p className="text-sm"><span className="font-semibold">Vehicle:</span> {appt.vehicle_model}</p>
+                  <p className="text-sm"><span className="font-semibold">Type:</span> {appt.vehicle_type}</p>
+                  <p className="text-sm"><span className="font-semibold">Service:</span> {appt.service_type}</p>
+                  <p className="text-sm"><span className="font-semibold">Time:</span> {appt.appointment_time}</p>
+                </div>
+                <div className="mt-2">
+                  <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                    appt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                    appt.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                    appt.status === 'completed' ? 'bg-gray-100 text-gray-700' :
+                    'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    {appt.status === 'in_progress' ? 'In Progress' : 
+                     appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -54,6 +54,25 @@ async function extractPlate(filePath) {
 
     console.log(`[OCR] Raw text: "${text.trim()}" (Confidence: ${confidence}%)`);
 
+    // Smart Camera Overlay Extraction:
+    // Hikvision ANPR cameras often overlay "Plate No.: XXXXX Vehicle Color:" on the image.
+    // By removing all spaces, we can catch it even if it breaks across lines.
+    const noSpaceText = text.replace(/\s+/g, '');
+    const overlayMatch = noSpaceText.match(/PlateNo\.?[:\s]*([A-Za-z0-9\-]+?)(?:Vehicle|Uehicle|Color|Type)/i);
+    
+    if (overlayMatch && overlayMatch[1] && overlayMatch[1].length >= 3) {
+      let extractedFromOverlay = overlayMatch[1].toUpperCase();
+      
+      // If the camera couldn't read the plate, it outputs "unknown" or "unknoun"
+      if (extractedFromOverlay === 'UNKNOWN' || extractedFromOverlay === 'UNKNOUN') {
+        console.warn(`[OCR] Camera AI could not detect plate (Read as UNKNOWN). Skipping.`);
+        return null;
+      }
+      
+      console.log(`[OCR] 🎯 Successfully extracted plate from Camera AI Overlay: ${extractedFromOverlay}`);
+      return extractedFromOverlay;
+    }
+
     if (confidence < (process.env.OCR_CONFIDENCE_THRESHOLD || 60)) {
         console.warn(`[OCR] Confidence too low (${confidence}% < ${process.env.OCR_CONFIDENCE_THRESHOLD || 60}%)`);
         // We still try to clean it up and see if it looks like a plate
@@ -66,6 +85,11 @@ async function extractPlate(filePath) {
     // Basic validation
     if (plateNumber.length < 3) {
       console.warn(`[OCR] Extracted plate too short: ${plateNumber}`);
+      return null;
+    }
+
+    if (plateNumber.length > 20) {
+      console.warn(`[OCR] Extracted plate too long (likely noise): ${plateNumber.substring(0, 30)}...`);
       return null;
     }
 

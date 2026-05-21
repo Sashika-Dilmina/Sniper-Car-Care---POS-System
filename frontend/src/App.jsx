@@ -17,6 +17,7 @@ import ServiceDetail from './pages/ServiceDetail';
 import Employees from './pages/Employees';
 import Reports from './pages/Reports';
 import ANPR from './pages/ANPR';
+import VIPDashboard from './components/VIPDashboard';
 
 function App() {
   return (
@@ -60,6 +61,7 @@ function App() {
               } 
             />
             <Route path="anpr" element={<ANPR />} />
+            <Route path="vip" element={<VIPDashboard />} />
           </Route>
         </Routes>
       </Router>

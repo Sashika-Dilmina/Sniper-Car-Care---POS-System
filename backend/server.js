@@ -18,6 +18,7 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const mockRoutes = require('./routes/mockRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const vipBookingRoutes = require('./routes/vipBookingRoutes');
 const { startFtpServer } = require('./services/ftpServer');
 const { startFileWatcher } = require('./services/anprWatcher');
 
@@ -28,7 +29,8 @@ const app = express();
 // Middleware
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
-  process.env.CUSTOMER_WEBSITE_URL || 'http://localhost:4000'
+  process.env.CUSTOMER_WEBSITE_URL || 'http://localhost:4000',
+  'http://localhost:4001'
 ];
 
 app.use(cors({
@@ -57,6 +59,7 @@ app.get('/api/health', (req, res) => {
 
 // Public API Routes (no authentication)
 app.use('/api/public', publicRoutes);
+app.use('/api/vip', vipBookingRoutes);
 
 // Protected API Routes (require authentication)
 app.use('/api/auth', authRoutes);
