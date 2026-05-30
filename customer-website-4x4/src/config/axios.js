@@ -1,9 +1,20 @@
 import axios from 'axios';
 
-const apiUrl = import.meta.env.PROD ? '/api' : 'http://localhost:5000';
+function getApiBaseUrl() {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/$/, '');
+  }
+  if (!import.meta.env.PROD) {
+    return 'http://localhost:5000';
+  }
+  if (typeof window !== 'undefined' && window.location.hostname) {
+    return `http://${window.location.hostname}:5000`;
+  }
+  return 'http://72.62.254.128:5000';
+}
 
 const api = axios.create({
-  baseURL: apiUrl,
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },

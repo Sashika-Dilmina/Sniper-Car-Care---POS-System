@@ -32,7 +32,13 @@ const VIPDashboard = () => {
       setVipBookings(response.data.data || []);
     } catch (error) {
       console.error('Error fetching VIP bookings:', error);
-      toast.error('Failed to fetch VIP bookings');
+      if (error.response?.status === 401) {
+        toast.error('Login expired. Please log out and log in again.');
+      } else if (!error.response) {
+        toast.error('Cannot reach API server. Is backend running on port 5000?');
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to fetch VIP bookings');
+      }
     } finally {
       setLoading(false);
     }

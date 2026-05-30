@@ -222,9 +222,19 @@ exports.getAvailableSlots = asyncHandler(async (req, res) => {
     'SELECT appointment_time FROM vip_bookings WHERE appointment_date = ? AND status IN ("pending", "confirmed", "in_progress")',
     [date]
   );
-  
-  const bookedTimes = bookedSlots.map(slot => slot.appointment_time);
-  const availableSlots = allSlots.filter(slot => !bookedTimes.includes(slot + ':00'));
+
+  const normalizeTime = (value) => {
+    if (!value) return '';
+    const raw = typeof value === 'string' ? value : String(value);
+    const match = raw.match(/(\d{1,2}):(\d{2})/);
+    if (!match) return raw.slice(0, 5);
+    return `${match[1].padStart(2, '0')}:${match[2]}`;
+  };
+
+  const bookedSet = new Set(
+    bookedSlots.map((slot) => normalizeTime(slot.appointment_time))
+  );
+  const availableSlots = allSlots.filter((slot) => !bookedSet.has(normalizeTime(slot)));
   
   res.status(200).json({
     success: true,

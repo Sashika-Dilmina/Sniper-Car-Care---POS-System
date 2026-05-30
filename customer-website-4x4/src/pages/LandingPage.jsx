@@ -59,55 +59,40 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
   const freeReady = washStamps >= 5;
 
   return (
-    <div className="mt-6 sm:mt-8 relative w-full">
+    <div className="relative w-full">
       <div
-        className="absolute left-[7%] right-[7%] top-[22px] sm:top-[28px] h-0.5 bg-gray-200 z-0"
+        className="absolute left-[8%] right-[8%] top-[12px] sm:top-[16px] h-0.5 bg-gray-200 z-0"
         aria-hidden="true"
       />
-      <div className="relative z-10 grid grid-cols-6 w-full items-start">
+      <div className="relative z-10 flex justify-between items-center w-full">
         {[1, 2, 3, 4, 5].map((n) => {
           const isFilled = n <= filled;
           return (
-            <div key={n} className="flex flex-col items-center justify-center w-full">
+            <div key={n} className="flex flex-col items-center">
               <div
-                className={`flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-full border-2 text-sm sm:text-lg shadow-sm mx-auto transition-all duration-300 ${
+                className={`flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center rounded-full border border-gray-200 text-[8px] sm:text-xs shadow-sm transition-all duration-300 ${
                   isFilled
-                    ? 'border-red-600 bg-red-600 text-white scale-105'
-                    : 'border-gray-300 bg-white text-gray-400'
+                    ? 'border-red-600 bg-red-600 text-white'
+                    : 'bg-white text-gray-400'
                 }`}
               >
                 🚗
               </div>
-              <span
-                className={`text-[10px] sm:text-xs font-bold mt-2 ${isFilled ? 'text-red-600' : 'text-gray-400'}`}
-              >
-                {n}
-              </span>
             </div>
           );
         })}
-        <div className="flex flex-col items-center justify-center w-full">
+        <div className="flex flex-col items-center">
           <div
-            className={`flex h-11 w-11 sm:h-16 sm:w-16 items-center justify-center rounded-full text-lg sm:text-2xl mx-auto transition-all duration-300 ${
+            className={`flex h-7 w-7 sm:h-10 sm:w-10 items-center justify-center rounded-full text-[10px] sm:text-sm transition-all duration-300 ${
               freeReady
-                ? 'bg-red-600 text-white shadow-lg shadow-red-600/40 ring-4 ring-red-200 scale-110 animate-pulse'
-                : 'bg-gray-100 text-gray-400 border-2 border-gray-300'
+                ? 'bg-red-600 text-white shadow-md ring-2 ring-red-200 scale-110 animate-pulse'
+                : 'bg-gray-100 text-gray-400 border border-gray-200'
             }`}
           >
             🎁
           </div>
-          <span
-            className={`text-[10px] sm:text-xs font-black mt-2 uppercase ${freeReady ? 'text-red-600' : 'text-gray-400'}`}
-          >
-            Free
-          </span>
         </div>
       </div>
-      {freeReady && (
-        <p className="mt-4 text-center text-sm font-semibold text-red-600">
-          Your next wash is FREE! Book now to redeem.
-        </p>
-      )}
     </div>
   );
 };
@@ -174,44 +159,45 @@ const vipServices = [
 
 const packages = [
   {
-    name: 'Full 4x4 Service',
+    name: 'Full Body Service',
     price: '25 AED',
     accent: 'Complete refresh',
     description: 'Complete interior and exterior detailing for your 4x4.',
-    features: [
-      'Deep interior cleaning with floor mat treatment',
-      'Exterior foam wash and hand wash',
-      'Wheel and tire cleaning',
-      'Undercarriage rinse and final inspection',
-    ],
+    features: ['Deep interior cleaning', 'Exterior foam wash', 'Wheel cleaning'],
     duration: '120-150 minutes',
   },
   {
-    name: 'Off-Road Refresh',
-    price: '15 AED',
+    name: 'Double Soap',
+    price: '30 AED',
     accent: 'Off-road favorite',
     featured: true,
-    description: 'Mud and dirt removal wash for your 4x4 adventure vehicle.',
-    features: [
-      'Heavy mud and dirt removal',
-      'Hand wash and dry',
-      'Wheel and tire cleaning',
-      'Interior vacuum and wipe down',
-    ],
+    description: 'Double soap foam wash for heavy mud and dirt removal.',
+    features: ['Double foam wash', 'Hand wash', 'Undercarriage rinse'],
     duration: '60-90 minutes',
   },
   {
-    name: 'Quick Water Wash',
-    price: '8 AED',
+    name: 'Ceramic Wash',
+    price: '30 AED',
+    accent: 'Protection',
+    description: 'Ceramic infused wash for extra shine and protection.',
+    features: ['Ceramic soap wash', 'Paint protection', 'Gloss finish'],
+    duration: '60-90 minutes',
+  },
+  {
+    name: 'Body Wash',
+    price: '20 AED',
+    accent: 'Quick refresh',
+    description: 'Standard exterior wash.',
+    features: ['Foam wash', 'Hand dry'],
+    duration: '45-60 minutes',
+  },
+  {
+    name: 'Just Water',
+    price: '5 AED',
     accent: 'Quick rinse',
     description: 'Quick exterior wash with pure water.',
-    features: [
-      'Water exterior wash',
-      'Hand wash and dry',
-      'Wheel cleaning',
-      'Basic glass clean',
-    ],
-    duration: '20-25 minutes',
+    features: ['Water wash', 'Basic glass clean'],
+    duration: '15-20 minutes',
   },
 ];
 
@@ -384,9 +370,10 @@ const LandingPage = () => {
     phone: '',
     vehicle_model: '',
     vehicle_type: '4x4',
-    service_type: '',
+    service_type: '4x4 VIP Service',
     appointment_date: '',
-    appointment_time: ''
+    appointment_time: '',
+    notes: ''
   });
   const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
   const [washStamps, setWashStamps] = useState(0);
@@ -422,17 +409,25 @@ const LandingPage = () => {
     fetchCustomerInfo();
   }, [vehiclePlate]);
 
+  const defaultTimeSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
+
   // Fetch available time slots when date changes
   useEffect(() => {
     const fetchAvailableSlots = async () => {
-      if (!vipBookingForm.appointment_date) return;
+      if (!vipBookingForm.appointment_date) {
+        setAvailableTimeSlots(defaultTimeSlots);
+        return;
+      }
 
       try {
         const response = await axios.get(`/api/vip/bookings/available-slots/${vipBookingForm.appointment_date}`);
-        setAvailableTimeSlots(response.data.available_slots || []);
+        const slots = response.data.available_slots;
+        setAvailableTimeSlots(
+          Array.isArray(slots) && slots.length > 0 ? slots : defaultTimeSlots
+        );
       } catch (error) {
         console.log('Error fetching time slots:', error.message);
-        setAvailableTimeSlots(['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00']);
+        setAvailableTimeSlots(defaultTimeSlots);
       }
     };
 
@@ -504,7 +499,8 @@ const LandingPage = () => {
         vehicle_type: vipBookingForm.vehicle_type,
         service_type: vipBookingForm.service_type,
         appointment_date: vipBookingForm.appointment_date,
-        appointment_time: vipBookingForm.appointment_time
+        appointment_time: vipBookingForm.appointment_time,
+        notes: vipBookingForm.notes
       });
 
       toast.success('VIP booking confirmed! We will contact you soon.');
@@ -515,9 +511,10 @@ const LandingPage = () => {
         phone: '',
         vehicle_model: '',
         vehicle_type: '4x4',
-        service_type: '',
+        service_type: '4x4 VIP Service',
         appointment_date: '',
-        appointment_time: ''
+        appointment_time: '',
+        notes: ''
       });
       setAvailableTimeSlots([]);
     } catch (error) {
@@ -528,10 +525,11 @@ const LandingPage = () => {
 
   const handleVipNextStep = () => {
     if (vipStep === 1) {
-      if (!vipBookingForm.name || !vipBookingForm.phone) {
-        toast.error('Please fill in your name and phone number');
+      if (!vipBookingForm.name || !vipBookingForm.phone || !vipBookingForm.vehicle_model) {
+        toast.error('Please fill in your name, phone and vehicle model');
         return;
       }
+      setAvailableTimeSlots(['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00']);
       setVipStep(2);
     }
   };
@@ -549,9 +547,10 @@ const LandingPage = () => {
       phone: customerInfo?.phone || '',
       vehicle_model: '',
       vehicle_type: '4x4',
-      service_type: '',
+      service_type: '4x4 VIP Service',
       appointment_date: '',
-      appointment_time: ''
+      appointment_time: '',
+      notes: ''
     });
     setShowVIPModal(true);
   };
@@ -655,47 +654,28 @@ const LandingPage = () => {
         </div>
       )}
 
-      <section id="top" className="relative w-full max-w-6xl mx-auto px-3 sm:px-4 pt-3 sm:pt-6">
+      <section id="top" className="relative w-full max-w-6xl mx-auto px-2 sm:px-4 pt-2">
         <Reveal>
-          <div className="relative overflow-hidden rounded-2xl border border-gray-200 shadow-lg min-h-[320px] sm:min-h-[380px] w-full">
+          <div className="relative overflow-hidden rounded-xl border border-gray-200 shadow-sm h-[100px] sm:h-[160px] w-full">
             <img src={images.hero} alt="Sniper Car Care" className="hero-photo absolute inset-0 h-full w-full object-cover" loading="eager" />
-            <div className="relative z-10 flex min-h-[320px] sm:min-h-[380px] items-center justify-start p-0 h-full w-full">
-              <div className="hero-text-panel flex flex-col justify-center w-[92%] max-w-[300px] sm:max-w-[340px] md:w-[42%] md:max-w-[380px] shrink-0 ml-0">
+            <div className="relative z-10 flex h-[100px] sm:h-[160px] items-center justify-start p-0 h-full w-full">
+              <div className="hero-text-panel flex flex-col justify-center w-full px-4 shrink-0">
                 <SniperBrandLogo variant="hero" />
-                <p className="hero-subtitle-text mt-2 text-sm sm:text-base text-gray-800 font-medium leading-snug max-w-[240px]">
-                  Professional 4x4 care, inside and out — after every adventure.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-3 sm:gap-4 justify-start">
-                  {heroFeatures.map((f) => (
-                    <div key={f.label} className="flex flex-col items-center gap-1 min-w-[60px] sm:min-w-[68px]">
-                      <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full border-2 border-red-600 bg-white/90 text-base sm:text-lg">{f.icon}</div>
-                      <span className="text-[10px] sm:text-xs font-semibold text-gray-900 text-center drop-shadow-sm">{f.label}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
         </Reveal>
       </section>
 
-      <section className="w-full px-3 sm:px-4 py-4 sm:py-5">
+      <section className="w-full px-2 sm:px-4 py-1 sm:py-2">
         <Reveal>
-          <div className="w-full max-w-6xl mx-auto template-card border-red-100 bg-gradient-to-br from-white via-white to-red-50/40 p-6 sm:p-8 rounded-2xl shadow-md">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 w-full">
-              <div className="flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-full bg-red-600 text-white text-3xl sm:text-4xl shadow-lg shadow-red-600/25 mx-auto sm:mx-0">🎁</div>
-              <div className="flex-1 w-full text-center sm:text-left min-w-0">
-                <p className="font-black text-gray-900 text-lg sm:text-xl md:text-2xl uppercase tracking-wide leading-snug">
-                  5 Washes — <span className="text-red-600">6th Wash FREE!</span>
-                </p>
-                <p className="mt-2 text-sm sm:text-base text-gray-600">
-                  {customerInfo
-                    ? `Your progress: ${Math.min(washStamps, 5)}/5 washes toward a free service.`
-                    : 'Book a service to start earning stamps (scan alone does not add stamps).'}
-                </p>
-              </div>
+          <div className="w-full max-w-6xl mx-auto template-card border-red-100 bg-gradient-to-br from-white via-white to-red-50/40 px-2 py-2 sm:p-4 rounded-xl shadow-sm flex items-center justify-between">
+            <div className="shrink-0 flex items-center justify-center w-[50px]">
+              <span className="text-[9px] font-black uppercase text-gray-500 text-center leading-tight">5 Washes<br/>Free</span>
             </div>
-            <LoyaltyProgress washStamps={washStamps} />
+            <div className="flex-1 ml-2">
+              <LoyaltyProgress washStamps={washStamps} />
+            </div>
           </div>
         </Reveal>
       </section>
@@ -707,29 +687,26 @@ const LandingPage = () => {
             <p className="mt-2 text-sm sm:text-base text-gray-600 font-medium">Select the service that suits your needs.</p>
           </div>
         </Reveal>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 w-full">
+        <div className="grid grid-cols-5 gap-1.5 sm:gap-4 w-full px-1">
           {packages.map((pkg, idx) => (
-            <Reveal key={pkg.name} delay={idx * 100}>
-              <div className={`template-card flex flex-col w-full h-full min-h-[440px] sm:min-h-[460px] overflow-hidden ${pkg.featured ? 'ring-2 ring-red-600 shadow-lg shadow-red-600/10' : ''}`}>
-                <div className="p-4 sm:p-5 text-center border-b border-gray-100 shrink-0">
-                  <h3 className="text-sm sm:text-base font-black uppercase tracking-wide text-gray-900">{pkg.name}</h3>
-                  <div className="mx-auto mt-3 flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-red-600 text-white text-xl sm:text-2xl font-bold">
+            <Reveal key={pkg.name} delay={idx * 50} className="flex w-full min-w-0">
+              <div className={`template-card flex flex-col w-full h-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white ${pkg.featured ? 'ring-1 ring-red-600' : ''}`}>
+                <div className="p-1 sm:p-2 text-center shrink-0 bg-white h-[36px] sm:h-[48px] flex items-center justify-center">
+                  <h3 className="text-[7px] sm:text-xs font-black uppercase tracking-tighter text-gray-900 leading-[1.1] break-words line-clamp-3">{pkg.name}</h3>
+                </div>
+                <div className="relative h-14 sm:h-24 bg-gray-900 overflow-visible shrink-0 border-y border-gray-100">
+                  <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center opacity-90" />
+                  <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex h-6 w-6 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-600 text-white text-[7px] sm:text-sm font-bold shadow-md ring-2 ring-white z-10">
                     {pkg.price.replace(' AED', '')}
                   </div>
-                  <p className="mt-1 text-sm font-bold text-red-600">{pkg.price}</p>
                 </div>
-                <div className="relative h-44 sm:h-48 bg-gray-900 overflow-hidden shrink-0">
-                  <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center scale-110" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/30 to-black/10 pointer-events-none" />
-                </div>
-                <div className="p-4 sm:p-5 flex flex-col flex-1">
-                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed flex-1">{pkg.description}</p>
+                <div className="px-1 pt-4 pb-2 sm:pt-6 sm:pb-3 flex flex-col flex-1 items-center text-center bg-white justify-between">
+                  <p className="text-[6px] sm:text-[10px] text-gray-500 leading-[1.2] mb-1.5 sm:mb-2 line-clamp-3 w-full break-words">{pkg.description}</p>
                   <button
                     onClick={() => handleServiceClick(pkg)}
-                    className="mt-5 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-900 py-3 text-xs sm:text-sm font-bold uppercase tracking-wide text-white hover:bg-red-600 transition active:scale-[0.98]"
+                    className="w-[90%] rounded bg-black py-1 sm:py-1.5 text-[6px] sm:text-[9px] font-bold uppercase tracking-widest text-white hover:bg-red-600 transition"
                   >
-                    Select
-                    <span className="text-red-400">▸</span>
+                    SELECT
                   </button>
                 </div>
               </div>
@@ -747,32 +724,32 @@ const LandingPage = () => {
             onKeyDown={(e) => e.key === 'Enter' && openVIPModal()}
             className="relative overflow-hidden rounded-2xl bg-black cursor-pointer group hover:ring-2 hover:ring-red-600 transition-shadow"
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-              <div className="p-6 sm:p-10 relative z-10 flex flex-col justify-center">
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <CrownIcon className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]" />
-                  <span className="text-4xl sm:text-5xl font-black uppercase text-red-600 vip-neon-text leading-none">
+            <div className="flex flex-row items-stretch">
+              <div className="p-4 sm:p-6 relative z-10 flex flex-col justify-center w-[60%] sm:w-1/2 shrink-0">
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <CrownIcon className="w-10 h-10 sm:w-16 sm:h-16 shrink-0 text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]" />
+                  <span className="text-2xl sm:text-4xl font-black uppercase text-red-600 vip-neon-text leading-none">
                     VIP
                   </span>
                 </div>
-                <p className="mt-3 text-sm sm:text-base text-gray-300 font-medium tracking-wide">
+                <p className="mt-1 sm:mt-2 text-[10px] sm:text-sm text-gray-300 font-medium tracking-wide">
                   Premium Car Care Service
                 </p>
-                <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
+                <div className="mt-2 sm:mt-3 flex flex-wrap gap-x-3 gap-y-1">
                   {vipHighlights.map((label) => (
-                    <span key={label} className="flex items-center gap-1.5 text-[10px] sm:text-xs text-gray-300">
+                    <span key={label} className="flex items-center gap-1 text-[8px] sm:text-xs text-gray-300">
                       <span className="text-red-600">●</span> {label}
                     </span>
                   ))}
                 </div>
-                <span className="mt-6 inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-3 text-xs sm:text-sm font-bold uppercase tracking-wide text-white group-hover:bg-red-700 transition w-full sm:w-auto">
-                  Discover VIP Service
+                <span className="mt-3 sm:mt-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 sm:px-4 sm:py-2 text-[9px] sm:text-sm font-bold uppercase tracking-wide text-white group-hover:bg-red-700 transition w-max">
+                  Discover VIP
                   <span>▸</span>
                 </span>
               </div>
-              <div className="relative min-h-[220px] sm:min-h-[260px] md:min-h-full">
-                <img src={images.vip} alt="" className="absolute inset-0 h-full w-full object-cover object-center opacity-75" />
-                <div className="absolute inset-0 bg-gradient-to-l from-black/40 to-transparent pointer-events-none" />
+              <div className="relative flex-1">
+                <img src={images.vip} alt="" className="absolute inset-0 h-full w-full object-cover object-center opacity-85" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent pointer-events-none" />
               </div>
             </div>
           </div>
@@ -1085,20 +1062,11 @@ const LandingPage = () => {
 
             <form onSubmit={submitVIPBooking} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Select VIP Service *</label>
-                <select
-                  required
-                  value={vipBookingForm.service_type}
-                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, service_type: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
-                >
-                  <option value="">Choose a service...</option>
-                  {vipServices.map((service) => (
-                    <option key={service.name} value={service.name}>
-                      {service.name} - {service.price}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Selected Service</label>
+                <div className="w-full px-4 py-3 rounded-lg bg-gray-100 border border-gray-200 text-gray-900 font-semibold flex justify-between items-center">
+                  <span>4x4 VIP Service</span>
+                  <span className="text-red-600">90 AED</span>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Date *</label>
@@ -1128,6 +1096,16 @@ const LandingPage = () => {
                     <option disabled>No slots available - select another date</option>
                   )}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Note (Optional)</label>
+                <textarea
+                  value={vipBookingForm.notes}
+                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, notes: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                  placeholder="Any additional information..."
+                />
               </div>
               <div className="flex gap-3 pt-2">
                 <button
