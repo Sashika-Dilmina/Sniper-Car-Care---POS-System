@@ -7,10 +7,7 @@ function getApiBaseUrl() {
   if (!import.meta.env.PROD) {
     return 'http://localhost:5000';
   }
-  if (typeof window !== 'undefined' && window.location.hostname) {
-    return `http://${window.location.hostname}:5000`;
-  }
-  return 'http://72.62.254.128:5000';
+  return '/api';
 }
 
 const api = axios.create({
