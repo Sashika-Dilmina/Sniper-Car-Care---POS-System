@@ -4,7 +4,7 @@ import axios from 'axios';
 // In development, Vite proxy handles /api requests (see vite.config.js)
 // In production, baseURL points to the backend server directly
 axios.defaults.baseURL = import.meta.env.PROD 
-  ? '/api'
+  ? ''
   : 'http://localhost:5000';
 axios.defaults.headers.common['Content-Type'] = 'application/json';
 

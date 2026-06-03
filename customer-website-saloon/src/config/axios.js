@@ -7,7 +7,7 @@ function getApiBaseUrl() {
   if (!import.meta.env.PROD) {
     return 'http://localhost:5000';
   }
-  return '/api';
+  return '';
 }
 
 const api = axios.create({
