@@ -11,12 +11,48 @@ const Dashboard = () => {
   const [vipAppointments, setVipAppointments] = useState([]);
   const [vipLoading, setVipLoading] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [completedServices, setCompletedServices] = useState([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
   const isAdmin = user?.role === 'admin';
+
+  const calculateDuration = (service) => {
+    if (!service.started_at || !service.completed_at) return null;
+    const start = new Date(service.started_at);
+    const end = new Date(service.completed_at);
+    const diffMs = end - start;
+    const diffMins = Math.round(diffMs / 60000);
+    return diffMins;
+  };
+
+  const formatDuration = (mins) => {
+    if (mins === null || mins === undefined) return 'N/A';
+    if (mins < 0) return '0 min';
+    if (mins < 60) {
+      return `${mins} min`;
+    }
+    const hours = Math.floor(mins / 60);
+    const minutes = mins % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  };
 
   useEffect(() => {
     fetchAnalytics();
     fetchVIPAppointments();
-  }, []);
+    if (isAdmin) {
+      fetchCompletedServices();
+    }
+  }, [isAdmin]);
+
+  const fetchCompletedServices = async () => {
+    try {
+      const response = await axios.get('/api/services?status=completed');
+      setCompletedServices(response.data.services || []);
+    } catch (error) {
+      console.error('Error fetching completed services:', error);
+    } finally {
+      setServicesLoading(false);
+    }
+  };
 
   const fetchVIPAppointments = async () => {
     try {
@@ -128,45 +164,49 @@ const Dashboard = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div>
-            <p className="text-gray-600 text-sm">Total Card Payments</p>
-            <p className="text-2xl font-bold text-blue-600">
-              AED {(summary.total_card_payments || 0).toLocaleString()}
-            </p>
-          </div>
-        </div>
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${isAdmin ? 'xl:grid-cols-4' : ''} gap-6`}>
+        {isAdmin && (
+          <>
+            <div className="bg-white p-6 rounded-lg shadow">
+              <div>
+                <p className="text-gray-600 text-sm">Total Card Payments</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  AED {(summary.total_card_payments || 0).toLocaleString()}
+                </p>
+              </div>
+            </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div>
-            <p className="text-gray-600 text-sm">Total Cash Payments</p>
-            <p className="text-2xl font-bold text-green-600">
-              AED {(summary.total_cash_payments || 0).toLocaleString()}
-            </p>
-          </div>
-        </div>
+            <div className="bg-white p-6 rounded-lg shadow">
+              <div>
+                <p className="text-gray-600 text-sm">Total Cash Payments</p>
+                <p className="text-2xl font-bold text-green-600">
+                  AED {(summary.total_cash_payments || 0).toLocaleString()}
+                </p>
+              </div>
+            </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div>
-            <p className="text-gray-600 text-sm">Total Profit</p>
-            <p className="text-2xl font-bold text-gray-800">
-              AED {(summary.total_profit || 0).toLocaleString()}
-            </p>
-          </div>
-        </div>
+            <div className="bg-white p-6 rounded-lg shadow">
+              <div>
+                <p className="text-gray-600 text-sm">Total Profit</p>
+                <p className="text-2xl font-bold text-gray-800">
+                  AED {(summary.total_profit || 0).toLocaleString()}
+                </p>
+              </div>
+            </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div>
-            <p className="text-gray-600 text-sm">Pending Payments</p>
-            <p className="text-2xl font-bold text-orange-600">
-              AED {(summary.pending_amount || 0).toLocaleString()}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {summary.pending_count || 0} orders
-            </p>
-          </div>
-        </div>
+            <div className="bg-white p-6 rounded-lg shadow">
+              <div>
+                <p className="text-gray-600 text-sm">Pending Payments</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  AED {(summary.pending_amount || 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {summary.pending_count || 0} orders
+                </p>
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="bg-white p-6 rounded-lg shadow">
           <div>
@@ -195,14 +235,16 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div>
-            <p className="text-gray-600 text-sm">Total Customers</p>
-            <p className="text-2xl font-bold text-gray-800">
-              {summary.total_customers || 0}
-            </p>
+        {isAdmin && (
+          <div className="bg-white p-6 rounded-lg shadow">
+            <div>
+              <p className="text-gray-600 text-sm">Total Customers</p>
+              <p className="text-2xl font-bold text-gray-800">
+                {summary.total_customers || 0}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* VIP Today's Appointments */}
@@ -360,7 +402,7 @@ const Dashboard = () => {
                   <tr key={customer.id} className="border-b hover:bg-gray-50">
                     <td className="p-2">{customer.name}</td>
                     <td className="p-2">{customer.phone}</td>
-                    <td className="p-2">{customer.vehicle_model || 'N/A'}</td>
+                    <td className="p-2">{customer.vehicle_type || 'N/A'}</td>
                     <td className="p-2">{customer.vehicle_plate || 'N/A'}</td>
                     <td className="p-2 text-right">{customer.joined_date}</td>
                   </tr>
@@ -443,6 +485,69 @@ const Dashboard = () => {
                 <p>No feedback available yet</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Service Completion Durations - Admin Only */}
+      {isAdmin && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold">Service Completion Performance</h2>
+            <Link to="/services" className="text-primary-600 hover:underline">
+              View All Services
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-2">Customer</th>
+                  <th className="text-left p-2">Vehicle Plate</th>
+                  <th className="text-left p-2">Service</th>
+                  <th className="text-left p-2 text-center">Started</th>
+                  <th className="text-left p-2 text-center">Completed</th>
+                  <th className="text-right p-2">Time Taken</th>
+                </tr>
+              </thead>
+              <tbody>
+                {completedServices.length > 0 ? (
+                  completedServices.slice(0, 10).map((service) => {
+                    const duration = calculateDuration(service);
+                    return (
+                      <tr key={service.id} className="border-b hover:bg-gray-50">
+                        <td className="p-2 font-semibold text-gray-800">
+                          {service.customer_name || <span className="text-gray-400 italic font-normal">Walk-in</span>}
+                        </td>
+                        <td className="p-2 font-mono text-sm">{service.vehicle_plate || 'N/A'}</td>
+                        <td className="p-2">{service.service_name}</td>
+                        <td className="p-2 text-center text-xs text-gray-500">
+                          {service.started_at ? new Date(service.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A'}
+                        </td>
+                        <td className="p-2 text-center text-xs text-gray-500">
+                          {service.completed_at ? new Date(service.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A'}
+                        </td>
+                        <td className="p-2 text-right">
+                          <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${
+                            duration !== null && duration < 30 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {formatDuration(duration)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="p-4 text-center text-gray-500">
+                      No completed services found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

@@ -169,6 +169,15 @@ const createOrder = asyncHandler(async (req, res) => {
 
     const orderId = orderResult.insertId;
 
+    // Fetch customer vehicle type if customer_id exists
+    let vehicleType = 'Saloon';
+    if (customer_id) {
+      const [custRows] = await connection.query('SELECT vehicle_type FROM customers WHERE id = ?', [customer_id]);
+      if (custRows.length > 0) {
+        vehicleType = custRows[0].vehicle_type;
+      }
+    }
+
     // Create order items and update stock
     for (let item of items) {
       await connection.query(
@@ -181,6 +190,15 @@ const createOrder = asyncHandler(async (req, res) => {
         'UPDATE products SET stock = stock - ? WHERE id = ?',
         [item.quantity, item.product_id]
       );
+
+      // Check if item is a service, and create service task
+      const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
+      if (prodRows.length > 0 && prodRows[0].category === 'Services') {
+        await connection.query(
+          'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
+          [customer_id || null, prodRows[0].name, vehicleType, item.price, 'Added via POS Order', 'pending']
+        );
+      }
     }
 
     await connection.commit();

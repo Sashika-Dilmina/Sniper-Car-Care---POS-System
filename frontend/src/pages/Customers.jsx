@@ -8,6 +8,17 @@ const Customers = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
+  const [checkinCustomer, setCheckinCustomer] = useState(null);
+  const [checkinForm, setCheckinForm] = useState({
+    customer_id: '',
+    name: '',
+    phone: '',
+    vehicle_plate: '',
+    vehicle_type: 'Saloon',
+    province: 'Dubai',
+    notes: 'Camera offline - manual scan'
+  });
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -135,6 +146,32 @@ const Customers = () => {
     }
   };
 
+  const handleOpenCheckin = (customer) => {
+    setCheckinCustomer(customer);
+    setCheckinForm({
+      customer_id: customer.id,
+      name: customer.name || '',
+      phone: customer.phone || '',
+      vehicle_plate: customer.vehicle_plate || '',
+      vehicle_type: customer.vehicle_type || 'Saloon',
+      province: customer.province || 'Dubai',
+      notes: 'Camera offline - manual scan'
+    });
+    setShowCheckinModal(true);
+  };
+
+  const handleCheckinSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post('/api/anpr/manual-checkin', checkinForm);
+      toast.success(response.data.message || 'Manual check-in completed!');
+      setShowCheckinModal(false);
+      fetchCustomers();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to perform check-in');
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
   }
@@ -241,6 +278,105 @@ const Customers = () => {
                   className="flex-1 px-4 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 font-bold transition shadow-lg shadow-primary-200"
                 >
                   Save Registration
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Check-in Modal */}
+      {showCheckinModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-primary-600 p-6 text-white text-center">
+              <h2 className="text-2xl font-bold">Manual Vehicle Check-In</h2>
+              <p className="text-primary-100 text-sm mt-1">
+                For customer {checkinForm.name} ({checkinForm.vehicle_plate})
+              </p>
+            </div>
+            <form onSubmit={handleCheckinSubmit} className="p-6 space-y-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Customer Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={checkinForm.name}
+                    onChange={(e) => setCheckinForm({ ...checkinForm, name: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="Customer name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Phone Number (971...)</label>
+                  <input
+                    type="tel"
+                    required
+                    value={checkinForm.phone}
+                    onChange={(e) => setCheckinForm({ ...checkinForm, phone: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="+971XXXXXXXXX"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Vehicle Plate</label>
+                    <input
+                      type="text"
+                      required
+                      value={checkinForm.vehicle_plate}
+                      onChange={(e) => setCheckinForm({ ...checkinForm, vehicle_plate: e.target.value.toUpperCase() })}
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono"
+                      placeholder="DXB123"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Vehicle Type</label>
+                    <select
+                      value={checkinForm.vehicle_type}
+                      onChange={(e) => setCheckinForm({ ...checkinForm, vehicle_type: e.target.value })}
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    >
+                      <option value="Saloon">Saloon</option>
+                      <option value="4x4">4x4</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Province</label>
+                  <input
+                    type="text"
+                    value={checkinForm.province}
+                    onChange={(e) => setCheckinForm({ ...checkinForm, province: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="e.g. Dubai"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Check-in Note / Comment *</label>
+                  <textarea
+                    required
+                    value={checkinForm.notes}
+                    onChange={(e) => setCheckinForm({ ...checkinForm, notes: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none h-20 resize-none"
+                    placeholder="e.g., Gate camera failed, manually scanned at entrance."
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCheckinModal(false)}
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-bold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 font-bold transition shadow-lg shadow-primary-200"
+                >
+                  Check-in & SMS
                 </button>
               </div>
             </form>
@@ -474,6 +610,15 @@ const Customers = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleOpenCheckin(customer)}
+                          className="text-primary-600 hover:text-primary-800 transition-colors"
+                          title="Manual Check-in / Scan"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                          </svg>
+                        </button>
                         <Link
                           to={`/customers/${customer.id}`}
                           className="text-blue-600 hover:text-blue-800 transition-colors"

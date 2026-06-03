@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import { images, getServiceImage } from '../config/siteImages';
+import BottomNav from '../components/BottomNav';
 
-const Reveal = ({ children, delay = 0 }) => {
+const Reveal = ({ children, delay = 0, className = '' }) => {
   const elementRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
     const node = elementRef.current;
@@ -15,7 +17,7 @@ const Reveal = ({ children, delay = 0 }) => {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
+            setIsVisible(true);
             observer.unobserve(entry.target);
           }
         });
@@ -31,7 +33,7 @@ const Reveal = ({ children, delay = 0 }) => {
   }, []);
 
   return (
-    <div ref={elementRef} className="reveal" style={{ transitionDelay: `${delay}ms` }}>
+    <div ref={elementRef} className={`reveal ${isVisible ? 'visible' : ''} ${className || ''}`} style={{ transitionDelay: `${delay}ms` }}>
       {children}
     </div>
   );
@@ -215,7 +217,6 @@ const howItWorks = [
 
 const trustFeatures = [
   { title: 'CUSTOMER SUPPORT', subtitle: '24/7 Available', icon: '📞' },
-  { title: 'COMPETITIVE PRICES', subtitle: 'Best quality at the best price', icon: '💰' },
   { title: 'QUALITY GUARANTEE', subtitle: 'Satisfaction guaranteed', icon: '✅' },
   { title: 'EXPERT TEAM', subtitle: 'Trained professionals you can trust', icon: '👥' },
 ];
@@ -352,7 +353,8 @@ const products = [
 
 const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showVIPModal, setShowVIPModal] = useState(false);
   const [vipStep, setVipStep] = useState(1);
@@ -374,10 +376,34 @@ const LandingPage = () => {
     appointment_time: '',
     notes: ''
   });
+  const [quickBookOpen, setQuickBookOpen] = useState(false);
+  const [quickBookForm, setQuickBookForm] = useState({ service: '', date: '', time: '' });
+  const [showSupportOptions, setShowSupportOptions] = useState(false);
   const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
   const [washStamps, setWashStamps] = useState(0);
 
   const vehiclePlate = searchParams.get('plate') || '';
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'book') {
+      setQuickBookOpen(true);
+      // Clean up URL
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('action');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (location.hash) {
+      setTimeout(() => {
+        const element = document.getElementById(location.hash.slice(1));
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    }
+  }, [location]);
 
   // Fetch customer info by plate number
   useEffect(() => {
@@ -764,12 +790,50 @@ const LandingPage = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 relative">
           <div className="hidden md:block absolute top-8 left-[12%] right-[12%] border-t border-dashed border-gray-300" aria-hidden="true" />
           {howItWorks.map((item, idx) => (
-            <Reveal key={item.step} delay={idx * 80}>
-              <div className="flex flex-col items-center text-center">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white text-sm font-bold z-10">{item.step}</div>
+            <Reveal key={item.step} delay={idx * 80} className={`relative ${item.step === 1 && quickBookOpen ? 'z-50' : 'z-20'}`}>
+              <div 
+                className={`flex flex-col items-center text-center ${item.step === 1 || item.step === 3 ? 'cursor-pointer hover:scale-[1.02] transition-transform' : ''}`}
+                onClick={() => {
+                  if (item.step === 1) setQuickBookOpen(!quickBookOpen);
+                  if (item.step === 3) openVIPModal();
+                }}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white text-sm font-bold z-10 shadow-md">{item.step}</div>
                 <div className="mt-3 text-2xl">{item.icon}</div>
                 <h3 className="mt-2 text-xs sm:text-sm font-black uppercase text-gray-900">{item.title}</h3>
                 <p className="mt-1 text-[10px] sm:text-xs text-gray-500 leading-relaxed">{item.description}</p>
+                
+                {item.step === 1 && quickBookOpen && (
+                  <div className="hidden sm:flex absolute top-full left-1/2 -translate-x-1/2 mt-4 w-[250px] max-w-[250px] p-4 bg-white rounded-xl border border-gray-200 shadow-2xl flex-col gap-3 z-50 before:content-[''] before:absolute before:-top-2 before:left-1/2 before:-translate-x-1/2 before:border-8 before:border-transparent before:border-b-white" onClick={(e) => e.stopPropagation()}>
+                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
+                      <option value="">Select Service</option>
+                      {packages.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                    </select>
+                    <input type="date" className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.date} onChange={e => setQuickBookForm({...quickBookForm, date: e.target.value})} min={new Date().toISOString().split('T')[0]} />
+                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.time} onChange={e => setQuickBookForm({...quickBookForm, time: e.target.value})}>
+                      <option value="">Select Time</option>
+                      {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <button 
+                      className="w-full mt-1 bg-red-600 text-white text-xs font-bold py-3 rounded-lg hover:bg-red-700 shadow-md transition-colors"
+                      onClick={() => {
+                        if (!quickBookForm.service) return toast.error('Select a service');
+                        const svc = packages.find(p => p.name === quickBookForm.service);
+                        setSelectedService(svc);
+                        
+                        let initialNotes = '';
+                        if (quickBookForm.date || quickBookForm.time) {
+                          initialNotes = `Preferred Appointment: ${quickBookForm.date || 'Any Date'} at ${quickBookForm.time || 'Any Time'}\n`;
+                        }
+                        setBookingForm(prev => ({ ...prev, notes: initialNotes }));
+                        setShowBookingModal(true);
+                        setQuickBookOpen(false);
+                      }}
+                    >
+                      Book Now
+                    </button>
+                  </div>
+                )}
               </div>
             </Reveal>
           ))}
@@ -777,13 +841,25 @@ const LandingPage = () => {
       </section>
 
       <section className="mx-auto max-w-6xl px-4 pb-10">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {trustFeatures.map((item, idx) => (
-            <Reveal key={item.title} delay={idx * 60}>
-              <div className="flex flex-col items-center text-center p-3">
+            <Reveal key={item.title} delay={idx * 60} className={idx === 2 ? 'col-span-2 sm:col-span-1 mx-auto sm:mx-0 max-w-[50%]' : ''}>
+              <div 
+                className={`flex flex-col items-center text-center p-3 ${item.title === 'CUSTOMER SUPPORT' ? 'cursor-pointer hover:bg-gray-50 rounded-xl transition' : ''}`}
+                onClick={() => {
+                  if (item.title === 'CUSTOMER SUPPORT') setShowSupportOptions(!showSupportOptions);
+                }}
+              >
                 <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-red-600 text-lg">{item.icon}</div>
                 <p className="mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-900">{item.title}</p>
                 <p className="text-[9px] sm:text-[10px] text-gray-500">{item.subtitle}</p>
+                
+                {item.title === 'CUSTOMER SUPPORT' && showSupportOptions && (
+                  <div className="mt-3 flex gap-2 w-full justify-center" onClick={(e) => e.stopPropagation()}>
+                    <a href="tel:+971555371811" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">Call</a>
+                    <a href="https://wa.me/971555371811" target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">WhatsApp</a>
+                  </div>
+                )}
               </div>
             </Reveal>
           ))}
@@ -859,32 +935,7 @@ const LandingPage = () => {
         </div>
       </footer>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 bottom-nav-shadow md:hidden">
-        <div className="flex items-end justify-around px-2 pt-2 pb-3 max-w-lg mx-auto">
-          <a href="#top" className="flex flex-col items-center gap-0.5 text-red-600 min-w-[56px]">
-            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
-            <span className="text-[10px] font-semibold">Home</span>
-          </a>
-          <a href="#services" className="flex flex-col items-center gap-0.5 text-gray-600 min-w-[56px]">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-            <span className="text-[10px] font-medium">Services</span>
-          </a>
-          <a href="#services" className="flex flex-col items-center -mt-6 min-w-[72px]">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-red-600/40">
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            </div>
-            <span className="text-[10px] font-bold text-red-600 mt-1">Book Now</span>
-          </a>
-          <a href="#vip" className="flex flex-col items-center gap-0.5 text-gray-600 min-w-[56px]">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-            <span className="text-[10px] font-medium">Bookings</span>
-          </a>
-          <a href="#reviews" className="flex flex-col items-center gap-0.5 text-gray-600 min-w-[56px]">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-            <span className="text-[10px] font-medium">Profile</span>
-          </a>
-        </div>
-      </nav>
+      <BottomNav />
 
       {/* Booking Modal */}
       {showBookingModal && selectedService && (
@@ -1122,6 +1173,62 @@ const LandingPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Book Mobile Modal */}
+      {quickBookOpen && (
+        <div className="fixed inset-0 z-[100] flex sm:hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setQuickBookOpen(false)}>
+          <div className="relative w-full max-w-sm rounded-2xl bg-white border border-gray-200 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-5">
+              <span className="font-bold text-gray-900 text-xl">Quick Book</span>
+              <button onClick={() => setQuickBookOpen(false)} className="p-1 text-gray-400 hover:text-gray-900 bg-gray-100 rounded-full transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Service Type</label>
+                <select className="w-full p-3.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
+                  <option value="">Select Service</option>
+                  {packages.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Date</label>
+                <input type="date" className="w-full p-3.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.date} onChange={e => setQuickBookForm({...quickBookForm, date: e.target.value})} min={new Date().toISOString().split('T')[0]} />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Time</label>
+                <select className="w-full p-3.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.time} onChange={e => setQuickBookForm({...quickBookForm, time: e.target.value})}>
+                  <option value="">Select Time</option>
+                  {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+
+              <button 
+                className="w-full mt-2 bg-red-600 text-white text-base font-bold py-4 rounded-xl hover:bg-red-700 shadow-lg shadow-red-600/30 transition-all active:scale-[0.98]"
+                onClick={() => {
+                  if (!quickBookForm.service) return toast.error('Select a service');
+                  const svc = packages.find(p => p.name === quickBookForm.service);
+                  setSelectedService(svc);
+                  
+                  let initialNotes = '';
+                  if (quickBookForm.date || quickBookForm.time) {
+                    initialNotes = `Preferred Appointment: ${quickBookForm.date || 'Any Date'} at ${quickBookForm.time || 'Any Time'}\n`;
+                  }
+                  setBookingForm(prev => ({ ...prev, notes: initialNotes }));
+                  setShowBookingModal(true);
+                  setQuickBookOpen(false);
+                }}
+              >
+                Continue Booking
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -62,19 +62,26 @@ const getService = asyncHandler(async (req, res) => {
   res.json({ service: services[0] });
 });
 
-// @desc    Create service
-// @route   POST /api/services
-// @access  Private
 const createService = asyncHandler(async (req, res) => {
-  const { customer_id, service_name, vehicle_type, price, description } = req.body;
+  const { customer_id, service_name, vehicle_type, price, description, status } = req.body;
 
   if (!service_name || !vehicle_type || !price) {
     return res.status(400).json({ message: 'Service name, vehicle type, and price are required' });
   }
 
+  const initialStatus = status || 'pending';
+  let startedAt = null;
+  let completedAt = null;
+  if (initialStatus === 'in_progress') {
+    startedAt = new Date();
+  } else if (initialStatus === 'completed') {
+    startedAt = new Date();
+    completedAt = new Date();
+  }
+
   const [result] = await pool.query(
-    'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
-    [customer_id || null, service_name, vehicle_type, price, description || null, 'pending']
+    'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, started_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [customer_id || null, service_name, vehicle_type, price, description || null, initialStatus, startedAt, completedAt]
   );
 
   const [newService] = await pool.query('SELECT * FROM services WHERE id = ?', [result.insertId]);
@@ -111,7 +118,24 @@ const updateServiceStatus = asyncHandler(async (req, res) => {
     }
   }
 
-  await pool.query('UPDATE services SET status = ? WHERE id = ?', [status, id]);
+  if (status === 'in_progress') {
+    await pool.query(
+      'UPDATE services SET status = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE id = ?',
+      [status, id]
+    );
+  } else if (status === 'completed') {
+    await pool.query(
+      'UPDATE services SET status = ?, completed_at = CURRENT_TIMESTAMP, started_at = COALESCE(started_at, created_at, CURRENT_TIMESTAMP) WHERE id = ?',
+      [status, id]
+    );
+  } else if (status === 'pending') {
+    await pool.query(
+      'UPDATE services SET status = ?, started_at = NULL, completed_at = NULL WHERE id = ?',
+      [status, id]
+    );
+  } else {
+    await pool.query('UPDATE services SET status = ? WHERE id = ?', [status, id]);
+  }
 
   // If service completed, send notification and award loyalty points
   if (status === 'completed' && service.customer_id) {
@@ -198,7 +222,7 @@ const redeemFreeService = asyncHandler(async (req, res) => {
   try {
     // Create the free service
     const [result] = await connection.query(
-      'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, started_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
       [customer_id, service_name, vehicle_type, price || 0, (description || '') + ' [FREE SERVICE - Loyalty Reward]', 'completed']
     );
 

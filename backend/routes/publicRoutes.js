@@ -11,6 +11,7 @@ router.get('/products/:id', publicProductController.getProduct);
 // Public customer routes
 router.get('/customer/by-plate', publicCustomerController.getCustomerByPlate);
 router.get('/customer/by-id', publicCustomerController.getCustomerById);
+router.get('/customer/orders', publicCustomerController.getCustomerOrders);
 
 // Public order routes
 router.post('/orders', publicOrderController.createOrder);

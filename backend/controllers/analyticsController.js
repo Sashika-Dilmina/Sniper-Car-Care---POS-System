@@ -71,7 +71,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
         COUNT(*) as order_count
        FROM orders o
        LEFT JOIN customers c ON o.customer_id = c.id
-       WHERE ${dateFilter} AND c.vehicle_type IS NOT NULL
+       WHERE ${dateFilter.replace(/created_at/g, 'o.created_at')} AND c.vehicle_type IS NOT NULL
        GROUP BY c.vehicle_type`
     );
     ordersByVehicleType = vehicleTypeResult;
@@ -124,7 +124,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   let newCustomers = [];
   try {
     const [newCustomersResult] = await pool.query(`
-      SELECT c.id, c.name, c.phone, c.vehicle_plate, c.vehicle_model, 
+      SELECT c.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, 
              DATE_FORMAT(c.created_at, '%Y-%m-%d') as joined_date
       FROM customers c
       WHERE ${dateFilter}
@@ -204,7 +204,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE ${dateFilter} AND o.payment_status = 'paid'
+      WHERE ${dateFilter.replace(/created_at/g, 'o.created_at')} AND o.payment_status = 'paid'
       GROUP BY p.category
       ORDER BY revenue DESC
     `);

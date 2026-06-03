@@ -74,8 +74,59 @@ const getCustomerById = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Get customer orders (public)
+// @route   GET /api/public/customer/orders
+// @access  Public
+const getCustomerOrders = asyncHandler(async (req, res) => {
+  const { plate, id } = req.query;
+
+  if (!plate && !id) {
+    return res.status(400).json({ message: 'Customer ID or Vehicle plate is required' });
+  }
+
+  let customerId = id;
+
+  if (!customerId) {
+    const [customers] = await pool.query(
+      'SELECT id FROM customers WHERE vehicle_plate = ?',
+      [plate]
+    );
+    if (customers.length === 0) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+    customerId = customers[0].id;
+  }
+
+  const [orders] = await pool.query(
+    'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
+    [customerId]
+  );
+
+  // Fetch items for each order
+  const orderIds = orders.map(o => o.id);
+  let allItems = [];
+  
+  if (orderIds.length > 0) {
+    const [items] = await pool.query(
+      'SELECT oi.*, p.name as product_name FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id IN (?)',
+      [orderIds]
+    );
+    allItems = items;
+  }
+
+  const formattedOrders = orders.map(order => ({
+    ...order,
+    items: allItems.filter(item => item.order_id === order.id)
+  }));
+
+  res.json({
+    orders: formattedOrders
+  });
+});
+
 module.exports = {
   getCustomerByPlate,
-  getCustomerById
+  getCustomerById,
+  getCustomerOrders
 };
 

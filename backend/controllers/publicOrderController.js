@@ -122,6 +122,15 @@ const createOrder = asyncHandler(async (req, res) => {
           'UPDATE products SET stock = stock - ? WHERE id = ?',
           [item.quantity, item.product_id]
         );
+
+        // Check if item is a service, and create service task
+        const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
+        if (prodRows.length > 0 && prodRows[0].category === 'Services') {
+          await connection.query(
+            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [finalCustomerId || null, prodRows[0].name, vehicleType, item.price, 'Added via Order Items', status || 'pending']
+          );
+        }
       }
     }
 
@@ -138,6 +147,18 @@ const createOrder = asyncHandler(async (req, res) => {
       try {
         await ensureLoyaltyRow(connection, finalCustomerId);
         loyalty = await incrementWashStamp(connection, finalCustomerId);
+
+        // Auto-create service task for the booking
+        let serviceName = 'Car Care Service';
+        if (notes && notes.includes('One-Tap Booking via Website - ')) {
+          serviceName = notes.replace('One-Tap Booking via Website - ', '');
+        } else if (notes) {
+          serviceName = notes;
+        }
+        await connection.query(
+          'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
+          [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending']
+        );
       } catch (loyaltyErr) {
         if (loyaltyErr.code !== 'ER_BAD_FIELD_ERROR') {
           throw loyaltyErr;

@@ -225,10 +225,78 @@ function generateMockPlateNumber() {
   return `${letter1}${letter2}${num1}${num2}${num3}${num4}`;
 }
 
+// @desc    Manually check-in a customer, update details, write to ANPR log with note, and send welcome SMS
+// @route   POST /api/anpr/manual-checkin
+// @access  Private
+const manualCheckIn = asyncHandler(async (req, res) => {
+  const { customer_id, name, phone, vehicle_plate, vehicle_type, province, notes } = req.body;
+
+  if (!customer_id) {
+    return res.status(400).json({ message: 'Customer ID is required' });
+  }
+  if (!vehicle_plate || !vehicle_type) {
+    return res.status(400).json({ message: 'Vehicle plate and vehicle type are required' });
+  }
+
+  // 1. Fetch current customer
+  const [customers] = await pool.query('SELECT * FROM customers WHERE id = ?', [customer_id]);
+  if (customers.length === 0) {
+    return res.status(404).json({ message: 'Customer not found' });
+  }
+
+  // Check if another customer already has this vehicle plate (excluding current customer)
+  const [existingPlate] = await pool.query(
+    'SELECT id FROM customers WHERE vehicle_plate = ? AND id != ?',
+    [vehicle_plate, customer_id]
+  );
+  if (existingPlate.length > 0) {
+    return res.status(400).json({ message: 'Another customer with this vehicle plate already exists' });
+  }
+
+  // 2. Update customer details and last_seen
+  await pool.query(
+    'UPDATE customers SET name = ?, phone = ?, vehicle_plate = ?, vehicle_type = ?, province = ?, last_seen = NOW() WHERE id = ?',
+    [name || customers[0].name, phone || customers[0].phone, vehicle_plate, vehicle_type, province || customers[0].province, customer_id]
+  );
+
+  // Get the updated customer record
+  const [updatedCustomers] = await pool.query('SELECT * FROM customers WHERE id = ?', [customer_id]);
+  const updatedCustomer = updatedCustomers[0];
+
+  // 3. Log the detection to anpr_logs
+  const checkinNote = notes || 'Camera offline - manual scan';
+  await pool.query(
+    'INSERT INTO anpr_logs (plate_number, camera_id, confidence, image_url, customer_id, notes, is_manual) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [vehicle_plate, 'MANUAL', 1.00, null, customer_id, checkinNote, 1]
+  );
+
+  // 4. Send welcome SMS with portal link
+  let smsSent = false;
+  let smsError = null;
+  if (updatedCustomer.phone) {
+    try {
+      await sendProductPageSMS(updatedCustomer, vehicle_plate, vehicle_type);
+      smsSent = true;
+    } catch (error) {
+      smsError = error.message;
+      console.error('Failed to send manual check-in SMS:', error.message);
+    }
+  }
+
+  res.json({
+    success: true,
+    message: 'Manual check-in completed successfully',
+    customer: updatedCustomer,
+    sms_sent: smsSent,
+    sms_error: smsError
+  });
+});
+
 module.exports = {
   detectPlate,
   getLatestDetections,
   registerFromANPR,
   sendWelcomeFromDashboard,
+  manualCheckIn,
 };
 
