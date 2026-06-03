@@ -3,7 +3,9 @@ import axios from 'axios';
 // Configure axios defaults
 // In development, Vite proxy handles /api requests (see vite.config.js)
 // In production, baseURL points to the backend server directly
-axios.defaults.baseURL = import.meta.env.PROD ? 'http://72.62.254.128:5000' : 'http://localhost:5000';
+axios.defaults.baseURL = import.meta.env.PROD 
+  ? (typeof window !== 'undefined' && window.location.hostname ? `http://${window.location.hostname}:5000` : 'http://72.62.254.128:5000')
+  : 'http://localhost:5000';
 axios.defaults.headers.common['Content-Type'] = 'application/json';
 
 // Get token from localStorage and set it in axios defaults
