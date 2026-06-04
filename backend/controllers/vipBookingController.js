@@ -1,5 +1,47 @@
 const db = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
+const { sendReson8Message } = require('../services/reson8Service');
+const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
+
+// Helper function to send VIP completion notification
+async function sendVIPCompletionNotification(booking, customer, orderId) {
+  if (!customer) {
+    console.warn('[Reson8] Skipping completion SMS - no customer linked to VIP booking.');
+    return;
+  }
+
+  const formattedPhone = formatPhoneNumber(customer.phone);
+  if (!formattedPhone) {
+    console.warn(`[Reson8] Skipping completion SMS - invalid phone for VIP customer ${customer.id}.`);
+    return;
+  }
+
+  const feedbackUrl = buildFeedbackUrl({
+    vehicleType: customer.vehicle_type || 'Saloon',
+    customerId: null,
+    plate: customer.vehicle_model,
+    orderId: orderId,
+  });
+
+  const firstName = customer.name ? customer.name.split(' ')[0] : 'Customer';
+  let message = `Hi ${firstName}, your VIP ${booking.service_type} service is complete. Thank you for choosing Sniper Car Care.`;
+
+  if (feedbackUrl) {
+    message += ` Share feedback: ${feedbackUrl}`;
+  }
+
+  await sendReson8Message({
+    to: formattedPhone,
+    message,
+    campaignName: 'VIP_SERVICE_COMPLETION',
+    metadata: {
+      bookingId: booking.id,
+      vipCustomerId: customer.id,
+      orderId: orderId
+    },
+  });
+}
+
 
 // @desc Get all VIP bookings
 // @route GET /api/vip-bookings
@@ -64,7 +106,7 @@ exports.getVIPBookingById = asyncHandler(async (req, res) => {
 // @route POST /api/vip-bookings
 // @access Public
 exports.createVIPBooking = asyncHandler(async (req, res) => {
-  const { name, phone, email, vehicle_model, vehicle_type, service_type, appointment_date, appointment_time } = req.body;
+  const { name, phone, email, vehicle_model, vehicle_type, service_type, appointment_date, appointment_time, notes } = req.body;
   
   // Validate required fields
   if (!name || !phone || !vehicle_model || !vehicle_type || !service_type || !appointment_date || !appointment_time) {
@@ -103,6 +145,23 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
     const [bookingResult] = await db.query(
       'INSERT INTO vip_bookings (vip_customer_id, service_type, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?, ?)',
       [vipCustomerId, service_type, appointment_date, appointment_time, 'pending']
+    );
+
+    // Fetch price for VIP service from vip_services by service_type name
+    const [serviceRows] = await db.query('SELECT price FROM vip_services WHERE name = ?', [service_type]);
+    const price = serviceRows.length > 0 ? parseFloat(serviceRows[0].price) : 0;
+
+    // Check if customer exists in the main customers table by phone (to link customer_id)
+    const [mainCustomer] = await db.query(
+      'SELECT id FROM customers WHERE phone = ?',
+      [phone]
+    );
+    const mainCustomerId = mainCustomer.length > 0 ? mainCustomer[0].id : null;
+
+    // Create corresponding order in the orders table
+    await db.query(
+      'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, vip_booking_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [mainCustomerId, price, 0, 'pending', 'pending', 'vip_booking', bookingResult.insertId, notes || `VIP Booking - ${service_type}`]
     );
     
     res.status(201).json({
@@ -168,6 +227,40 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
     `UPDATE vip_bookings SET ${updateFields.join(', ')} WHERE id = ?`,
     updateValues
   );
+
+  // Sync to orders table
+  if (status) {
+    let orderStatus = 'pending';
+    if (status === 'confirmed' || status === 'in_progress') orderStatus = 'processing';
+    else if (status === 'completed') orderStatus = 'completed';
+    else if (status === 'cancelled') orderStatus = 'cancelled';
+
+    await db.query(
+      'UPDATE orders SET status = ? WHERE vip_booking_id = ?',
+      [orderStatus, req.params.id]
+    );
+
+    // If completed, send feedback SMS
+    if (status === 'completed') {
+      try {
+        const [bookingRows] = await db.query('SELECT * FROM vip_bookings WHERE id = ?', [req.params.id]);
+        if (bookingRows.length > 0) {
+          const currentBooking = bookingRows[0];
+          const [customerRows] = await db.query('SELECT * FROM vip_customers WHERE id = ?', [currentBooking.vip_customer_id]);
+          const [orderRows] = await db.query('SELECT id FROM orders WHERE vip_booking_id = ?', [currentBooking.id]);
+          
+          if (customerRows.length > 0) {
+            const customer = customerRows[0];
+            const orderId = orderRows.length > 0 ? orderRows[0].id : null;
+            await sendVIPCompletionNotification(currentBooking, customer, orderId);
+            console.log(`[SMS] VIP Completion SMS sent to ${customer.phone}`);
+          }
+        }
+      } catch (err) {
+        console.error('Error sending VIP completion SMS:', err.message);
+      }
+    }
+  }
   
   res.status(200).json({
     success: true,

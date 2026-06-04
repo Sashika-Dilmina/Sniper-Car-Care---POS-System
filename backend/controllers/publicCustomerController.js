@@ -97,10 +97,28 @@ const getCustomerOrders = asyncHandler(async (req, res) => {
     customerId = customers[0].id;
   }
 
-  const [orders] = await pool.query(
-    'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
-    [customerId]
-  );
+  // Get customer phone number to search for associated VIP bookings
+  let phone = null;
+  const [custRows] = await pool.query('SELECT phone FROM customers WHERE id = ?', [customerId]);
+  if (custRows.length > 0) {
+    phone = custRows[0].phone;
+  }
+
+  let query = 'SELECT * FROM orders WHERE customer_id = ?';
+  let queryParams = [customerId];
+
+  if (phone) {
+    query += ` OR vip_booking_id IN (
+      SELECT vb.id 
+      FROM vip_bookings vb 
+      JOIN vip_customers vc ON vb.vip_customer_id = vc.id 
+      WHERE vc.phone = ?
+    )`;
+    queryParams.push(phone);
+  }
+  
+  query += ' ORDER BY created_at DESC';
+  const [orders] = await pool.query(query, queryParams);
 
   // Fetch items for each order
   const orderIds = orders.map(o => o.id);

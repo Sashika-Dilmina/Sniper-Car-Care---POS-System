@@ -67,12 +67,15 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   try {
     const [vehicleTypeResult] = await pool.query(
       `SELECT 
-        c.vehicle_type,
+        COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
         COUNT(*) as order_count
        FROM orders o
        LEFT JOIN customers c ON o.customer_id = c.id
-       WHERE ${dateFilter.replace(/created_at/g, 'o.created_at')} AND c.vehicle_type IS NOT NULL
-       GROUP BY c.vehicle_type`
+       LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+       LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+       WHERE ${dateFilter.replace(/created_at/g, 'o.created_at')}
+       GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type)
+       HAVING vehicle_type IS NOT NULL`
     );
     ordersByVehicleType = vehicleTypeResult;
   } catch (error) {

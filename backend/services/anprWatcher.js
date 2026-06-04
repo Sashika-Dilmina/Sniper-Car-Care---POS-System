@@ -12,9 +12,19 @@ const { buildCustomerWebsiteUrl, formatPhoneNumber } = require('../utils/custome
 async function handleDetection(plateNumber, imageUrl = null) {
   if (!plateNumber) return;
 
-  console.log(`[ANPR Processor] Processing plate: ${plateNumber}`);
-
   try {
+    // Check if plate has been scanned in the last 24 hours
+    const [recentScans] = await pool.query(
+      'SELECT id FROM anpr_logs WHERE plate_number = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) LIMIT 1',
+      [plateNumber]
+    );
+
+    if (recentScans.length > 0) {
+      console.log(`[ANPR Watcher] Plate ${plateNumber} already scanned within last 24 hours. Ignoring scan.`);
+      return;
+    }
+
+    console.log(`[ANPR Processor] Processing plate: ${plateNumber}`);
     // 1. Match with existing customer
     const [customers] = await pool.query(
       'SELECT * FROM customers WHERE vehicle_plate = ?',

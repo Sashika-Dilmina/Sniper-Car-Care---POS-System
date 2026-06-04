@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import axios from '../config/axios';
 import BottomNav from '../components/BottomNav';
 import { getServiceImage } from '../config/siteImages';
+import toast from 'react-hot-toast';
 
 const HistoryPage = () => {
   const [searchParams] = useSearchParams();
@@ -10,6 +11,102 @@ const HistoryPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Real-time order status notifications & screen sync
+  useEffect(() => {
+    if (!plate) return;
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    const checkOrderStatusNotifications = async () => {
+      try {
+        const response = await axios.get(`/api/public/customer/orders?plate=${encodeURIComponent(plate)}`);
+        const ordersList = response.data.orders || [];
+
+        // Sync order status on screen in real-time
+        setOrders(prevOrders => {
+          let stateChanged = false;
+          const updatedList = prevOrders.map(ord => {
+            const match = ordersList.find(o => o.id === ord.id);
+            if (match && match.status !== ord.status) {
+              stateChanged = true;
+              return { ...ord, status: match.status };
+            }
+            return ord;
+          });
+          return stateChanged ? updatedList : prevOrders;
+        });
+
+        // Load previously seen statuses
+        const storageKey = `seen_orders_${plate}`;
+        const seenOrders = JSON.parse(localStorage.getItem(storageKey) || '{}');
+        let updated = false;
+
+        ordersList.forEach(order => {
+          const prevStatus = seenOrders[order.id];
+          
+          if (prevStatus !== undefined && prevStatus !== order.status) {
+            // Status changed!
+            let title = '';
+            let body = '';
+
+            if (order.status === 'processing') {
+              title = 'Order Confirmed 🚗';
+              body = `Your service (Order #${order.id}) has been confirmed by our staff and is now in progress!`;
+            } else if (order.status === 'completed') {
+              title = 'Service Completed! ✨';
+              body = `Your vehicle is ready. You can view payment details and complete checkout on the site.`;
+            } else if (order.status === 'cancelled') {
+              title = 'Order Cancelled ❌';
+              body = `Your order #${order.id} has been cancelled.`;
+            }
+
+            if (title) {
+              // Show in-app toast
+              toast.success(
+                <div className="flex flex-col text-left">
+                  <span className="font-bold text-gray-900">{title}</span>
+                  <span className="text-xs text-gray-600 mt-0.5">{body}</span>
+                </div>,
+                { duration: 8000 }
+              );
+
+              // Show browser native notification
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, { body });
+              }
+            }
+            updated = true;
+          }
+          
+          // Update status in storage
+          seenOrders[order.id] = order.status;
+        });
+
+        // Save current statuses if it's the first run (initialize)
+        ordersList.forEach(order => {
+          if (seenOrders[order.id] === undefined) {
+            seenOrders[order.id] = order.status;
+            updated = true;
+          }
+        });
+
+        if (updated) {
+          localStorage.setItem(storageKey, JSON.stringify(seenOrders));
+        }
+      } catch (err) {
+        console.error('Error fetching orders for notifications:', err);
+      }
+    };
+
+    // Run initially and then every 10 seconds
+    const interval = setInterval(checkOrderStatusNotifications, 10000);
+
+    return () => clearInterval(interval);
+  }, [plate]);
 
   useEffect(() => {
     const fetchHistory = async () => {

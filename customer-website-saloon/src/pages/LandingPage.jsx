@@ -384,6 +384,89 @@ const LandingPage = () => {
 
   const vehiclePlate = searchParams.get('plate') || '';
 
+  // Real-time order status notifications
+  useEffect(() => {
+    if (!vehiclePlate) return;
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    const checkOrderStatusNotifications = async () => {
+      try {
+        const response = await axios.get(`/api/public/customer/orders?plate=${encodeURIComponent(vehiclePlate)}`);
+        const ordersList = response.data.orders || [];
+
+        // Load previously seen statuses
+        const storageKey = `seen_orders_${vehiclePlate}`;
+        const seenOrders = JSON.parse(localStorage.getItem(storageKey) || '{}');
+        let updated = false;
+
+        ordersList.forEach(order => {
+          const prevStatus = seenOrders[order.id];
+          
+          if (prevStatus !== undefined && prevStatus !== order.status) {
+            // Status changed!
+            let title = '';
+            let body = '';
+
+            if (order.status === 'processing') {
+              title = 'Order Confirmed 🚗';
+              body = `Your service (Order #${order.id}) has been confirmed by our staff and is now in progress!`;
+            } else if (order.status === 'completed') {
+              title = 'Service Completed! ✨';
+              body = `Your vehicle is ready. You can view payment details and complete checkout on the site.`;
+            } else if (order.status === 'cancelled') {
+              title = 'Order Cancelled ❌';
+              body = `Your order #${order.id} has been cancelled.`;
+            }
+
+            if (title) {
+              // Show in-app toast
+              toast.success(
+                <div className="flex flex-col text-left">
+                  <span className="font-bold text-gray-900">{title}</span>
+                  <span className="text-xs text-gray-600 mt-0.5">{body}</span>
+                </div>,
+                { duration: 8000 }
+              );
+
+              // Show browser native notification
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, { body });
+              }
+            }
+            updated = true;
+          }
+          
+          // Update status in storage
+          seenOrders[order.id] = order.status;
+        });
+
+        // Save current statuses if it's the first run (initialize)
+        ordersList.forEach(order => {
+          if (seenOrders[order.id] === undefined) {
+            seenOrders[order.id] = order.status;
+            updated = true;
+          }
+        });
+
+        if (updated) {
+          localStorage.setItem(storageKey, JSON.stringify(seenOrders));
+        }
+      } catch (err) {
+        console.error('Error fetching orders for notifications:', err);
+      }
+    };
+
+    // Run initially and then every 10 seconds
+    checkOrderStatusNotifications();
+    const interval = setInterval(checkOrderStatusNotifications, 10000);
+
+    return () => clearInterval(interval);
+  }, [vehiclePlate]);
+
   useEffect(() => {
     if (searchParams.get('action') === 'book') {
       setQuickBookOpen(true);

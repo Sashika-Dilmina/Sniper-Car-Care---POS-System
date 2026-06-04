@@ -10,9 +10,9 @@ const getOrders = asyncHandler(async (req, res) => {
   const { status, payment_status, customer_id, date, service_time } = req.query;
   let query = `
     SELECT o.*, 
-           c.name as customer_name, 
-           c.phone as customer_phone,
-           c.vehicle_plate,
+           COALESCE(c.name, vc.name) as customer_name, 
+           COALESCE(c.phone, vc.phone) as customer_phone,
+           COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
            -- Service time: Duration from first payment completion to order completion
            -- Start: When customer pays (first completed payment timestamp)
            -- End: When service finishes (order status updated to 'completed', when staff sends completion message)
@@ -31,6 +31,8 @@ const getOrders = asyncHandler(async (req, res) => {
            END as service_time_minutes
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     WHERE 1=1
   `;
   const params = [];
@@ -111,12 +113,14 @@ const getOrder = asyncHandler(async (req, res) => {
 
   const [orders] = await pool.query(`
     SELECT o.*, 
-           c.name as customer_name, 
-           c.phone as customer_phone,
-           c.vehicle_plate,
-           c.vehicle_type
+           COALESCE(c.name, vc.name) as customer_name, 
+           COALESCE(c.phone, vc.phone) as customer_phone,
+           COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
+           COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     WHERE o.id = ?
   `, [id]);
 

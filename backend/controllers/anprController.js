@@ -20,6 +20,22 @@ const detectPlate = asyncHandler(async (req, res) => {
     isMock = true;
   }
 
+  // Check if plate has been scanned in the last 24 hours
+  const [recentScans] = await pool.query(
+    'SELECT id FROM anpr_logs WHERE plate_number = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) LIMIT 1',
+    [detectedPlate]
+  );
+
+  if (recentScans.length > 0) {
+    console.log(`[ANPR] Plate ${detectedPlate} already scanned within last 24 hours. Ignoring scan.`);
+    return res.status(200).json({
+      success: true,
+      message: 'Plate already scanned in the last 24 hours. Scan ignored.',
+      plate_number: detectedPlate,
+      skipped: true
+    });
+  }
+
   const mockProvince = ['Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman', 'Fujairah'][Math.floor(Math.random() * 5)];
   const confidence = reqConfidence || (0.85 + Math.random() * 0.15).toFixed(2);
 

@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const Sales = () => {
-  // Products & Catalog State
+  const { user } = useAuth();
+  const [activeSubTab, setActiveSubTab] = useState('pos'); // 'pos' or 'ledger'
+
+  // POS - Products & Catalog State
   const [products, setProducts] = useState([]);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [loadingProducts, setLoadingProducts] = useState(true);
 
-  // Customer State
+  // POS - Customer State
   const [customers, setCustomers] = useState([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   
-  // Quick Customer Registration State
+  // POS - Quick Customer Registration State
   const [showQuickRegister, setShowQuickRegister] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
@@ -25,16 +29,48 @@ const Sales = () => {
     province: 'Dubai'
   });
 
-  // Cart State
+  // POS - Cart State
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash'); // cash, card, credit (unpaid)
   const [isCheckingOut, setIsCheckingOut] = useState(false);
 
+  // Ledger - State
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [ledgerOrders, setLedgerOrders] = useState([]);
+  const [loadingLedger, setLoadingLedger] = useState(false);
+  const [ledgerSearchQuery, setLedgerSearchQuery] = useState('');
+
+  // Force staff users to only access 'pos' sub-tab
+  useEffect(() => {
+    if (user && user.role !== 'admin') {
+      setActiveSubTab('pos');
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchProducts();
     fetchCustomers();
   }, []);
+
+  // Fetch ledger sales when active sub-tab is ledger or date changes
+  useEffect(() => {
+    if (activeSubTab === 'ledger') {
+      fetchDailySales();
+    }
+  }, [selectedDate, activeSubTab]);
+
+  const fetchDailySales = async () => {
+    try {
+      setLoadingLedger(true);
+      const response = await axios.get(`/api/orders?date=${selectedDate}`);
+      setLedgerOrders(response.data.orders || []);
+    } catch (error) {
+      toast.error('Failed to load daily sales data');
+    } finally {
+      setLoadingLedger(false);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -217,379 +253,651 @@ const Sales = () => {
     c.vehicle_plate?.toLowerCase().includes(customerSearch.toLowerCase())
   );
 
+  // Filter Ledger Orders
+  const filteredLedgerOrders = ledgerOrders.filter(order => {
+    const customer = (order.customer_name || 'Walk-in').toLowerCase();
+    const plate = (order.vehicle_plate || '').toLowerCase();
+    const phone = (order.customer_phone || '').toLowerCase();
+    const query = ledgerSearchQuery.toLowerCase();
+    return customer.includes(query) || plate.includes(query) || phone.includes(query);
+  });
+
+  // Ledger stats
+  const totalSalesCount = filteredLedgerOrders.length;
+  const totalDiscount = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.discount || 0), 0);
+  const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
+
+  const formatSource = (source) => {
+    if (source === 'vip_booking') return { label: '👑 VIP Booking', color: 'bg-purple-100 text-purple-800' };
+    if (source === 'customer_website_saloon' || source === 'customer_website_4x4' || source === 'customer_website') {
+      return { label: '🌐 Website', color: 'bg-blue-100 text-blue-800' };
+    }
+    return { label: '🖥️ POS Terminal', color: 'bg-gray-100 text-gray-800' };
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-black text-gray-800 tracking-tight">Point of Sale (POS)</h1>
-        <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-xs font-semibold border border-green-200">
-          <span className="h-2 w-2 rounded-full bg-green-500 animate-ping"></span>
-          POS Terminal Active
-        </div>
-      </div>
+    <div className="space-y-6 print:space-y-0 print:p-0">
+      {/* Print Styles */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          aside, nav, header, button, input, select, .no-print {
+            display: none !important;
+          }
+          main {
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          body {
+            background-color: white !important;
+            color: black !important;
+          }
+          .print-full-width {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+          }
+        }
+      `}} />
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        
-        {/* LEFT COLUMN: Catalog / Product & Service List (Col Span 2) */}
-        <div className="xl:col-span-2 space-y-4">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-            
-            {/* Category tabs and Search bar */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex bg-gray-100 p-1.5 rounded-xl gap-1 overflow-x-auto">
-                {['All', 'Services', 'Accessories', 'Spare Parts'].map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-4 py-2 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${
-                      selectedCategory === cat 
-                        ? 'bg-white text-primary-600 shadow-sm' 
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-
-              <input
-                type="text"
-                placeholder="Search services & products..."
-                value={catalogSearch}
-                onChange={(e) => setCatalogSearch(e.target.value)}
-                className="px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none w-full md:max-w-xs"
-              />
-            </div>
-
-            {/* Catalog Grid */}
-            {loadingProducts ? (
-              <div className="flex justify-center items-center h-64 text-gray-500">Loading catalog...</div>
-            ) : filteredProducts.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto pr-1">
-                {filteredProducts.map(product => {
-                  const isService = product.category === 'Services';
-                  const outOfStock = !isService && product.stock <= 0;
-
-                  return (
-                    <div
-                      key={product.id}
-                      onClick={() => !outOfStock && addToCart(product)}
-                      className={`group border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between ${
-                        outOfStock 
-                          ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200' 
-                          : 'cursor-pointer hover:shadow-lg hover:border-primary-500 bg-white border-gray-100'
-                      }`}
-                    >
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-start gap-2">
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                            isService ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
-                          }`}>
-                            {product.category}
-                          </span>
-                          {!isService && (
-                            <span className={`text-[10px] font-bold ${
-                              product.stock <= 5 ? 'text-red-500' : 'text-gray-500'
-                            }`}>
-                              Stock: {product.stock}
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="font-bold text-gray-800 group-hover:text-primary-600 transition-colors line-clamp-1">
-                          {product.name}
-                        </h3>
-                        <p className="text-xs text-gray-500 line-clamp-2">{product.description || 'No description available'}</p>
-                      </div>
-                      <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-50">
-                        <span className="font-extrabold text-gray-900">AED {parseFloat(product.price).toFixed(2)}</span>
-                        <span className="text-primary-600 font-bold text-lg group-hover:translate-x-1 transition-transform">
-                          {outOfStock ? '❌' : '+'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-20 text-gray-400">
-                <p className="text-lg">No items match your query</p>
-                <button onClick={() => { setSelectedCategory('All'); setCatalogSearch(''); }} className="text-primary-600 underline text-sm mt-1">
-                  Reset filters
-                </button>
-              </div>
-            )}
-
-          </div>
+      {/* Unified Header & Tab Switcher */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print border-b pb-4 border-gray-100">
+        <div>
+          <h1 className="text-3xl font-black text-gray-800 tracking-tight">Sales & Ledger</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage POS checkouts and trace daily transactions ledger.</p>
         </div>
 
-        {/* RIGHT COLUMN: Cart & Billing Checkout Panel (Col Span 1) */}
-        <div className="space-y-4">
-          
-          {/* Customer Search & Selector */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 relative">
-            <h2 className="text-lg font-bold text-gray-800 flex items-center justify-between">
-              <span>👤 Customer Select</span>
-              {selectedCustomer && (
-                <button
-                  onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); }}
-                  className="text-xs text-red-500 font-semibold hover:underline"
-                >
-                  Clear Selection
-                </button>
-              )}
-            </h2>
-
-            {!selectedCustomer ? (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      placeholder="Search customer by name or plate..."
-                      value={customerSearch}
-                      onChange={(e) => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
-                      onFocus={() => setShowCustomerDropdown(true)}
-                      className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                    />
-                    
-                    {/* Customer Dropdown Results */}
-                    {showCustomerDropdown && customerSearch && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y">
-                        {filteredCustomers.length > 0 ? (
-                          filteredCustomers.map(cust => (
-                            <div
-                              key={cust.id}
-                              onClick={() => {
-                                setSelectedCustomer(cust);
-                                setCustomerSearch(`${cust.name} (${cust.vehicle_plate})`);
-                                setShowCustomerDropdown(false);
-                              }}
-                              className="px-4 py-2 hover:bg-primary-50 cursor-pointer flex justify-between items-center"
-                            >
-                              <div>
-                                <p className="font-bold text-sm text-gray-800">{cust.name}</p>
-                                <p className="text-xs text-gray-500">{cust.phone || 'No phone'}</p>
-                              </div>
-                              <span className="font-mono text-xs font-semibold bg-gray-100 px-2 py-0.5 rounded text-gray-600">
-                                {cust.vehicle_plate}
-                              </span>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="px-4 py-3 text-center text-gray-400 text-sm">No customers found</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setShowQuickRegister(true)}
-                    className="px-3 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition font-bold"
-                    title="Register New Customer"
-                  >
-                    +
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400 italic">Leaves order under default "Walk-in Customer" if unselected</p>
-              </div>
-            ) : (
-              <div className="bg-primary-50/50 p-4 rounded-xl border border-primary-100 flex items-center justify-between">
-                <div>
-                  <h4 className="font-black text-primary-900">{selectedCustomer.name}</h4>
-                  <p className="text-xs text-primary-700 font-mono mt-0.5">{selectedCustomer.vehicle_plate} ({selectedCustomer.vehicle_type})</p>
-                  {selectedCustomer.phone && <p className="text-xs text-primary-600 mt-0.5">{selectedCustomer.phone}</p>}
-                </div>
-                <span className="text-3xl">🚗</span>
-              </div>
-            )}
-
-            {/* Quick Customer Registration Form Modal Inside Card */}
-            {showQuickRegister && (
-              <div className="bg-gray-50 border p-4 rounded-xl space-y-3">
-                <h4 className="text-sm font-bold text-gray-700">Quick Register Customer</h4>
-                <form onSubmit={handleQuickRegisterSubmit} className="space-y-3">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Name *"
-                    value={newCustomer.name}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                    className="w-full px-3 py-1.5 border rounded-lg text-sm"
-                  />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Plate Number (e.g. DXB123) *"
-                    value={newCustomer.vehicle_plate}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_plate: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-1.5 border rounded-lg text-sm font-mono"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="tel"
-                      placeholder="Phone (+971)"
-                      value={newCustomer.phone}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                      className="w-full px-3 py-1.5 border rounded-lg text-sm"
-                    />
-                    <select
-                      value={newCustomer.vehicle_type}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_type: e.target.value })}
-                      className="w-full px-3 py-1.5 border rounded-lg text-sm"
-                    >
-                      <option value="Saloon">Saloon</option>
-                      <option value="4x4">4x4</option>
-                    </select>
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickRegister(false)}
-                      className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-bold"
-                    >
-                      Save & Select
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-          </div>
-
-          {/* Cart & Billing Checkout Summary */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
-            <h2 className="text-lg font-bold text-gray-800 flex items-center justify-between border-b pb-2">
-              <span>🛒 Register Cart</span>
-              <span className="bg-primary-100 text-primary-800 text-xs px-2.5 py-0.5 rounded-full font-bold">
-                {cart.reduce((sum, item) => sum + item.quantity, 0)} items
-              </span>
-            </h2>
-
-            {/* Cart Items */}
-            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-              {cart.length > 0 ? (
-                cart.map(item => (
-                  <div key={item.id} className="flex justify-between items-center gap-3 border-b border-gray-50 pb-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm text-gray-800 truncate">{item.name}</p>
-                      <p className="text-xs text-gray-500">AED {parseFloat(item.price).toFixed(2)} each</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => updateQuantity(item.id, -1)}
-                        className="h-7 w-7 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center justify-center font-bold text-gray-600 transition"
-                      >
-                        -
-                      </button>
-                      <span className="text-sm font-bold text-gray-800 w-6 text-center">{item.quantity}</span>
-                      <button
-                        onClick={() => updateQuantity(item.id, 1)}
-                        className="h-7 w-7 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center justify-center font-bold text-gray-600 transition"
-                      >
-                        +
-                      </button>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-red-500 hover:text-red-700 ml-1"
-                        title="Remove item"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-12 text-gray-400">
-                  <span className="text-4xl block mb-2">🛒</span>
-                  <p className="text-sm">Click products or services on the left to add them to this sale register.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Discount & Payment Method Selection */}
-            {cart.length > 0 && (
-              <div className="space-y-4 pt-4 border-t">
-                
-                {/* Discount */}
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Apply Discount (AED)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max={subtotal}
-                    step="0.01"
-                    placeholder="Enter discount amount"
-                    value={discount}
-                    onChange={(e) => setDiscount(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                  />
-                </div>
-
-                {/* Payment Method */}
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { key: 'cash', label: '💵 Cash' },
-                      { key: 'card', label: '💳 Card' },
-                      { key: 'credit', label: '📝 Credit' }
-                    ].map(pm => (
-                      <button
-                        key={pm.key}
-                        type="button"
-                        onClick={() => setPaymentMethod(pm.key)}
-                        className={`py-2 text-xs font-bold rounded-xl border transition-all ${
-                          paymentMethod === pm.key
-                            ? 'bg-primary-600 text-white border-primary-600 shadow'
-                            : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        {pm.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-            {/* Checkout Totals Summary */}
-            <div className="space-y-2 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Subtotal:</span>
-                <span>AED {subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-sm text-red-600">
-                <span>Discount:</span>
-                <span>- AED {discountVal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-lg font-black text-gray-900 border-t pt-2 mt-1">
-                <span>Net Total:</span>
-                <span>AED {total.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Complete Sale Button */}
+        {/* Tab Selector for Admins */}
+        {user?.role === 'admin' && (
+          <div className="flex bg-gray-100 p-1.5 rounded-xl gap-2 shadow-inner">
             <button
-              onClick={handleCheckout}
-              disabled={isCheckingOut || cart.length === 0}
-              className={`w-full py-4 rounded-xl font-bold text-white transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-primary-200 ${
-                isCheckingOut || cart.length === 0
-                  ? 'bg-gray-300 cursor-not-allowed shadow-none'
-                  : 'bg-primary-600 hover:bg-primary-700'
+              onClick={() => setActiveSubTab('pos')}
+              className={`px-5 py-2.5 text-xs sm:text-sm font-bold rounded-lg transition-all ${
+                activeSubTab === 'pos'
+                  ? 'bg-white text-primary-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              {isCheckingOut ? 'Processing checkout...' : 'Complete POS Sale & Pay'}
+              🛒 POS Terminal
             </button>
+            <button
+              onClick={() => setActiveSubTab('ledger')}
+              className={`px-5 py-2.5 text-xs sm:text-sm font-bold rounded-lg transition-all ${
+                activeSubTab === 'ledger'
+                  ? 'bg-white text-primary-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              📊 Sales Ledger
+            </button>
+          </div>
+        )}
+      </div>
 
+      {/* SUB-TAB 1: POS TERMINAL VIEW */}
+      {activeSubTab === 'pos' && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 no-print">
+          {/* LEFT COLUMN: Catalog / Product & Service List (Col Span 2) */}
+          <div className="xl:col-span-2 space-y-4">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+              
+              {/* Category tabs and Search bar */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex bg-gray-100 p-1.5 rounded-xl gap-1 overflow-x-auto">
+                  {['All', 'Services', 'Accessories', 'Spare Parts'].map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-4 py-2 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${
+                        selectedCategory === cat 
+                          ? 'bg-white text-primary-600 shadow-sm' 
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="Search services & products..."
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  className="px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none w-full md:max-w-xs"
+                />
+              </div>
+
+              {/* Catalog Grid */}
+              {loadingProducts ? (
+                <div className="flex justify-center items-center h-64 text-gray-500">Loading catalog...</div>
+              ) : filteredProducts.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto pr-1">
+                  {filteredProducts.map(product => {
+                    const isService = product.category === 'Services';
+                    const outOfStock = !isService && product.stock <= 0;
+
+                    return (
+                      <div
+                        key={product.id}
+                        onClick={() => !outOfStock && addToCart(product)}
+                        className={`group border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between ${
+                          outOfStock 
+                            ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200' 
+                            : 'cursor-pointer hover:shadow-lg hover:border-primary-500 bg-white border-gray-100'
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start gap-2">
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                              isService ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                            }`}>
+                              {product.category}
+                            </span>
+                            {!isService && (
+                              <span className={`text-[10px] font-bold ${
+                                product.stock <= 5 ? 'text-red-500' : 'text-gray-500'
+                              }`}>
+                                Stock: {product.stock}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="font-bold text-gray-800 group-hover:text-primary-600 transition-colors line-clamp-1">
+                            {product.name}
+                          </h3>
+                          <p className="text-xs text-gray-500 line-clamp-2">{product.description || 'No description available'}</p>
+                        </div>
+                        <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-50">
+                          <span className="font-extrabold text-gray-900">AED {parseFloat(product.price).toFixed(2)}</span>
+                          <span className="text-primary-600 font-bold text-lg group-hover:translate-x-1 transition-transform">
+                            {outOfStock ? '❌' : '+'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-20 text-gray-400">
+                  <p className="text-lg">No items match your query</p>
+                  <button onClick={() => { setSelectedCategory('All'); setCatalogSearch(''); }} className="text-primary-600 underline text-sm mt-1">
+                    Reset filters
+                  </button>
+                </div>
+              )}
+
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: Cart & Billing Checkout Panel (Col Span 1) */}
+          <div className="space-y-4">
+            
+            {/* Customer Search & Selector */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 relative">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center justify-between">
+                <span>👤 Customer Select</span>
+                {selectedCustomer && (
+                  <button
+                    onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); }}
+                    className="text-xs text-red-500 font-semibold hover:underline"
+                  >
+                    Clear Selection
+                  </button>
+                )}
+              </h2>
+
+              {!selectedCustomer ? (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Search customer by name or plate..."
+                        value={customerSearch}
+                        onChange={(e) => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
+                        onFocus={() => setShowCustomerDropdown(true)}
+                        className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                      />
+                      
+                      {/* Customer Dropdown Results */}
+                      {showCustomerDropdown && customerSearch && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y">
+                          {filteredCustomers.length > 0 ? (
+                            filteredCustomers.map(cust => (
+                              <div
+                                key={cust.id}
+                                onClick={() => {
+                                  setSelectedCustomer(cust);
+                                  setCustomerSearch(`${cust.name} (${cust.vehicle_plate})`);
+                                  setShowCustomerDropdown(false);
+                                }}
+                                className="px-4 py-2 hover:bg-primary-50 cursor-pointer flex justify-between items-center"
+                              >
+                                <div>
+                                  <p className="font-bold text-sm text-gray-800">{cust.name}</p>
+                                  <p className="text-xs text-gray-500">{cust.phone || 'No phone'}</p>
+                                </div>
+                                <span className="font-mono text-xs font-semibold bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                                  {cust.vehicle_plate}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-4 py-3 text-center text-gray-400 text-sm">No customers found</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setShowQuickRegister(true)}
+                      className="px-3 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition font-bold"
+                      title="Register New Customer"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 italic">Leaves order under default "Walk-in Customer" if unselected</p>
+                </div>
+              ) : (
+                <div className="bg-primary-50/50 p-4 rounded-xl border border-primary-100 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-black text-primary-900">{selectedCustomer.name}</h4>
+                    <p className="text-xs text-primary-700 font-mono mt-0.5">{selectedCustomer.vehicle_plate} ({selectedCustomer.vehicle_type})</p>
+                    {selectedCustomer.phone && <p className="text-xs text-primary-600 mt-0.5">{selectedCustomer.phone}</p>}
+                  </div>
+                  <span className="text-3xl">🚗</span>
+                </div>
+              )}
+
+              {/* Quick Customer Registration Form Modal Inside Card */}
+              {showQuickRegister && (
+                <div className="bg-gray-50 border p-4 rounded-xl space-y-3">
+                  <h4 className="text-sm font-bold text-gray-700">Quick Register Customer</h4>
+                  <form onSubmit={handleQuickRegisterSubmit} className="space-y-3">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Name *"
+                      value={newCustomer.name}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                      className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                    />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Plate Number (e.g. DXB123) *"
+                      value={newCustomer.vehicle_plate}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_plate: e.target.value.toUpperCase() })}
+                      className="w-full px-3 py-1.5 border rounded-lg text-sm font-mono"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="tel"
+                        placeholder="Phone (+971)"
+                        value={newCustomer.phone}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                        className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                      />
+                      <select
+                        value={newCustomer.vehicle_type}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_type: e.target.value })}
+                        className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                      >
+                        <option value="Saloon">Saloon</option>
+                        <option value="4x4">4x4</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickRegister(false)}
+                        className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-bold"
+                      >
+                        Save & Select
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+            </div>
+
+            {/* Cart & Billing Checkout Summary */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center justify-between border-b pb-2">
+                <span>🛒 Register Cart</span>
+                <span className="bg-primary-100 text-primary-800 text-xs px-2.5 py-0.5 rounded-full font-bold">
+                  {cart.reduce((sum, item) => sum + item.quantity, 0)} items
+                </span>
+              </h2>
+
+              {/* Cart Items */}
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                {cart.length > 0 ? (
+                  cart.map(item => (
+                    <div key={item.id} className="flex justify-between items-center gap-3 border-b border-gray-50 pb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm text-gray-800 truncate">{item.name}</p>
+                        <p className="text-xs text-gray-500">AED {parseFloat(item.price).toFixed(2)} each</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => updateQuantity(item.id, -1)}
+                          className="h-7 w-7 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center justify-center font-bold text-gray-600 transition"
+                        >
+                          -
+                        </button>
+                        <span className="text-sm font-bold text-gray-800 w-6 text-center">{item.quantity}</span>
+                        <button
+                          onClick={() => updateQuantity(item.id, 1)}
+                          className="h-7 w-7 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center justify-center font-bold text-gray-600 transition"
+                        >
+                          +
+                        </button>
+                        <button
+                          onClick={() => removeFromCart(item.id)}
+                          className="text-red-500 hover:text-red-700 ml-1"
+                          title="Remove item"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 text-gray-400">
+                    <span className="text-4xl block mb-2">🛒</span>
+                    <p className="text-sm">Click products or services on the left to add them to this sale register.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Discount & Payment Method Selection */}
+              {cart.length > 0 && (
+                <div className="space-y-4 pt-4 border-t">
+                  
+                  {/* Discount */}
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Apply Discount (AED)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={subtotal}
+                      step="0.01"
+                      placeholder="Enter discount amount"
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { key: 'cash', label: '💵 Cash' },
+                        { key: 'card', label: '💳 Card' },
+                        { key: 'credit', label: '📝 Credit' }
+                      ].map(pm => (
+                        <button
+                          key={pm.key}
+                          type="button"
+                          onClick={() => setPaymentMethod(pm.key)}
+                          className={`py-2 text-xs font-bold rounded-xl border transition-all ${
+                            paymentMethod === pm.key
+                              ? 'bg-primary-600 text-white border-primary-600 shadow'
+                              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pm.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {/* Checkout Totals Summary */}
+              <div className="space-y-2 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Subtotal:</span>
+                  <span>AED {subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-red-600">
+                  <span>Discount:</span>
+                  <span>- AED {discountVal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-lg font-black text-gray-900 border-t pt-2 mt-1">
+                  <span>Net Total:</span>
+                  <span>AED {total.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Complete Sale Button */}
+              <button
+                onClick={handleCheckout}
+                disabled={isCheckingOut || cart.length === 0}
+                className={`w-full py-4 rounded-xl font-bold text-white transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-primary-200 ${
+                  isCheckingOut || cart.length === 0
+                    ? 'bg-gray-300 cursor-not-allowed shadow-none'
+                    : 'bg-primary-600 hover:bg-primary-700'
+                }`}
+              >
+                {isCheckingOut ? 'Processing checkout...' : 'Complete POS Sale & Pay'}
+              </button>
+
+            </div>
           </div>
         </div>
+      )}
 
-      </div>
+      {/* SUB-TAB 2: SALES LEDGER VIEW */}
+      {activeSubTab === 'ledger' && user?.role === 'admin' && (
+        <div className="space-y-6">
+          {/* Ledger Date & Action Picker */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-2xl border shadow-sm no-print">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex bg-gray-100 rounded-xl p-1 border">
+                <button
+                  onClick={() => {
+                    const d = new Date(selectedDate);
+                    d.setDate(d.getDate() - 1);
+                    setSelectedDate(d.toISOString().split('T')[0]);
+                  }}
+                  className="p-2 hover:bg-gray-200 rounded-lg text-gray-600 transition"
+                  title="Previous Day"
+                >
+                  ◀
+                </button>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="px-3 py-1 font-bold text-gray-800 bg-transparent border-none outline-none focus:ring-0 cursor-pointer"
+                />
+                <button
+                  onClick={() => {
+                    const d = new Date(selectedDate);
+                    d.setDate(d.getDate() + 1);
+                    setSelectedDate(d.toISOString().split('T')[0]);
+                  }}
+                  className="p-2 hover:bg-gray-200 rounded-lg text-gray-600 transition"
+                  title="Next Day"
+                >
+                  ▶
+                </button>
+              </div>
+
+              <button
+                onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition text-sm"
+              >
+                Today
+              </button>
+            </div>
+
+            <button
+              onClick={() => window.print()}
+              className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-md transition flex items-center gap-2 text-sm"
+            >
+              🖨️ Print Daily Invoice
+            </button>
+          </div>
+
+          {/* Ledger Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
+            <div className="bg-gradient-to-br from-primary-600 to-primary-700 p-6 rounded-2xl shadow-sm border text-white flex flex-col justify-between">
+              <span className="text-sm font-bold uppercase tracking-wider opacity-85">Daily Sales Revenue</span>
+              <h3 className="text-3xl font-black mt-2">AED {totalRevenue.toFixed(2)}</h3>
+              <span className="text-xs opacity-75 mt-4">Total net sales generated today</span>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+              <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Sales Count</span>
+              <h3 className="text-3xl font-black text-gray-800 mt-2">{totalSalesCount} Sales</h3>
+              <span className="text-xs text-green-500 font-semibold mt-4">Including normal and VIP services</span>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+              <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Applied Discounts</span>
+              <h3 className="text-3xl font-black text-red-500 mt-2">AED {totalDiscount.toFixed(2)}</h3>
+              <span className="text-xs text-gray-400 mt-4">Discounts offered to customers</span>
+            </div>
+          </div>
+
+          {/* Search ledger */}
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center no-print">
+            <input
+              type="text"
+              placeholder="Filter ledger by customer name, phone, or plate/model..."
+              value={ledgerSearchQuery}
+              onChange={(e) => setLedgerSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-primary-500 border-gray-200"
+            />
+          </div>
+
+          {/* Printable Invoice Header (Hidden on Screen, Visible on Print) */}
+          <div className="hidden print:block border-b-2 border-gray-300 pb-6 print-full-width">
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-3xl font-black text-black">SNIPER CAR CARE</h1>
+                <p className="text-sm text-gray-500 mt-1">Premium Vehicle Care & Detailing Center</p>
+                <p className="text-xs text-gray-400 mt-0.5">Hostinger VPS Server Network</p>
+              </div>
+              <div className="text-right">
+                <h2 className="text-xl font-bold text-gray-800">DAILY SALES STATEMENT</h2>
+                <p className="text-sm text-gray-600 mt-1">Date: <span className="font-bold">{new Date(selectedDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span></p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 mt-6 bg-gray-50 p-4 rounded-xl border">
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-bold">Total Sales Count</p>
+                <p className="text-lg font-black text-black">{totalSalesCount}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-bold">Total Discounts</p>
+                <p className="text-lg font-black text-black">AED {totalDiscount.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-bold">Grand Total Revenue</p>
+                <p className="text-xl font-black text-red-600">AED {totalRevenue.toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Sales Ledger Table */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden print-full-width">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-gray-50 border-b border-gray-100 print:bg-gray-100">
+                  <tr>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Sale ID</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Customer</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Vehicle / Plate</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Source</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Status</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Payment</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right print:text-black">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {loadingLedger ? (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-12 text-center text-gray-500 no-print">Loading ledger...</td>
+                    </tr>
+                  ) : filteredLedgerOrders.length > 0 ? (
+                    filteredLedgerOrders.map((order) => {
+                      const src = formatSource(order.source);
+                      return (
+                        <tr key={order.id} className="hover:bg-gray-50/50 transition">
+                          <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-700">
+                            #{order.id}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="font-bold text-gray-800">{order.customer_name || 'Walk-in'}</div>
+                            {order.customer_phone && (
+                              <div className="text-xs text-gray-500 print:text-gray-600 mt-0.5">{order.customer_phone}</div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700">
+                            {order.vehicle_plate || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2.5 py-1 text-xs rounded-full font-bold ${src.color}`}>
+                              {src.label}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
+                              order.status === 'completed' ? 'bg-green-50 text-green-700' :
+                              order.status === 'processing' ? 'bg-yellow-50 text-yellow-700' :
+                              order.status === 'cancelled' ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-700'
+                            }`}>
+                              {order.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
+                              order.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                            }`}>
+                              {order.payment_status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-extrabold text-gray-900 text-right">
+                            AED {parseFloat(order.total).toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
+                        No transactions registered for this date.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Printable Invoice Footer (Hidden on Screen, Visible on Print) */}
+          <div className="hidden print:block mt-12 border-t pt-6 text-center text-xs text-gray-400 print-full-width">
+            <p>This statement represents the official record of daily transactions for Sniper Car Care POS System.</p>
+            <p className="mt-1">Generated by Sniper POS Admin Ledger</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
