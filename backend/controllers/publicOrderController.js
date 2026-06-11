@@ -86,6 +86,33 @@ const createOrder = asyncHandler(async (req, res) => {
       }
     }
 
+    // Update customer info if they already exist but name or phone changed during checkout
+    if (finalCustomerId && (customer_name || customer_phone)) {
+      const [existing] = await connection.query(
+        'SELECT name, phone FROM customers WHERE id = ?',
+        [finalCustomerId]
+      );
+      if (existing.length > 0) {
+        const updateFields = [];
+        const updateParams = [];
+        if (customer_name && existing[0].name !== customer_name) {
+          updateFields.push('name = ?');
+          updateParams.push(customer_name);
+        }
+        if (customer_phone && existing[0].phone !== customer_phone) {
+          updateFields.push('phone = ?');
+          updateParams.push(customer_phone);
+        }
+        if (updateFields.length > 0) {
+          updateParams.push(finalCustomerId);
+          await connection.query(
+            `UPDATE customers SET ${updateFields.join(', ')} WHERE id = ?`,
+            updateParams
+          );
+        }
+      }
+    }
+
     // Create order with notes - include customer info in notes if no customer_id
     let orderNotes = notes || '';
     if (!finalCustomerId && customer_name) {
@@ -155,10 +182,20 @@ const createOrder = asyncHandler(async (req, res) => {
         } else if (notes) {
           serviceName = notes;
         }
+
+        const finalPrice = (loyalty && loyalty.free_wash_earned) ? 0.00 : total;
+
         await connection.query(
           'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
-          [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending']
+          [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending']
         );
+
+        if (loyalty && loyalty.free_wash_earned) {
+          await connection.query(
+            'UPDATE orders SET total = 0.00, discount = ?, payment_status = ? WHERE id = ?',
+            [total, 'paid', orderId]
+          );
+        }
       } catch (loyaltyErr) {
         if (loyaltyErr.code !== 'ER_BAD_FIELD_ERROR') {
           throw loyaltyErr;
@@ -232,12 +269,52 @@ const getOrder = asyncHandler(async (req, res) => {
 const confirmOrder = asyncHandler(async (req, res) => {
   const { order_id, payment_method } = req.body;
 
-  await pool.query(
-    'UPDATE orders SET status = ?, payment_status = ? WHERE id = ?',
-    ['processing', payment_method === 'cash' ? 'pending' : 'paid', order_id]
-  );
+  if (!order_id) {
+    return res.status(400).json({ message: 'Order ID is required' });
+  }
 
-  res.json({ message: 'Order confirmed successfully' });
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
+
+  try {
+    const isCash = payment_method === 'cash';
+    const paymentStatus = isCash ? 'pending' : 'paid';
+
+    // Update order status (keep as pending so staff manually starts it)
+    await connection.query(
+      'UPDATE orders SET status = ?, payment_status = ? WHERE id = ?',
+      ['pending', paymentStatus, order_id]
+    );
+
+    // Fetch order total to create/update payments row
+    const [orders] = await connection.query('SELECT total FROM orders WHERE id = ?', [order_id]);
+    if (orders.length > 0) {
+      const total = orders[0].total;
+
+      // Check if there is already a payment record for this order
+      const [existing] = await connection.query('SELECT id FROM payments WHERE order_id = ?', [order_id]);
+      if (existing.length === 0) {
+        await connection.query(
+          'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
+          [order_id, total, payment_method || 'cash', isCash ? 'pending' : 'completed']
+        );
+      } else {
+        await connection.query(
+          'UPDATE payments SET method = ?, status = ?, amount = ? WHERE order_id = ?',
+          [payment_method || 'cash', isCash ? 'pending' : 'completed', total, order_id]
+        );
+      }
+    }
+
+    await connection.commit();
+    connection.release();
+
+    res.json({ message: 'Order confirmed successfully' });
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+    throw error;
+  }
 });
 
 // @desc    Create payment intent
@@ -293,10 +370,10 @@ const confirmPayment = asyncHandler(async (req, res) => {
           [order_id, amount, method || 'card', 'completed', payment_intent_id]
         );
 
-        // Update order payment status
+        // Update order payment status (keep status as pending so staff manually starts it)
         await connection.query(
           'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
-          ['paid', 'processing', order_id]
+          ['paid', 'pending', order_id]
         );
 
         // Send Feedback SMS

@@ -7,6 +7,7 @@ const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: '', payment_status: '', date: '', service_time: '' });
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'saloon', '4x4'
 
   useEffect(() => {
     fetchOrders();
@@ -49,6 +50,15 @@ const Orders = () => {
     return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   };
 
+  const filteredOrders = orders.filter((order) => {
+    if (activeTab === 'all') return true;
+    const vt = (order.vehicle_type || '').toLowerCase();
+    const src = (order.source || '').toLowerCase();
+    const isOrder4x4 = vt === '4x4' || src.includes('4x4') || (order.notes && order.notes.toLowerCase().includes('4x4'));
+    if (activeTab === '4x4') return isOrder4x4;
+    return !isOrder4x4;
+  });
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
   }
@@ -57,6 +67,48 @@ const Orders = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-800">Orders</h1>
+      </div>
+
+      {/* Tabs for Saloon and 4x4 */}
+      <div className="flex border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+            activeTab === 'all'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          All Orders ({orders.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('saloon')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+            activeTab === 'saloon'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Saloon Orders ({orders.filter(o => {
+            const vt = (o.vehicle_type || '').toLowerCase();
+            const src = (o.source || '').toLowerCase();
+            return !(vt === '4x4' || src.includes('4x4') || (o.notes && o.notes.toLowerCase().includes('4x4')));
+          }).length})
+        </button>
+        <button
+          onClick={() => setActiveTab('4x4')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+            activeTab === '4x4'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          4x4 Orders ({orders.filter(o => {
+            const vt = (o.vehicle_type || '').toLowerCase();
+            const src = (o.source || '').toLowerCase();
+            return vt === '4x4' || src.includes('4x4') || (o.notes && o.notes.toLowerCase().includes('4x4'));
+          }).length})
+        </button>
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow flex flex-wrap gap-4">
@@ -131,8 +183,8 @@ const Orders = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {orders.length > 0 ? (
-              orders.map((order) => {
+            {filteredOrders.length > 0 ? (
+              filteredOrders.map((order) => {
                 const serviceTime = calculateServiceTime(order);
                 const serviceTimeColor = getServiceTimeColor(serviceTime);
                 const isCompleted = order.status === 'completed';
@@ -211,12 +263,15 @@ const Orders = () => {
                   <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <p className="mt-2 text-gray-600">No orders found matching your filters</p>
+                  <p className="mt-2 text-gray-600 font-medium">No orders found for this selection</p>
                   <button
-                    onClick={() => setFilter({ status: '', payment_status: '', date: '', service_time: '' })}
-                    className="mt-4 text-primary-600 hover:underline text-sm"
+                    onClick={() => {
+                      setFilter({ status: '', payment_status: '', date: '', service_time: '' });
+                      setActiveTab('all');
+                    }}
+                    className="mt-4 text-primary-600 hover:underline text-sm font-bold"
                   >
-                    Clear all filters
+                    Reset all filters & tabs
                   </button>
                 </td>
               </tr>

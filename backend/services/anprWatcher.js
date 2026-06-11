@@ -115,6 +115,11 @@ function startFileWatcher() {
       return;
     }
 
+    // Skip service package configuration images
+    if (fileName.startsWith('service_') || fileName.includes('-saloon') || fileName.includes('-4x4')) {
+      return;
+    }
+
     console.log(`[Watcher] New image detected: ${fileName}`);
     
     try {

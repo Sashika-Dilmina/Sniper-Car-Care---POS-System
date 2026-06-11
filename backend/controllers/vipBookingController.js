@@ -149,7 +149,16 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
 
     // Fetch price for VIP service from vip_services by service_type name
     const [serviceRows] = await db.query('SELECT price FROM vip_services WHERE name = ?', [service_type]);
-    const price = serviceRows.length > 0 ? parseFloat(serviceRows[0].price) : 0;
+    let price = serviceRows.length > 0 ? parseFloat(serviceRows[0].price) : 0;
+
+    // Fallback if price is 0 (ensure VIP pricing is always correct)
+    if (price === 0) {
+      if (service_type === 'Saloon VIP Service') {
+        price = 75.00;
+      } else if (service_type === '4x4 VIP Service') {
+        price = 90.00;
+      }
+    }
 
     // Check if customer exists in the main customers table by phone (to link customer_id)
     const [mainCustomer] = await db.query(

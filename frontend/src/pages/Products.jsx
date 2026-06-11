@@ -16,6 +16,40 @@ const Products = () => {
     stock: '',
     image_url: ''
   });
+  const [uploading, setUploading] = useState(false);
+
+  const resolveImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    return `${apiBaseUrl.replace(/\/$/, '')}${url.startsWith('/') ? '' : '/'}${url}`;
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        setUploading(true);
+        const response = await axios.post('/api/products/upload-image', { image: reader.result });
+        setFormData((prev) => ({ ...prev, image_url: response.data.imageUrl }));
+        toast.success('Image uploaded successfully');
+      } catch (error) {
+        console.error('Image upload failed:', error);
+        toast.error(error.response?.data?.message || 'Failed to upload image');
+      } finally {
+        setUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -270,7 +304,7 @@ const Products = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     {product.image_url ? (
                       <img
-                        src={product.image_url}
+                        src={resolveImageUrl(product.image_url)}
                         alt={product.name}
                         className="w-16 h-16 object-cover rounded-lg border border-gray-200"
                         onError={(e) => {
@@ -389,28 +423,50 @@ const Products = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Image URL
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                  Product Image
                 </label>
-                <input
-                  type="url"
-                  value={formData.image_url}
-                  onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg"
-                  placeholder="https://example.com/image.jpg"
-                />
-                {formData.image_url && (
-                  <div className="mt-2">
-                    <img
-                      src={formData.image_url}
-                      alt="Preview"
-                      className="w-24 h-24 object-cover rounded-lg border border-gray-200"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
-                    />
+                <div className="mt-1 flex items-center gap-4">
+                  {formData.image_url ? (
+                    <div className="relative w-20 h-20 rounded-lg overflow-hidden border">
+                      <img
+                        src={resolveImageUrl(formData.image_url)}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, image_url: '' })}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 shadow"
+                        title="Remove image"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-500 cursor-pointer flex flex-col items-center justify-center text-gray-400 transition hover:text-primary-600 bg-gray-50">
+                      <svg className="w-6 h-6 stroke-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span className="text-[10px] font-semibold mt-1">Upload</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                  <div className="flex-grow text-xs text-gray-500">
+                    {uploading ? (
+                      <span className="text-primary-600 font-bold animate-pulse">Uploading image...</span>
+                    ) : (
+                      <span>Select an image from your device. Recommended: landscape photo (4:3 ratio).</span>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -458,7 +514,8 @@ const Products = () => {
               <div className="flex space-x-4">
                 <button
                   type="submit"
-                  className="flex-1 bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition"
+                  disabled={uploading}
+                  className="flex-1 bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
                 >
                   {editingProduct ? 'Update' : 'Create'}
                 </button>

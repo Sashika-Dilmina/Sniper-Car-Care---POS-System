@@ -6,11 +6,14 @@ const {
   createProduct,
   updateProduct,
   deleteProduct,
-  updateStock
+  updateStock,
+  uploadImage
 } = require('../controllers/productController');
 const { protect } = require('../middleware/auth');
 
 router.use(protect);
+
+router.post('/upload-image', uploadImage);
 
 router.route('/')
   .get(getProducts)

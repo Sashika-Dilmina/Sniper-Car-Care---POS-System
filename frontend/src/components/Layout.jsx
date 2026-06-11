@@ -1,11 +1,115 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import axios from '../config/axios';
+import toast from 'react-hot-toast';
 
 const Layout = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const maxOrderIdRef = useRef(0);
+
+  // Setup real-time order poller for admin/staff dashboard
+  useEffect(() => {
+    if (!user) return;
+
+    // Request browser notification permissions
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    const playNotificationChime = () => {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Note 1 (D5)
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+        gain1.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc1.start(audioCtx.currentTime);
+        osc1.stop(audioCtx.currentTime + 0.3);
+
+        // Note 2 (A5)
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15);
+        gain2.gain.setValueAtTime(0.1, audioCtx.currentTime + 0.15);
+        gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.55);
+        osc2.start(audioCtx.currentTime + 0.15);
+        osc2.stop(audioCtx.currentTime + 0.55);
+      } catch (error) {
+        console.warn('Notification sound playback failed:', error.message);
+      }
+    };
+
+    const pollNewOrders = async () => {
+      try {
+        const response = await axios.get('/api/orders');
+        const orders = response.data.orders || [];
+        
+        if (orders.length === 0) return;
+
+        // If it's the first poll, initialize maxOrderIdRef
+        if (maxOrderIdRef.current === 0) {
+          const maxId = Math.max(...orders.map(o => o.id));
+          maxOrderIdRef.current = maxId;
+          return;
+        }
+
+        // Check for new orders
+        const newOrders = orders.filter(o => o.id > maxOrderIdRef.current);
+        if (newOrders.length > 0) {
+          // Update max ID
+          const maxId = Math.max(...newOrders.map(o => o.id));
+          maxOrderIdRef.current = maxId;
+
+          // Notify for each new order
+          newOrders.forEach(order => {
+            // Visual Toast Notification
+            toast.success(
+              <div className="flex flex-col text-left">
+                <span className="font-bold text-gray-900">New Booking Placed! 🚗</span>
+                <span className="text-xs text-gray-600 mt-1">
+                  Order #{order.id} - {order.customer_name || 'Walk-in'} ({order.vehicle_plate || 'N/A'})
+                </span>
+                <span className="text-xs text-primary-600 font-bold mt-0.5">
+                  Total: AED {parseFloat(order.total).toLocaleString()}
+                </span>
+              </div>,
+              { duration: 8000 }
+            );
+
+            // Native Browser Push Notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(`New Sniper Booking! 🚗`, {
+                body: `Order #${order.id} - ${order.customer_name || 'Walk-in'} (${order.vehicle_plate || 'N/A'})\nTotal: AED ${parseFloat(order.total).toLocaleString()}`,
+              });
+            }
+
+            // Audio notification sound
+            playNotificationChime();
+          });
+        }
+      } catch (err) {
+        console.error('Failed to poll new orders:', err.message);
+      }
+    };
+
+    // Run initially and then every 7 seconds
+    pollNewOrders();
+    const interval = setInterval(pollNewOrders, 7000);
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
 

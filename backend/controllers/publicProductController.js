@@ -5,13 +5,18 @@ const asyncHandler = require('../utils/asyncHandler');
 // @route   GET /api/public/products
 // @access  Public
 const getProducts = asyncHandler(async (req, res) => {
-  const { category } = req.query;
+  const { category, vehicle_type } = req.query;
   let query = 'SELECT * FROM products WHERE 1=1';
   const params = [];
 
   if (category) {
     query += ' AND category = ?';
     params.push(category);
+  }
+
+  if (vehicle_type) {
+    query += ' AND (vehicle_type = ? OR vehicle_type = "Both")';
+    params.push(vehicle_type);
   }
 
   query += ' ORDER BY category ASC, name ASC';

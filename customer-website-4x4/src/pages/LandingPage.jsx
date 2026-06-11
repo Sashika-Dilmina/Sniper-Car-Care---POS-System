@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams, useLocation } from 'react-router-dom';
+import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import { images, getServiceImage } from '../config/siteImages';
@@ -159,49 +159,7 @@ const vipServices = [
   }
 ];
 
-const packages = [
-  {
-    name: 'Full Body Service',
-    price: '25 AED',
-    accent: 'Complete refresh',
-    description: 'Complete interior and exterior detailing for your 4x4.',
-    features: ['Deep interior cleaning', 'Exterior foam wash', 'Wheel cleaning'],
-    duration: '120-150 minutes',
-  },
-  {
-    name: 'Double Soap',
-    price: '30 AED',
-    accent: 'Off-road favorite',
-    featured: true,
-    description: 'Double soap foam wash for heavy mud and dirt removal.',
-    features: ['Double foam wash', 'Hand wash', 'Undercarriage rinse'],
-    duration: '60-90 minutes',
-  },
-  {
-    name: 'Ceramic Wash',
-    price: '30 AED',
-    accent: 'Protection',
-    description: 'Ceramic infused wash for extra shine and protection.',
-    features: ['Ceramic soap wash', 'Paint protection', 'Gloss finish'],
-    duration: '60-90 minutes',
-  },
-  {
-    name: 'Body Wash',
-    price: '20 AED',
-    accent: 'Quick refresh',
-    description: 'Standard exterior wash.',
-    features: ['Foam wash', 'Hand dry'],
-    duration: '45-60 minutes',
-  },
-  {
-    name: 'Just Water',
-    price: '5 AED',
-    accent: 'Quick rinse',
-    description: 'Quick exterior wash with pure water.',
-    features: ['Water wash', 'Basic glass clean'],
-    duration: '15-20 minutes',
-  },
-];
+// Service packages are loaded dynamically from the backend
 
 const heroFeatures = [
   { label: 'Safe Products', icon: '🛡️' },
@@ -353,6 +311,7 @@ const products = [
 ];
 
 const LandingPage = () => {
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -382,6 +341,47 @@ const LandingPage = () => {
   const [showSupportOptions, setShowSupportOptions] = useState(false);
   const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
   const [washStamps, setWashStamps] = useState(0);
+  const [packages, setPackages] = useState([]);
+  const [dbProducts, setDbProducts] = useState([]);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [productForm, setProductForm] = useState({
+    name: '',
+    phone: '',
+    vehicle_plate: '',
+    quantity: 1,
+    notes: ''
+  });
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const response = await axios.get('/api/public/products?category=Services&vehicle_type=4x4');
+        const mappedPackages = (response.data.products || []).map(p => ({
+          id: p.id,
+          name: p.name,
+          price: typeof p.price === 'number' ? p.price : parseFloat(p.price),
+          description: p.description || '',
+          image_url: p.image_url,
+          featured: p.name === 'Double Soap'
+        }));
+        setPackages(mappedPackages);
+      } catch (err) {
+        console.error('Error fetching services:', err);
+      }
+    };
+    const fetchDbProducts = async () => {
+      try {
+        const response = await axios.get('/api/public/products');
+        const filtered = (response.data.products || []).filter(p => p.category !== 'Services');
+        setDbProducts(filtered);
+      } catch (err) {
+        console.error('Error fetching products:', err);
+      }
+    };
+    fetchServices();
+    fetchDbProducts();
+  }, []);
 
   const vehiclePlate = searchParams.get('plate') || '';
 
@@ -545,9 +545,14 @@ const LandingPage = () => {
 
   const submitBooking = async (service, form) => {
     try {
-      // Extract price from service.price (format: "15 AED" or "Rs. 15,000")
-      const priceMatch = service.price.match(/[\d,]+/);
-      const servicePrice = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
+      // Extract price from service.price
+      let servicePrice = 0;
+      if (typeof service.price === 'number') {
+        servicePrice = service.price;
+      } else if (typeof service.price === 'string') {
+        const priceMatch = service.price.match(/[\d,]+/);
+        servicePrice = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
+      }
 
       // Create order with service details
       const orderData = {
@@ -564,19 +569,22 @@ const LandingPage = () => {
       };
 
       const response = await axios.post('/api/public/orders', orderData);
+      const order = response.data.order;
 
       if (response.data.loyalty?.wash_stamps !== undefined) {
         setWashStamps(response.data.loyalty.wash_stamps);
       }
 
-      if (response.data.loyalty?.free_wash_earned) {
-        toast.success('Service booked! You earned a FREE wash — enjoy your reward!');
+      const isFreeWash = response.data.loyalty?.free_wash_earned;
+
+      if (isFreeWash) {
+        toast.success('Service booked! You earned a FREE wash — enjoy your reward!', { duration: 5000 });
       } else if (response.data.loyalty) {
         toast.success(
           `Service booked! Loyalty progress: ${response.data.loyalty.wash_stamps}/5 washes.`
         );
       } else {
-        toast.success('Service booked successfully! We will contact you soon.');
+        toast.success('Service booked successfully! Redirecting to payment...');
       }
       setShowBookingModal(false);
       setSelectedService(null);
@@ -586,10 +594,135 @@ const LandingPage = () => {
         vehicle_plate: '',
         notes: ''
       });
+
+      if (!isFreeWash && order && order.id) {
+        setTimeout(() => {
+          navigate(`/payment?order_id=${order.id}&plate=${encodeURIComponent(form.vehicle_plate || '')}`);
+        }, 1500);
+      }
     } catch (error) {
       console.error('Booking error:', error);
       toast.error(error.response?.data?.message || 'Failed to book service. Please try again.');
     }
+  };
+
+  const handleProductPurchaseClick = (product) => {
+    setSelectedProduct(product);
+    setShowProductModal(true);
+    setProductForm({
+      name: customerInfo?.name || '',
+      phone: customerInfo?.phone || '',
+      vehicle_plate: vehiclePlate || customerInfo?.vehicle_plate || '',
+      quantity: 1,
+      notes: ''
+    });
+  };
+
+  const submitProductPurchase = async (e) => {
+    e.preventDefault();
+    if (!selectedProduct) return;
+
+    if (!productForm.name || !productForm.phone) {
+      toast.error('Please fill in your name and phone number');
+      return;
+    }
+
+    try {
+      const price = typeof selectedProduct.price === 'number'
+        ? selectedProduct.price
+        : parseFloat(String(selectedProduct.price).replace(/[^0-9.]/g, ''));
+
+      const orderData = {
+        customer_id: customerInfo?.id || null,
+        customer_name: productForm.name,
+        customer_phone: productForm.phone,
+        vehicle_plate: productForm.vehicle_plate || null,
+        items: [
+          {
+            product_id: selectedProduct.id || null,
+            quantity: productForm.quantity,
+            price: price
+          }
+        ],
+        total: price * productForm.quantity,
+        source: 'customer_website_4x4',
+        status: 'pending',
+        payment_status: 'pending',
+        notes: productForm.notes || `Product Purchase via Website - ${selectedProduct.name} (Qty: ${productForm.quantity})`
+      };
+
+      const response = await axios.post('/api/public/orders', orderData);
+      const order = response.data.order;
+
+      toast.success('Product order created successfully! Redirecting to payment...');
+      setShowProductModal(false);
+      setSelectedProduct(null);
+
+      if (order && order.id) {
+        setTimeout(() => {
+          navigate(`/payment?order_id=${order.id}&plate=${encodeURIComponent(productForm.vehicle_plate || '')}`);
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Product purchase error:', error);
+      toast.error(error.response?.data?.message || 'Failed to place order. Please try again.');
+    }
+  };
+
+  const resolveImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    return `${apiBaseUrl.replace(/\/$/, '')}${url.startsWith('/') ? '' : '/'}${url}`;
+  };
+
+  const renderProductArt = (product) => {
+    if (typeof product.art === 'function') {
+      return product.art({ className: 'h-full w-full object-cover' });
+    }
+    
+    const match = products.find(p => p.name.toLowerCase() === product.name.toLowerCase());
+    if (match && typeof match.art === 'function') {
+      return match.art({ className: 'h-full w-full object-cover' });
+    }
+
+    if (product.image_url) {
+      return (
+        <img
+          src={resolveImageUrl(product.image_url)}
+          alt={product.name}
+          className="h-full w-full object-cover"
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src = 'https://via.placeholder.com/320x220?text=Premium+Accessory';
+          }}
+        />
+      );
+    }
+
+    return (
+      <svg viewBox="0 0 320 220" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full object-cover">
+        <defs>
+          <linearGradient id="prodGrad" x1="0" y1="0" x2="320" y2="220" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#1e293b" />
+            <stop offset="50%" stopColor="#0f172a" />
+            <stop offset="100%" stopColor="#020617" />
+          </linearGradient>
+        </defs>
+        <rect width="320" height="220" rx="32" fill="url(#prodGrad)" />
+        <circle cx="160" cy="110" r="45" fill="#1e293b" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 6" />
+        <path d="M160 85v50M135 110h50" stroke="#ef4444" strokeWidth="4" strokeLinecap="round" />
+      </svg>
+    );
+  };
+
+  const getProductBenefits = (product) => {
+    if (Array.isArray(product.benefits)) return product.benefits;
+    
+    const match = products.find(p => p.name.toLowerCase() === product.name.toLowerCase());
+    if (match && Array.isArray(match.benefits)) return match.benefits;
+
+    return ['Premium Quality', 'Best in class', 'Satisfaction Guaranteed'];
   };
 
   const submitVIPBooking = async (e) => {
@@ -806,7 +939,7 @@ const LandingPage = () => {
                 <div className="relative h-14 sm:h-24 bg-gray-900 overflow-visible shrink-0 border-y border-gray-100">
                   <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center opacity-90" />
                   <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex h-6 w-6 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-600 text-white text-[7px] sm:text-sm font-bold shadow-md ring-2 ring-white z-10">
-                    {pkg.price.replace(' AED', '')}
+                    {String(pkg.price).replace(' AED', '')}
                   </div>
                 </div>
                 <div className="px-1 pt-4 pb-2 sm:pt-6 sm:pb-3 flex flex-col flex-1 items-center text-center bg-white justify-between">
@@ -959,27 +1092,30 @@ const LandingPage = () => {
           </div>
         </Reveal>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {products.map((product, index) => (
+          {(dbProducts.length > 0 ? dbProducts : products).map((product, index) => (
             <Reveal key={product.name} delay={index * 100}>
               <div className="template-card overflow-hidden flex flex-col h-full">
                 <div className="relative h-40 bg-gray-100">
-                  {product.art({ className: 'h-full w-full object-cover' })}
+                  {renderProductArt(product)}
                 </div>
                 <div className="p-5 flex flex-col flex-1">
                   <div className="flex justify-between text-[10px] uppercase tracking-widest text-red-600 font-bold">
                     <span>Sniper</span>
-                    <span>{product.price}</span>
+                    <span>{typeof product.price === 'number' ? `${product.price} AED` : product.price}</span>
                   </div>
                   <h3 className="mt-3 text-lg font-bold text-gray-900">{product.name}</h3>
                   <p className="mt-1 text-xs text-gray-600">{product.description}</p>
                   <ul className="mt-3 space-y-1 text-xs text-gray-500">
-                    {product.benefits.map((benefit) => (
+                    {getProductBenefits(product).map((benefit) => (
                       <li key={benefit} className="flex gap-2"><span className="text-red-600">•</span>{benefit}</li>
                     ))}
                   </ul>
-                  <a href="tel:+12125550123" className="mt-5 inline-flex items-center justify-center rounded-lg border-2 border-gray-900 py-2.5 text-xs font-bold uppercase text-gray-900 hover:bg-gray-900 hover:text-white transition">
+                  <button
+                    onClick={() => handleProductPurchaseClick(product)}
+                    className="w-full mt-5 inline-flex items-center justify-center rounded-lg border-2 border-gray-900 py-3 text-xs sm:text-sm font-bold uppercase text-gray-900 hover:bg-gray-900 hover:text-white transition active:scale-[0.98]"
+                  >
                     Purchase
-                  </a>
+                  </button>
                 </div>
               </div>
             </Reveal>
@@ -1313,6 +1449,104 @@ const LandingPage = () => {
                 Continue Booking
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Purchase Modal */}
+      {showProductModal && selectedProduct && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-md rounded-2xl bg-white border border-gray-200 p-6 sm:p-8 shadow-2xl">
+            <button
+              onClick={() => {
+                setShowProductModal(false);
+                setSelectedProduct(null);
+              }}
+              className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-900 transition"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Purchase {selectedProduct.name}</h3>
+            <p className="text-lg text-red-600 font-semibold mb-6">
+              {typeof selectedProduct.price === 'number' ? `${selectedProduct.price} AED` : selectedProduct.price}
+            </p>
+
+            <form onSubmit={submitProductPurchase} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={productForm.name}
+                  onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="Your full name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  value={productForm.phone}
+                  onChange={(e) => setProductForm({ ...productForm, phone: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="03001234567"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Plate (Optional)</label>
+                <input
+                  type="text"
+                  value={productForm.vehicle_plate}
+                  onChange={(e) => setProductForm({ ...productForm, vehicle_plate: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="ABC-123"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Quantity *</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setProductForm(prev => ({ ...prev, quantity: Math.max(1, prev.quantity - 1) }))}
+                    className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center font-bold text-lg text-gray-700 transition"
+                  >
+                    -
+                  </button>
+                  <span className="w-12 text-center font-bold text-lg text-gray-900">{productForm.quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => setProductForm(prev => ({ ...prev, quantity: Math.min(selectedProduct.stock || 99, prev.quantity + 1) }))}
+                    className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center font-bold text-lg text-gray-700 transition"
+                  >
+                    +
+                  </button>
+                  {selectedProduct.stock !== undefined && (
+                    <span className="text-xs text-gray-500 font-medium">({selectedProduct.stock} in stock)</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Special Notes (Optional)</label>
+                <textarea
+                  value={productForm.notes}
+                  onChange={(e) => setProductForm({ ...productForm, notes: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                  placeholder="Any special instructions or preferences..."
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full mt-6 inline-flex items-center justify-center rounded-lg bg-red-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-red-700"
+              >
+                Confirm Purchase - {(parseFloat(typeof selectedProduct.price === 'number' ? selectedProduct.price : String(selectedProduct.price).replace(/[^0-9.]/g, '')) * productForm.quantity).toLocaleString()} AED
+              </button>
+            </form>
           </div>
         </div>
       )}

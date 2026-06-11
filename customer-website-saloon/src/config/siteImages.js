@@ -64,8 +64,20 @@ export const images = {
 
 export function getServiceImage(pkg) {
 
-  return images.byServiceName[pkg.name] || images.defaultService;
+  if (pkg && pkg.image_url) {
+
+    if (pkg.image_url.startsWith('http')) {
+
+      return pkg.image_url;
+
+    }
+
+    const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+    return `${apiBaseUrl.replace(/\/$/, '')}${pkg.image_url.startsWith('/') ? '' : '/'}${pkg.image_url}`;
+
+  }
+
+  return images.byServiceName[pkg ? pkg.name : ''] || images.defaultService;
 
 }
-
-

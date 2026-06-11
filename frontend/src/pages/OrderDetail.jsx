@@ -168,15 +168,47 @@ const OrderDetail = () => {
             )}
             <div>
               <p className="text-sm text-gray-600">Status</p>
-              <select
-                value={order.status}
-                onChange={(e) => handleStatusUpdate(e.target.value)}
-                className="mt-1 px-4 py-2 border rounded-lg"
-              >
-                <option value="processing">Processing</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+              <div className="mt-2 flex items-center flex-wrap gap-3">
+                <span className={`px-3 py-1.5 text-xs font-black rounded-full uppercase tracking-wider ${
+                  order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                  order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                  order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {order.status === 'processing' ? 'In Progress' : order.status}
+                </span>
+
+                {order.status === 'pending' && (
+                  <button
+                    onClick={() => handleStatusUpdate('processing')}
+                    className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-green-500/20 active:scale-[0.98]"
+                  >
+                    ⚡ Service Start
+                  </button>
+                )}
+
+                {order.status === 'processing' && (
+                  <button
+                    onClick={() => handleStatusUpdate('completed')}
+                    className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98]"
+                  >
+                    ✓ Done / Completed
+                  </button>
+                )}
+
+                {(order.status === 'pending' || order.status === 'processing') && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to cancel this order?')) {
+                        handleStatusUpdate('cancelled');
+                      }
+                    }}
+                    className="px-3 py-2 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
+                  >
+                    Cancel Order
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <p className="text-sm text-gray-600">Total Amount</p>
