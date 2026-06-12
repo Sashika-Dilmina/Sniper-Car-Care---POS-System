@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
 const Sales = () => {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const customerIdParam = searchParams.get('customer_id');
   const [activeSubTab, setActiveSubTab] = useState('pos'); // 'pos' or 'ledger'
 
   // POS - Products & Catalog State
@@ -91,6 +94,16 @@ const Sales = () => {
       toast.error('Failed to load customers');
     }
   };
+
+  useEffect(() => {
+    if (customerIdParam && customers.length > 0) {
+      const cust = customers.find(c => c.id === parseInt(customerIdParam));
+      if (cust) {
+        setSelectedCustomer(cust);
+        setCustomerSearch(`${cust.name} (${cust.vehicle_plate})`);
+      }
+    }
+  }, [customerIdParam, customers]);
 
   // Add Product/Service to Cart
   const addToCart = (product) => {

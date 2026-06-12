@@ -3,7 +3,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
-const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
+const { ensureLoyaltyRow, incrementWashStamp, getWashStamps } = require('../utils/loyaltyStamps');
 
 // @desc    Create order from customer website
 // @route   POST /api/public/orders
@@ -154,8 +154,8 @@ const createOrder = asyncHandler(async (req, res) => {
         const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
         if (prodRows.length > 0 && prodRows[0].category === 'Services') {
           await connection.query(
-            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
-            [finalCustomerId || null, prodRows[0].name, vehicleType, item.price, 'Added via Order Items', status || 'pending']
+            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [finalCustomerId || null, prodRows[0].name, vehicleType, item.price, 'Added via Order Items', status || 'pending', orderId]
           );
         }
       }
@@ -188,8 +188,8 @@ const createOrder = asyncHandler(async (req, res) => {
           const finalPrice = 0.00;
 
           await connection.query(
-            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
-            [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending']
+            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending', orderId]
           );
 
           await connection.query(
@@ -199,8 +199,8 @@ const createOrder = asyncHandler(async (req, res) => {
         } else {
           // Paid booking, do not increment stamps yet!
           await connection.query(
-            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
-            [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending']
+            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending', orderId]
           );
         }
       } catch (loyaltyErr) {

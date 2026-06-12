@@ -206,8 +206,8 @@ const createOrder = asyncHandler(async (req, res) => {
       const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
       if (prodRows.length > 0 && prodRows[0].category === 'Services') {
         await connection.query(
-          'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
-          [customer_id || null, prodRows[0].name, vehicleType, item.price, 'Added via POS Order', 'pending']
+          'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [customer_id || null, prodRows[0].name, vehicleType, item.price, 'Added via POS Order', 'pending', orderId]
         );
       }
     }
@@ -281,6 +281,31 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
         [vipStatus, order.vip_booking_id]
       );
     }
+
+    // Sync status and timestamps to associated services
+    let serviceStatus = 'pending';
+    let serviceStartedUpdate = '';
+    let serviceCompletedUpdate = '';
+    
+    if (status === 'processing') {
+      serviceStatus = 'in_progress';
+      serviceStartedUpdate = ', started_at = COALESCE(started_at, CURRENT_TIMESTAMP)';
+    } else if (status === 'completed') {
+      serviceStatus = 'completed';
+      serviceStartedUpdate = ', started_at = COALESCE(started_at, created_at, CURRENT_TIMESTAMP)';
+      serviceCompletedUpdate = ', completed_at = CURRENT_TIMESTAMP';
+    } else if (status === 'cancelled') {
+      serviceStatus = 'cancelled';
+    } else if (status === 'pending') {
+      serviceStatus = 'pending';
+      serviceStartedUpdate = ', started_at = NULL';
+      serviceCompletedUpdate = ', completed_at = NULL';
+    }
+
+    await connection.query(
+      `UPDATE services SET status = ?${serviceStartedUpdate}${serviceCompletedUpdate} WHERE order_id = ?`,
+      [serviceStatus, id]
+    );
 
     // If order status is set to 'completed', automatically handle payment status and record cash payments if unpaid
     if (status === 'completed') {

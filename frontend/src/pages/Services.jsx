@@ -19,10 +19,19 @@ const Services = () => {
 
   const resolveImageUrl = (url) => {
     if (!url) return '';
-    if (url.startsWith('http')) return url;
-    if (import.meta.env.PROD) return url;
+    
+    // Normalize legacy localhost URLs to relative paths
+    let cleanUrl = url;
+    if (url.startsWith('http://localhost:5000')) {
+      cleanUrl = url.replace('http://localhost:5000', '');
+    } else if (url.startsWith('https://localhost:5000')) {
+      cleanUrl = url.replace('https://localhost:5000', '');
+    }
+
+    if (cleanUrl.startsWith('http')) return cleanUrl;
+    if (import.meta.env.PROD) return cleanUrl;
     const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    return `${apiBaseUrl.replace(/\/$/, '')}${url.startsWith('/') ? '' : '/'}${url}`;
+    return `${apiBaseUrl.replace(/\/$/, '')}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
   };
 
   useEffect(() => {

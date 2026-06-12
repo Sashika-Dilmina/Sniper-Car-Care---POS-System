@@ -41,20 +41,32 @@ const Dashboard = () => {
     if (isAdmin) {
       fetchCompletedServices();
     }
+
+    const interval = setInterval(() => {
+      fetchAnalytics(true);
+      fetchVIPAppointments(true);
+      if (isAdmin) {
+        fetchCompletedServices(true);
+      }
+    }, 7000);
+
+    return () => clearInterval(interval);
   }, [isAdmin]);
 
-  const fetchCompletedServices = async () => {
+  const fetchCompletedServices = async (silent = false) => {
+    if (!silent) setServicesLoading(true);
     try {
       const response = await axios.get('/api/services?status=completed');
       setCompletedServices(response.data.services || []);
     } catch (error) {
       console.error('Error fetching completed services:', error);
     } finally {
-      setServicesLoading(false);
+      if (!silent) setServicesLoading(false);
     }
   };
 
-  const fetchVIPAppointments = async () => {
+  const fetchVIPAppointments = async (silent = false) => {
+    if (!silent) setVipLoading(true);
     try {
       const response = await axios.get('/api/vip/bookings/today', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -63,27 +75,30 @@ const Dashboard = () => {
     } catch (error) {
       console.error('Error fetching VIP appointments:', error);
     } finally {
-      setVipLoading(false);
+      if (!silent) setVipLoading(false);
     }
   };
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const response = await axios.get('/api/analytics/dashboard?period=today');
       console.log('Analytics response:', response.data);
       if (response.data) {
         setAnalytics(response.data);
       } else {
-        toast.error('No analytics data received');
+        if (!silent) toast.error('No analytics data received');
       }
     } catch (error) {
       console.error('Analytics error:', error);
-      if (error.response?.status === 401) {
-        toast.error('Authentication failed. Please login again.');
-      } else if (error.response?.status === 500) {
-        toast.error('Server error. Check backend logs.');
-      } else {
-        toast.error(error.response?.data?.message || 'Failed to load analytics');
+      if (!silent) {
+        if (error.response?.status === 401) {
+          toast.error('Authentication failed. Please login again.');
+        } else if (error.response?.status === 500) {
+          toast.error('Server error. Check backend logs.');
+        } else {
+          toast.error(error.response?.data?.message || 'Failed to load analytics');
+        }
       }
       // Set default empty data structure so page still renders
       setAnalytics({
@@ -96,7 +111,7 @@ const Dashboard = () => {
         recent_feedback: []
       });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
