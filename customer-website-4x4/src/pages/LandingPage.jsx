@@ -745,9 +745,13 @@ const LandingPage = () => {
         notes: vipBookingForm.notes
       });
 
-      toast.success('VIP booking confirmed! We will contact you soon.');
+      toast.success('VIP booking confirmed! Redirecting to payment...');
       setShowVIPModal(false);
       setVipStep(1);
+      
+      const orderId = response.data.orderId;
+      const vehicleModel = vipBookingForm.vehicle_model;
+
       setVipBookingForm({
         name: '',
         phone: '',
@@ -759,6 +763,12 @@ const LandingPage = () => {
         notes: ''
       });
       setAvailableTimeSlots([]);
+
+      if (orderId) {
+        setTimeout(() => {
+          navigate(`/payment?order_id=${orderId}&plate=${encodeURIComponent(vehicleModel || '')}`);
+        }, 1500);
+      }
     } catch (error) {
       console.error('VIP Booking error:', error);
       toast.error(error.response?.data?.message || 'Failed to book VIP service. Please try again.');

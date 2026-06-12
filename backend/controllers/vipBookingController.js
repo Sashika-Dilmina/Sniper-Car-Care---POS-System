@@ -168,7 +168,7 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
     const mainCustomerId = mainCustomer.length > 0 ? mainCustomer[0].id : null;
 
     // Create corresponding order in the orders table
-    await db.query(
+    const [orderResult] = await db.query(
       'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, vip_booking_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [mainCustomerId, price, 0, 'pending', 'pending', 'vip_booking', bookingResult.insertId, notes || `VIP Booking - ${service_type}`]
     );
@@ -177,6 +177,7 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
       success: true,
       message: 'VIP booking created successfully',
       bookingId: bookingResult.insertId,
+      orderId: orderResult.insertId,
       customerId: vipCustomerId
     });
   } catch (error) {

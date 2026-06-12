@@ -49,11 +49,14 @@ function uploadFile(conn, localPath, remotePath) {
 conn.on('ready', async () => {
   console.log('⚡ Connected to VPS via SSH');
   try {
-    // 1. Upload archives
+    // 1. Upload archives and migrations
     const rootDir = path.join(__dirname, '..', '..');
     await uploadFile(conn, path.join(rootDir, 'frontend.tar.gz'), '/tmp/frontend.tar.gz');
     await uploadFile(conn, path.join(rootDir, 'saloon.tar.gz'), '/tmp/saloon.tar.gz');
     await uploadFile(conn, path.join(rootDir, '4x4.tar.gz'), '/tmp/4x4.tar.gz');
+    await uploadFile(conn, path.join(rootDir, 'database', 'migration_add_service_timestamps.sql'), '/tmp/migration_add_service_timestamps.sql');
+    await uploadFile(conn, path.join(rootDir, 'database', 'migration_update_payment_methods_v2.sql'), '/tmp/migration_update_payment_methods_v2.sql');
+    await uploadFile(conn, path.join(rootDir, 'database', 'migration_seed_vip_services_v2.sql'), '/tmp/migration_seed_vip_services_v2.sql');
 
     // 2. Repo path
     const repoPath = '~/Sniper-Car-Care---POS-System';
@@ -66,8 +69,10 @@ conn.on('ready', async () => {
     console.log('📦 Installing backend dependencies...');
     await executeCommand(conn, `cd ${backendPath} && npm install --production`);
     
-    console.log('🗄️ Running DB Migration...');
-    await executeCommand(conn, `cd ${backendPath} && node scripts/run-migration.js`);
+    console.log('🗄️ Running DB Migrations...');
+    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_add_service_timestamps.sql`);
+    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_update_payment_methods_v2.sql`);
+    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_seed_vip_services_v2.sql`);
 
     console.log('🔄 Restarting backend server...');
     await executeCommand(conn, `pm2 restart all || pm2 start server.js`);
@@ -87,7 +92,7 @@ conn.on('ready', async () => {
 
     // 5. Cleanup
     console.log('🧹 Cleaning up remote temporary files...');
-    await executeCommand(conn, 'rm -f /tmp/frontend.tar.gz /tmp/saloon.tar.gz /tmp/4x4.tar.gz');
+    await executeCommand(conn, 'rm -f /tmp/frontend.tar.gz /tmp/saloon.tar.gz /tmp/4x4.tar.gz /tmp/migration_add_service_timestamps.sql /tmp/migration_update_payment_methods_v2.sql /tmp/migration_seed_vip_services_v2.sql');
 
     console.log('🚀 DEPLOYMENT COMPLETED SUCCESSFULLY!');
   } catch (err) {
