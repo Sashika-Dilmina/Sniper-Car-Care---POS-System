@@ -12,6 +12,7 @@ const getCustomers = asyncHandler(async (req, res) => {
            COUNT(DISTINCT o.id) as total_orders,
            COALESCE(SUM(o.total), 0) as total_spent,
            COALESCE(l.points, 0) as loyalty_points,
+           COALESCE(l.wash_stamps, 0) as wash_stamps,
            (SELECT p2.method 
             FROM payments p2 
             INNER JOIN orders o2 ON p2.order_id = o2.id

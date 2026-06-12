@@ -269,6 +269,19 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
 
     const order = orders[0];
 
+    // Sync status to VIP bookings if linked
+    if (order.vip_booking_id) {
+      let vipStatus = 'pending';
+      if (status === 'processing') vipStatus = 'in_progress';
+      else if (status === 'completed') vipStatus = 'completed';
+      else if (status === 'cancelled') vipStatus = 'cancelled';
+
+      await connection.query(
+        'UPDATE vip_bookings SET status = ? WHERE id = ?',
+        [vipStatus, order.vip_booking_id]
+      );
+    }
+
     // If order status is set to 'completed', automatically handle payment status and record cash payments if unpaid
     if (status === 'completed') {
       if (order.payment_status !== 'paid') {

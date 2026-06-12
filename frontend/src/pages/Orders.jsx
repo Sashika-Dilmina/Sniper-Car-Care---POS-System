@@ -51,7 +51,10 @@ const Orders = () => {
   };
 
   const filteredOrders = orders.filter((order) => {
+    const hasProducts = order.items && order.items.some(item => item.category === 'Accessories' || item.category === 'Spare Parts');
+    if (activeTab === 'products') return hasProducts;
     if (activeTab === 'all') return true;
+    
     const vt = (order.vehicle_type || '').toLowerCase();
     const src = (order.source || '').toLowerCase();
     const isOrder4x4 = vt === '4x4' || src.includes('4x4') || (order.notes && order.notes.toLowerCase().includes('4x4'));
@@ -69,7 +72,7 @@ const Orders = () => {
         <h1 className="text-3xl font-bold text-gray-800">Orders</h1>
       </div>
 
-      {/* Tabs for Saloon and 4x4 */}
+      {/* Tabs for Saloon, 4x4, and Products */}
       <div className="flex border-b border-gray-200">
         <button
           onClick={() => setActiveTab('all')}
@@ -108,6 +111,16 @@ const Orders = () => {
             const src = (o.source || '').toLowerCase();
             return vt === '4x4' || src.includes('4x4') || (o.notes && o.notes.toLowerCase().includes('4x4'));
           }).length})
+        </button>
+        <button
+          onClick={() => setActiveTab('products')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+            activeTab === 'products'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Product Orders ({orders.filter(o => o.items && o.items.some(i => i.category === 'Accessories' || i.category === 'Spare Parts')).length})
         </button>
       </div>
 
@@ -174,6 +187,7 @@ const Orders = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle Plate</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items / Products</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service Time</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -188,19 +202,27 @@ const Orders = () => {
                 const serviceTime = calculateServiceTime(order);
                 const serviceTimeColor = getServiceTimeColor(serviceTime);
                 const isCompleted = order.status === 'completed';
+                const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
 
                 return (
                   <tr
                     key={order.id}
-                    className={`hover:bg-gray-50 ${isCompleted && serviceTimeColor === 'green' ? 'bg-green-50' :
-                        isCompleted && serviceTimeColor === 'red' ? 'bg-red-50' :
-                          ''
-                      }`}
+                    className={`hover:bg-gray-50 transition-colors ${
+                      isVipOrder ? 'bg-purple-50/60 hover:bg-purple-100/60 border-l-4 border-purple-500' :
+                      isCompleted && serviceTimeColor === 'green' ? 'bg-green-50/60' :
+                      isCompleted && serviceTimeColor === 'red' ? 'bg-red-50/60' :
+                      ''
+                    }`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         #{order.id}
-                        {order.source === 'customer_website' && (
+                        {isVipOrder && (
+                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded-full border border-purple-200" title="VIP Order">
+                            VIP ⭐
+                          </span>
+                        )}
+                        {order.source === 'customer_website' && !isVipOrder && (
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full" title="Customer Website Order">
                             🌐
                           </span>
@@ -209,6 +231,19 @@ const Orders = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{order.customer_name || 'Walk-in'}</td>
                     <td className="px-6 py-4 whitespace-nowrap font-mono">{order.vehicle_plate || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {order.items && order.items.length > 0 ? (
+                        <div className="flex flex-col gap-1 max-w-xs truncate">
+                          {order.items.map((item, idx) => (
+                            <span key={idx} className="text-xs text-gray-700 block bg-gray-100 px-2 py-0.5 rounded w-max">
+                              {item.product_name} x{item.quantity}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Service Booking</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       AED {parseFloat(order.total).toLocaleString()}
                     </td>

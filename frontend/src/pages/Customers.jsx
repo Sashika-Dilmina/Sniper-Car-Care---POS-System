@@ -30,11 +30,17 @@ const Customers = () => {
 
   useEffect(() => {
     fetchCustomers();
+    
+    const interval = setInterval(() => {
+      fetchCustomers(true);
+    }, 7000);
+
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  const fetchCustomers = async () => {
-    setLoading(true);
+  const fetchCustomers = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams();
 
@@ -46,9 +52,10 @@ const Customers = () => {
       const response = await axios.get(`/api/customers?${params.toString()}`);
       setCustomers(response.data.customers);
     } catch (error) {
-      toast.error('Failed to load customers');
+      // Don't show toast error on silent background updates to avoid annoying the user
+      if (!silent) toast.error('Failed to load customers');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -574,7 +581,7 @@ const Customers = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Orders</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Loyalty Points</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Loyalty & Stamps</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -604,9 +611,14 @@ const Customers = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{customer.total_orders || 0}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                        {customer.loyalty_points || 0} pts
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 w-max">
+                          {customer.loyalty_points || 0} pts
+                        </span>
+                        <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800 w-max font-semibold">
+                          {customer.wash_stamps || 0}/5 Stamps
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">

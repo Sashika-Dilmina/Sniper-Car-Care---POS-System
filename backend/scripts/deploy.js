@@ -90,7 +90,16 @@ conn.on('ready', async () => {
     await executeCommand(conn, 'mkdir -p /var/www/customer-4x4 && rm -rf /var/www/customer-4x4/*');
     await executeCommand(conn, 'tar -xzf /tmp/4x4.tar.gz -C /var/www/customer-4x4/');
 
-    // 5. Cleanup
+    // 5. Run Nginx Patching
+    console.log('🔧 Running Nginx patching script...');
+    const { execSync } = require('child_process');
+    try {
+      execSync(`node "${path.join(__dirname, 'patch-nginx.js')}"`, { stdio: 'inherit' });
+    } catch (patchErr) {
+      console.error('⚠️ Nginx patching script failed, but continuing deployment cleanup:', patchErr.message);
+    }
+
+    // 6. Cleanup
     console.log('🧹 Cleaning up remote temporary files...');
     await executeCommand(conn, 'rm -f /tmp/frontend.tar.gz /tmp/saloon.tar.gz /tmp/4x4.tar.gz /tmp/migration_add_service_timestamps.sql /tmp/migration_update_payment_methods_v2.sql /tmp/migration_seed_vip_services_v2.sql');
 

@@ -672,6 +672,7 @@ const LandingPage = () => {
   const resolveImageUrl = (url) => {
     if (!url) return '';
     if (url.startsWith('http')) return url;
+    if (import.meta.env.PROD) return url;
     const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     return `${apiBaseUrl.replace(/\/$/, '')}${url.startsWith('/') ? '' : '/'}${url}`;
   };

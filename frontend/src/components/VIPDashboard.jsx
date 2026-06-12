@@ -19,10 +19,16 @@ const VIPDashboard = () => {
   // Fetch VIP bookings
   useEffect(() => {
     fetchVIPBookings();
+
+    const interval = setInterval(() => {
+      fetchVIPBookings(true);
+    }, 7000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchVIPBookings = async () => {
-    setLoading(true);
+  const fetchVIPBookings = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const response = await axios.get('/api/vip/bookings', {
         headers: {
@@ -32,15 +38,17 @@ const VIPDashboard = () => {
       setVipBookings(response.data.data || []);
     } catch (error) {
       console.error('Error fetching VIP bookings:', error);
-      if (error.response?.status === 401) {
-        toast.error('Login expired. Please log out and log in again.');
-      } else if (!error.response) {
-        toast.error('Cannot reach API server. Is backend running on port 5000?');
-      } else {
-        toast.error(error.response?.data?.message || 'Failed to fetch VIP bookings');
+      if (!silent) {
+        if (error.response?.status === 401) {
+          toast.error('Login expired. Please log out and log in again.');
+        } else if (!error.response) {
+          toast.error('Cannot reach API server. Is backend running on port 5000?');
+        } else {
+          toast.error(error.response?.data?.message || 'Failed to fetch VIP bookings');
+        }
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 

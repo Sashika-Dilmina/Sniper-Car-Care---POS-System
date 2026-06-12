@@ -173,9 +173,8 @@ const createOrder = asyncHandler(async (req, res) => {
     if (isWebsiteServiceBooking) {
       try {
         await ensureLoyaltyRow(connection, finalCustomerId);
-        loyalty = await incrementWashStamp(connection, finalCustomerId);
+        const currentStamps = await getWashStamps(connection, finalCustomerId);
 
-        // Auto-create service task for the booking
         let serviceName = 'Car Care Service';
         if (notes && notes.includes('One-Tap Booking via Website - ')) {
           serviceName = notes.replace('One-Tap Booking via Website - ', '');
@@ -183,17 +182,25 @@ const createOrder = asyncHandler(async (req, res) => {
           serviceName = notes;
         }
 
-        const finalPrice = (loyalty && loyalty.free_wash_earned) ? 0.00 : total;
+        if (currentStamps >= 5) {
+          // 6th wash -> Free Wash!
+          loyalty = await incrementWashStamp(connection, finalCustomerId);
+          const finalPrice = 0.00;
 
-        await connection.query(
-          'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
-          [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending']
-        );
+          await connection.query(
+            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending']
+          );
 
-        if (loyalty && loyalty.free_wash_earned) {
           await connection.query(
             'UPDATE orders SET total = 0.00, discount = ?, payment_status = ? WHERE id = ?',
             [total, 'paid', orderId]
+          );
+        } else {
+          // Paid booking, do not increment stamps yet!
+          await connection.query(
+            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending']
           );
         }
       } catch (loyaltyErr) {
@@ -286,6 +293,22 @@ const confirmOrder = asyncHandler(async (req, res) => {
       ['pending', paymentStatus, order_id]
     );
 
+    // Sync loyalty stamps for paid website bookings confirmed with Cash
+    const [orderRows] = await connection.query('SELECT customer_id, source, total FROM orders WHERE id = ?', [order_id]);
+    if (orderRows.length > 0) {
+      const order = orderRows[0];
+      const isWebsiteServiceBooking = 
+        order.customer_id &&
+        (order.source === 'customer_website_saloon' ||
+         order.source === 'customer_website_4x4' ||
+         (order.source || '').includes('customer_website'));
+         
+      if (isWebsiteServiceBooking && parseFloat(order.total) > 0) {
+        await ensureLoyaltyRow(connection, order.customer_id);
+        await incrementWashStamp(connection, order.customer_id);
+      }
+    }
+
     // Fetch order total to create/update payments row
     const [orders] = await connection.query('SELECT total FROM orders WHERE id = ?', [order_id]);
     if (orders.length > 0) {
@@ -375,6 +398,30 @@ const confirmPayment = asyncHandler(async (req, res) => {
           'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
           ['paid', 'pending', order_id]
         );
+
+        // Fetch order details for loyalty and VIP sync
+        const [orderRows] = await connection.query('SELECT customer_id, source, total, vip_booking_id FROM orders WHERE id = ?', [order_id]);
+        if (orderRows.length > 0) {
+          const order = orderRows[0];
+          const isWebsiteServiceBooking = 
+            order.customer_id &&
+            (order.source === 'customer_website_saloon' ||
+             order.source === 'customer_website_4x4' ||
+             (order.source || '').includes('customer_website'));
+             
+          if (isWebsiteServiceBooking && parseFloat(order.total) > 0) {
+            await ensureLoyaltyRow(connection, order.customer_id);
+            await incrementWashStamp(connection, order.customer_id);
+          }
+
+          // If it is a VIP booking order, update VIP booking status to 'confirmed'
+          if (order.vip_booking_id) {
+            await connection.query(
+              'UPDATE vip_bookings SET status = "confirmed" WHERE id = ?',
+              [order.vip_booking_id]
+            );
+          }
+        }
 
         // Send Feedback SMS
         const [orderData] = await connection.query(`
