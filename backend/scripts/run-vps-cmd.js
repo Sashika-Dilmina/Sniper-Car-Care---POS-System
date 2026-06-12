@@ -4,7 +4,8 @@ const config = {
   host: '72.62.254.128',
   port: 22,
   username: 'root',
-  password: 'GrTKf/W@3U6Ur.KT'
+  password: 'GrTKf/W@3U6Ur.KT',
+  readyTimeout: 60000
 };
 
 const conn = new Client();
