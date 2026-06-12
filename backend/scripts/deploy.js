@@ -76,6 +76,9 @@ conn.on('ready', async () => {
     await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_seed_vip_services_v2.sql`);
     await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_add_order_id_to_services.sql`);
 
+    console.log('🌱 Seeding services into database...');
+    await executeCommand(conn, `cd ${backendPath} && node scripts/seedNewServices.js`);
+
     console.log('🖼️  Copying default service images & updating database...');
     await executeCommand(conn, `cd ${backendPath} && node scripts/copyOriginalImages.js`);
 

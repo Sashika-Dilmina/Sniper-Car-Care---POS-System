@@ -88,7 +88,8 @@ const Products = () => {
   const fetchProducts = async () => {
     try {
       const response = await axios.get('/api/products');
-      setProducts(response.data.products);
+      const filtered = (response.data.products || []).filter(p => p.category !== 'Services');
+      setProducts(filtered);
     } catch (error) {
       toast.error('Failed to load products');
     } finally {
@@ -488,7 +489,6 @@ const Products = () => {
                   className="w-full px-4 py-2 border rounded-lg"
                 >
                   <option value="Accessories">Accessories</option>
-                  <option value="Services">Services</option>
                   <option value="Spare Parts">Spare Parts</option>
                 </select>
               </div>
