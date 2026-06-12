@@ -681,7 +681,6 @@ const LandingPage = () => {
     }
 
     if (cleanUrl.startsWith('http')) return cleanUrl;
-    if (import.meta.env.PROD) return cleanUrl;
     const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     return `${apiBaseUrl.replace(/\/$/, '')}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
   };
