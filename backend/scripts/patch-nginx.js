@@ -50,9 +50,25 @@ conn.on('ready', async () => {
       throw new Error(`Failed to read config from ${configPath} or file is empty.`);
     }
 
-    // 2. Check if already patched
-    if (catResult.includes('/uploads/')) {
-      console.log('✨ Nginx config is already patched with /uploads/ location block.');
+    // 2. Check if already fully patched
+    if (catResult.includes('location ^~ /uploads/')) {
+      console.log('✨ Nginx config is already fully patched with ^~ /uploads/ location block.');
+    } else if (catResult.includes('location /uploads/')) {
+      console.log('🔧 Upgrading Nginx config to use prefix override (^~) for /uploads/...');
+      const patchedConfig = catResult.split('location /uploads/').join('location ^~ /uploads/');
+      
+      // Write back config
+      await new Promise((resolve, reject) => {
+        conn.sftp((err, sftp) => {
+          if (err) return reject(err);
+          const writeStream = sftp.createWriteStream(configPath);
+          writeStream.on('close', resolve);
+          writeStream.on('error', reject);
+          writeStream.write(patchedConfig);
+          writeStream.end();
+        });
+      });
+      console.log('✨ Config upgraded successfully.');
     } else {
       console.log('🔧 Patching Nginx config...');
       
@@ -77,7 +93,7 @@ conn.on('ready', async () => {
     }
 
     # Proxy uploads from the backend
-    location /uploads/ {
+    location ^~ /uploads/ {
         proxy_pass http://127.0.0.1:5000/uploads/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -88,8 +104,7 @@ conn.on('ready', async () => {
       // We do a global replacement to patch all active server blocks
       const patchedConfig = catResult.split(targetStr).join(replacementStr);
       
-      // Write back using a temporary file and sudo mv to be safe, or direct redirection since we are root
-      // We will write the file content using a remote echo/heredoc or sftp. Let's do sftp write.
+      // Write back using SFTP write
       await new Promise((resolve, reject) => {
         conn.sftp((err, sftp) => {
           if (err) return reject(err);
