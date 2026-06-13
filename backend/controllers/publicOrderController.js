@@ -39,9 +39,9 @@ const createOrder = asyncHandler(async (req, res) => {
 
     // If still no customer ID but we have name and phone, create new customer
     // Note: vehicle_plate is required in schema, so we only create customer if vehicle_plate is provided
-    // Determine vehicle type from order notes (if it mentions 4x4) or default to Saloon
-    let vehicleType = 'Saloon';
-    if (notes && (notes.toLowerCase().includes('4x4') || notes.toLowerCase().includes('(4x4)'))) {
+    // Determine vehicle type from body, notes (if it mentions 4x4) or default to Saloon
+    let vehicleType = req.body.vehicle_type || 'Saloon';
+    if (!req.body.vehicle_type && notes && (notes.toLowerCase().includes('4x4') || notes.toLowerCase().includes('(4x4)'))) {
       vehicleType = '4x4';
     }
 

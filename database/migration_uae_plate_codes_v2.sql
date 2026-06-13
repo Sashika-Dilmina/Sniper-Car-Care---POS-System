@@ -44,7 +44,7 @@ INSERT INTO PlateCodeMaster (EmirateId, EmirateName, PlateCode) VALUES
 (5, 'Umm Al Quwain', 'K'), (5, 'Umm Al Quwain', 'L'), (5, 'Umm Al Quwain', 'M'), (5, 'Umm Al Quwain', 'N'), (5, 'Umm Al Quwain', 'O'), 
 (5, 'Umm Al Quwain', 'P'), (5, 'Umm Al Quwain', 'Q'), (5, 'Umm Al Quwain', 'R'), (5, 'Umm Al Quwain', 'S'), (5, 'Umm Al Quwain', 'T'), 
 (5, 'Umm Al Quwain', 'U'), (5, 'Umm Al Quwain', 'V'), (5, 'Umm Al Quwain', 'W'), (5, 'Umm Al Quwain', 'X'), (5, 'Umm Al Quwain', 'Y'), 
-(5, 'Umm Al Quwain', 'Z'), (5, 'Umm Al Quwain', 'Classic'), (5, 'Umm Al Quwain', 'White'),
+(5, 'Umm Al Quwain', 'Z'), (5, 'Umm Al Quwain', 'White'),
 
 -- Ras Al Khaimah (Id = 6)
 (6, 'Ras Al Khaimah', 'A'), (6, 'Ras Al Khaimah', 'B'), (6, 'Ras Al Khaimah', 'C'), (6, 'Ras Al Khaimah', 'D'), (6, 'Ras Al Khaimah', 'E'), 

@@ -325,6 +325,7 @@ const LandingPage = () => {
   const [bookingForm, setBookingForm] = useState({
     name: '',
     phone: '',
+    vehicle_type: '4x4',
     emirate: 'Dubai',
     plate_code: '',
     plate_number: '',
@@ -511,6 +512,7 @@ const LandingPage = () => {
           setBookingForm({
             name: response.data.customer.name || '',
             phone: response.data.customer.phone || '',
+            vehicle_type: response.data.customer.vehicle_type || '4x4',
             vehicle_plate: vehiclePlate,
             notes: ''
           });
@@ -613,6 +615,7 @@ const LandingPage = () => {
         customer_name: form.name,
         customer_phone: form.phone,
         vehicle_plate: form.vehicle_plate || null,
+        vehicle_type: form.vehicle_type,
         items: [], // Empty items array since we're booking a service, not a product
         total: servicePrice,
         source: 'customer_website_4x4',
@@ -644,6 +647,7 @@ const LandingPage = () => {
       setBookingForm({
         name: '',
         phone: '',
+        vehicle_type: '4x4',
         vehicle_plate: '',
         notes: ''
       });
@@ -1259,8 +1263,8 @@ const LandingPage = () => {
 
       {/* Booking Modal */}
       {showBookingModal && selectedService && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-md rounded-2xl bg-white border border-gray-200 p-6 sm:p-8 shadow-2xl">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 backdrop-blur-sm px-4 py-6 overflow-y-auto">
+          <div className="relative w-full max-w-md rounded-2xl bg-white border border-gray-200 p-6 sm:p-8 shadow-2xl my-auto">
             <button
               onClick={() => {
                 setShowBookingModal(false);
@@ -1298,6 +1302,17 @@ const LandingPage = () => {
                   className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="03001234567"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Model *</label>
+                <select
+                  value={bookingForm.vehicle_type}
+                  onChange={(e) => setBookingForm({ ...bookingForm, vehicle_type: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                >
+                  <option value="Saloon">Saloon</option>
+                  <option value="4x4">4x4</option>
+                </select>
               </div>
               <div className="border-t pt-4">
                 <h4 className="text-md font-bold text-gray-800 mb-3">Vehicle Registration</h4>
@@ -1377,8 +1392,8 @@ const LandingPage = () => {
 
       {/* VIP Booking Modal - Step 1: Basic Info */}
       {showVIPModal && vipStep === 1 && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-md rounded-2xl bg-white border border-red-200 p-6 sm:p-8 shadow-2xl my-8">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 backdrop-blur-sm px-4 py-6 overflow-y-auto">
+          <div className="relative w-full max-w-md rounded-2xl bg-white border border-red-200 p-6 sm:p-8 shadow-2xl my-auto">
             <button
               onClick={() => { setShowVIPModal(false); setVipStep(1); }}
               className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-900 transition"
@@ -1427,6 +1442,18 @@ const LandingPage = () => {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Type *</label>
+                <select
+                  required
+                  value={vipBookingForm.vehicle_type}
+                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, vehicle_type: e.target.value })}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                >
+                  <option value="Saloon">Saloon</option>
+                  <option value="4x4">4x4</option>
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Model *</label>
                 <input
                   type="text"
@@ -1449,8 +1476,8 @@ const LandingPage = () => {
       )}
 
       {showVIPModal && vipStep === 2 && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-md rounded-2xl bg-white border border-red-200 p-6 sm:p-8 shadow-2xl my-8">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 backdrop-blur-sm px-4 py-6 overflow-y-auto">
+          <div className="relative w-full max-w-md rounded-2xl bg-white border border-red-200 p-6 sm:p-8 shadow-2xl my-auto">
             <button
               onClick={() => { setShowVIPModal(false); setVipStep(1); }}
               className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-900 transition"
@@ -1600,8 +1627,8 @@ const LandingPage = () => {
 
       {/* Product Purchase Modal */}
       {showProductModal && selectedProduct && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-md rounded-2xl bg-white border border-gray-200 p-6 sm:p-8 shadow-2xl">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 backdrop-blur-sm px-4 py-6 overflow-y-auto">
+          <div className="relative w-full max-w-md rounded-2xl bg-white border border-gray-200 p-6 sm:p-8 shadow-2xl my-auto">
             <button
               onClick={() => {
                 setShowProductModal(false);
