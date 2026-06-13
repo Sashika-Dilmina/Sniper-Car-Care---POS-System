@@ -65,42 +65,37 @@ conn.on('ready', async () => {
     const repoPath = '~/Sniper-Car-Care---POS-System';
     const backendPath = `${repoPath}/backend`;
 
-    // 3. Update code using Git
-    console.log('🔄 Updating codebase from GitHub...');
-    await executeCommand(conn, `cd ${repoPath} && git fetch --all && git reset --hard origin/ravix`);
-    
-    console.log('📦 Installing backend dependencies...');
-    await executeCommand(conn, `cd ${backendPath} && npm install --production`);
-    
-    console.log('🗄️ Running DB Migrations...');
-    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_add_service_timestamps.sql`);
-    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_update_payment_methods_v2.sql`);
-    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_seed_vip_services_v2.sql`);
-    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_add_order_id_to_services.sql`);
-    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_uae_vehicle_reg.sql`);
-    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_uae_plate_codes_v2.sql`);
-
-    console.log('🌱 Seeding services into database...');
-    await executeCommand(conn, `cd ${backendPath} && node scripts/seedNewServices.js`);
-
-    console.log('🖼️  Copying default service images & updating database...');
-    await executeCommand(conn, `cd ${backendPath} && node scripts/copyOriginalImages.js`);
-
-    console.log('🔄 Restarting backend server...');
-    await executeCommand(conn, `pm2 restart all || pm2 start server.js`);
+    // 3. Update codebase, dependencies, migrations, seed, copy images and restart pm2
+    console.log('🔄 Executing setup, database migrations, and server restart...');
+    const setupCommand = [
+      `cd ${repoPath}`,
+      `git fetch --all`,
+      `git reset --hard origin/ravix`,
+      `cd backend`,
+      `npm install --production`,
+      `mysql -u root -p123456 < /tmp/migration_add_service_timestamps.sql || true`,
+      `mysql -u root -p123456 < /tmp/migration_update_payment_methods_v2.sql || true`,
+      `mysql -u root -p123456 < /tmp/migration_seed_vip_services_v2.sql || true`,
+      `mysql -u root -p123456 < /tmp/migration_add_order_id_to_services.sql || true`,
+      `mysql -u root -p123456 < /tmp/migration_uae_vehicle_reg.sql || true`,
+      `mysql -u root -p123456 < /tmp/migration_uae_plate_codes_v2.sql || true`,
+      `node scripts/seedNewServices.js`,
+      `node scripts/copyOriginalImages.js`,
+      `pm2 restart all || pm2 start server.js`
+    ].join(' && ');
+    await executeCommand(conn, setupCommand);
 
     // 4. Extract frontends
-    console.log('📦 Deploying Frontend (POS Dashboard)...');
-    await executeCommand(conn, 'mkdir -p /var/www/pos-dashboard && rm -rf /var/www/pos-dashboard/*');
-    await executeCommand(conn, 'tar -xzf /tmp/frontend.tar.gz -C /var/www/pos-dashboard/');
-
-    console.log('📦 Deploying Frontend (Saloon Site)...');
-    await executeCommand(conn, 'mkdir -p /var/www/customer-saloon && rm -rf /var/www/customer-saloon/*');
-    await executeCommand(conn, 'tar -xzf /tmp/saloon.tar.gz -C /var/www/customer-saloon/');
-
-    console.log('📦 Deploying Frontend (4x4 Site)...');
-    await executeCommand(conn, 'mkdir -p /var/www/customer-4x4 && rm -rf /var/www/customer-4x4/*');
-    await executeCommand(conn, 'tar -xzf /tmp/4x4.tar.gz -C /var/www/customer-4x4/');
+    console.log('📦 Deploying frontends (POS Dashboard, Saloon, 4x4)...');
+    const extractCommand = [
+      'mkdir -p /var/www/pos-dashboard && rm -rf /var/www/pos-dashboard/*',
+      'tar -xzf /tmp/frontend.tar.gz -C /var/www/pos-dashboard/',
+      'mkdir -p /var/www/customer-saloon && rm -rf /var/www/customer-saloon/*',
+      'tar -xzf /tmp/saloon.tar.gz -C /var/www/customer-saloon/',
+      'mkdir -p /var/www/customer-4x4 && rm -rf /var/www/customer-4x4/*',
+      'tar -xzf /tmp/4x4.tar.gz -C /var/www/customer-4x4/'
+    ].join(' && ');
+    await executeCommand(conn, extractCommand);
 
     // 5. Run Nginx Patching
     console.log('🔧 Running Nginx patching script...');
