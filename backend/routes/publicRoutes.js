@@ -3,6 +3,7 @@ const router = express.Router();
 const publicProductController = require('../controllers/publicProductController');
 const publicOrderController = require('../controllers/publicOrderController');
 const publicCustomerController = require('../controllers/publicCustomerController');
+const { getPlateCodesByEmirate } = require('../controllers/vehicleRegistrationController');
 
 // Public product routes (no authentication required)
 router.get('/products', publicProductController.getProducts);
@@ -22,6 +23,9 @@ router.post('/orders/confirm', publicOrderController.confirmOrder);
 // Public payment routes
 router.post('/payments/create-intent', publicOrderController.createPaymentIntent);
 router.post('/payments/confirm', publicOrderController.confirmPayment);
+
+// Public plate codes lookup (used by customer registration)
+router.get('/plate-codes/:emirate', getPlateCodesByEmirate);
 
 module.exports = router;
 

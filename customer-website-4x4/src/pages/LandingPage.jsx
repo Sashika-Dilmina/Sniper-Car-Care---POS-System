@@ -4,6 +4,8 @@ import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import { images, getServiceImage } from '../config/siteImages';
 import BottomNav from '../components/BottomNav';
+import VehiclePlatePreview from '../components/VehiclePlatePreview';
+import SearchableSelect from '../components/SearchableSelect';
 
 const Reveal = ({ children, delay = 0, className = '' }) => {
   const elementRef = useRef(null);
@@ -323,9 +325,12 @@ const LandingPage = () => {
   const [bookingForm, setBookingForm] = useState({
     name: '',
     phone: '',
-    vehicle_plate: '',
+    emirate: 'Dubai',
+    plate_code: '',
+    plate_number: '',
     notes: ''
   });
+  const [plateCodes, setPlateCodes] = useState([]);
   const [vipBookingForm, setVipBookingForm] = useState({
     name: '',
     phone: '',
@@ -516,6 +521,54 @@ const LandingPage = () => {
     };
 
     fetchCustomerInfo();
+  }, [vehiclePlate]);
+
+  // Fetch plate codes dynamically based on selected Emirate
+  useEffect(() => {
+    const fetchPlateCodes = async () => {
+      try {
+        const response = await axios.get(`/api/public/plate-codes/${bookingForm.emirate}`);
+        const codes = response.data.codes || [];
+        setPlateCodes(codes);
+        
+        // If the current plate code is NOT in the new codes list, select the first one
+        if (bookingForm.emirate && !codes.includes(bookingForm.plate_code)) {
+          setBookingForm(prev => ({
+            ...prev,
+            plate_code: codes.length > 0 ? codes[0] : ''
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to load plate codes:', error);
+      }
+    };
+    
+    if (bookingForm.emirate) {
+      fetchPlateCodes();
+    }
+  }, [bookingForm.emirate]);
+
+  // Parse vehiclePlate if present in URL
+  useEffect(() => {
+    if (vehiclePlate) {
+      const parts = vehiclePlate.trim().split(/\s+/);
+      let plateCode = '';
+      let emirate = 'Dubai';
+      let plateNumber = vehiclePlate;
+      
+      if (parts.length >= 3) {
+        plateCode = parts[0];
+        plateNumber = parts[parts.length - 1];
+        emirate = parts.slice(1, parts.length - 1).join(' ');
+      }
+      
+      setBookingForm(prev => ({
+        ...prev,
+        emirate,
+        plate_code: plateCode,
+        plate_number: plateNumber
+      }));
+    }
   }, [vehiclePlate]);
 
   const defaultTimeSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
@@ -839,10 +892,24 @@ const LandingPage = () => {
     // Otherwise, show the manual booking modal
     setSelectedService(service);
     setShowBookingModal(true);
+
+    const parts = (vehiclePlate || '').trim().split(/\s+/);
+    let plateCode = '';
+    let emirate = 'Dubai';
+    let plateNumber = vehiclePlate || '';
+    
+    if (parts.length >= 3) {
+      plateCode = parts[0];
+      plateNumber = parts[parts.length - 1];
+      emirate = parts.slice(1, parts.length - 1).join(' ');
+    }
+
     setBookingForm({
       name: '',
       phone: '',
-      vehicle_plate: vehiclePlate || '',
+      emirate: emirate,
+      plate_code: plateCode,
+      plate_number: plateNumber,
       notes: ''
     });
   };
@@ -852,12 +919,25 @@ const LandingPage = () => {
 
     if (!selectedService) return;
 
-    if (!bookingForm.name || !bookingForm.phone) {
-      toast.error('Please fill in your name and phone number');
+    if (!bookingForm.name || !bookingForm.phone || !bookingForm.plate_number) {
+      toast.error('Please fill in all required fields');
       return;
     }
 
-    await submitBooking(selectedService, bookingForm);
+    // Phone validation: numbers only, 9-15 digits
+    const cleanPhone = bookingForm.phone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length < 9 || cleanPhone.length > 15) {
+      toast.error('Phone number must contain between 9 and 15 digits');
+      return;
+    }
+
+    const plateStr = `${bookingForm.plate_code} ${bookingForm.emirate} ${bookingForm.plate_number}`;
+
+    await submitBooking(selectedService, {
+      ...bookingForm,
+      phone: cleanPhone,
+      vehicle_plate: plateStr
+    });
   };
 
 
@@ -1219,16 +1299,61 @@ const LandingPage = () => {
                   placeholder="03001234567"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Plate</label>
-                <input
-                  type="text"
-                  value={bookingForm.vehicle_plate}
-                  onChange={(e) => setBookingForm({ ...bookingForm, vehicle_plate: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
-                  placeholder="ABC-123"
-                />
+              <div className="border-t pt-4">
+                <h4 className="text-md font-bold text-gray-800 mb-3">Vehicle Registration</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Emirate Dropdown */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Emirate *</label>
+                    <select
+                      value={bookingForm.emirate}
+                      onChange={(e) => setBookingForm({ ...bookingForm, emirate: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                      required
+                    >
+                      <option value="Dubai">Dubai</option>
+                      <option value="Abu Dhabi">Abu Dhabi</option>
+                      <option value="Sharjah">Sharjah</option>
+                      <option value="Ajman">Ajman</option>
+                      <option value="Umm Al Quwain">Umm Al Quwain</option>
+                      <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                      <option value="Fujairah">Fujairah</option>
+                    </select>
+                  </div>
+
+                  {/* Plate Code Dropdown */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
+                    <SearchableSelect
+                      options={plateCodes}
+                      value={bookingForm.plate_code}
+                      onChange={(val) => setBookingForm(prev => ({ ...prev, plate_code: val }))}
+                      disabled={plateCodes.length === 0}
+                    />
+                  </div>
+                </div>
+
+                {/* Plate Number Input */}
+                <div className="mt-3">
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={bookingForm.plate_number}
+                    onChange={(e) => setBookingForm({ ...bookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
+                    placeholder="12345"
+                  />
+                </div>
               </div>
+
+              {/* Plate Live Preview */}
+              <VehiclePlatePreview 
+                emirate={bookingForm.emirate}
+                plateCode={bookingForm.plate_code}
+                plateNumber={bookingForm.plate_number}
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Special Requests (Optional)</label>
                 <textarea

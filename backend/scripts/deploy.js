@@ -38,6 +38,7 @@ function uploadFile(conn, localPath, remotePath) {
     conn.sftp((err, sftp) => {
       if (err) return reject(err);
       sftp.fastPut(localPath, remotePath, (err) => {
+        sftp.end();
         if (err) return reject(err);
         console.log(`Uploaded successfully!`);
         resolve();
