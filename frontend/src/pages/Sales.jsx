@@ -280,6 +280,50 @@ const Sales = () => {
   const totalDiscount = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.discount || 0), 0);
   const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
 
+  const renderCatalogCard = (product) => {
+    const isService = product.category === 'Services';
+    const outOfStock = !isService && product.stock <= 0;
+
+    return (
+      <div
+        key={product.id}
+        onClick={() => !outOfStock && addToCart(product)}
+        className={`group border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between ${
+          outOfStock 
+            ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200' 
+            : 'cursor-pointer hover:shadow-lg hover:border-primary-500 bg-white border-gray-100'
+        }`}
+      >
+        <div className="space-y-2">
+          <div className="flex justify-between items-start gap-2">
+            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+              isService ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+            }`}>
+              {product.category}
+            </span>
+            {!isService && (
+              <span className={`text-[10px] font-bold ${
+                product.stock <= 5 ? 'text-red-500' : 'text-gray-500'
+              }`}>
+                Stock: {product.stock}
+              </span>
+            )}
+          </div>
+          <h3 className="font-bold text-gray-800 group-hover:text-primary-600 transition-colors line-clamp-1">
+            {product.name}
+          </h3>
+          <p className="text-xs text-gray-500 line-clamp-2">{product.description || 'No description available'}</p>
+        </div>
+        <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-50">
+          <span className="font-extrabold text-gray-900">AED {parseFloat(product.price).toFixed(2)}</span>
+          <span className="text-primary-600 font-bold text-lg group-hover:translate-x-1 transition-transform">
+            {outOfStock ? '❌' : '+'}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   const formatSource = (source) => {
     if (source === 'vip_booking') return { label: '👑 VIP Booking', color: 'bg-purple-100 text-purple-800' };
     if (source === 'customer_website_saloon' || source === 'customer_website_4x4' || source === 'customer_website') {
@@ -386,51 +430,43 @@ const Sales = () => {
               {loadingProducts ? (
                 <div className="flex justify-center items-center h-64 text-gray-500">Loading catalog...</div>
               ) : filteredProducts.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto pr-1">
-                  {filteredProducts.map(product => {
-                    const isService = product.category === 'Services';
-                    const outOfStock = !isService && product.stock <= 0;
-
-                    return (
-                      <div
-                        key={product.id}
-                        onClick={() => !outOfStock && addToCart(product)}
-                        className={`group border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between ${
-                          outOfStock 
-                            ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200' 
-                            : 'cursor-pointer hover:shadow-lg hover:border-primary-500 bg-white border-gray-100'
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-start gap-2">
-                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                              isService ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
-                            }`}>
-                              {product.category}
-                            </span>
-                            {!isService && (
-                              <span className={`text-[10px] font-bold ${
-                                product.stock <= 5 ? 'text-red-500' : 'text-gray-500'
-                              }`}>
-                                Stock: {product.stock}
-                              </span>
-                            )}
-                          </div>
-                          <h3 className="font-bold text-gray-800 group-hover:text-primary-600 transition-colors line-clamp-1">
-                            {product.name}
-                          </h3>
-                          <p className="text-xs text-gray-500 line-clamp-2">{product.description || 'No description available'}</p>
-                        </div>
-                        <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-50">
-                          <span className="font-extrabold text-gray-900">AED {parseFloat(product.price).toFixed(2)}</span>
-                          <span className="text-primary-600 font-bold text-lg group-hover:translate-x-1 transition-transform">
-                            {outOfStock ? '❌' : '+'}
-                          </span>
-                        </div>
+                selectedCategory === 'Services' ? (
+                  <div className="space-y-6 max-h-[600px] overflow-y-auto pr-1">
+                    {/* Saloon Services Group */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-black text-gray-700 flex items-center gap-2 border-b pb-1">
+                        <span>🚗 Saloon Services</span>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold">
+                          {filteredProducts.filter(p => p.vehicle_type === 'Saloon' || p.vehicle_type === 'Both').length} items
+                        </span>
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {filteredProducts
+                          .filter(p => p.vehicle_type === 'Saloon' || p.vehicle_type === 'Both')
+                          .map(product => renderCatalogCard(product))}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+
+                    {/* 4x4 Services Group */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-black text-gray-700 flex items-center gap-2 border-b pb-1">
+                        <span>🚙 4x4 Services</span>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold">
+                          {filteredProducts.filter(p => p.vehicle_type === '4x4' || p.vehicle_type === 'Both').length} items
+                        </span>
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {filteredProducts
+                          .filter(p => p.vehicle_type === '4x4' || p.vehicle_type === 'Both')
+                          .map(product => renderCatalogCard(product))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto pr-1">
+                    {filteredProducts.map(product => renderCatalogCard(product))}
+                  </div>
+                )
               ) : (
                 <div className="text-center py-20 text-gray-400">
                   <p className="text-lg">No items match your query</p>

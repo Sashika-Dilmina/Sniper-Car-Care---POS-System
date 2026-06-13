@@ -775,7 +775,8 @@ const LandingPage = () => {
 
       if (orderId) {
         setTimeout(() => {
-          navigate(`/payment?order_id=${orderId}&plate=${encodeURIComponent(vehicleModel || '')}`);
+          const plateToPass = vehiclePlate || vehicleModel || '';
+          navigate(`/payment?order_id=${orderId}&plate=${encodeURIComponent(plateToPass)}`);
         }, 1500);
       }
     } catch (error) {
