@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import VehiclePlatePreview from '../components/VehiclePlatePreview';
 
 const Sales = () => {
   const { user } = useAuth();
@@ -24,13 +25,38 @@ const Sales = () => {
   
   // POS - Quick Customer Registration State
   const [showQuickRegister, setShowQuickRegister] = useState(false);
+  const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '',
-    vehicle_plate: '',
-    vehicle_type: 'Saloon',
-    province: 'Dubai'
+    emirate: 'Dubai',
+    plate_code: '',
+    plate_number: '',
+    vehicle_type: 'Saloon'
   });
+
+  // Fetch plate codes dynamically based on selected Emirate
+  useEffect(() => {
+    const fetchPlateCodes = async () => {
+      try {
+        const response = await axios.get(`/api/vehicle-registration/plate-codes/${newCustomer.emirate}`);
+        const codes = response.data.codes || [];
+        setPlateCodes(codes);
+        
+        // Auto-select first plate code if available
+        setNewCustomer(prev => ({
+          ...prev,
+          plate_code: codes.length > 0 ? codes[0] : ''
+        }));
+      } catch (error) {
+        console.error('Failed to load plate codes:', error);
+      }
+    };
+    
+    if (showQuickRegister && newCustomer.emirate) {
+      fetchPlateCodes();
+    }
+  }, [newCustomer.emirate, showQuickRegister]);
 
   // POS - Cart State
   const [cart, setCart] = useState([]);
@@ -156,28 +182,39 @@ const Sales = () => {
   // Quick Register Customer Submit
   const handleQuickRegisterSubmit = async (e) => {
     e.preventDefault();
-    if (!newCustomer.name || !newCustomer.vehicle_plate) {
-      toast.error('Please provide name and vehicle plate');
+    if (!newCustomer.name || !newCustomer.phone || !newCustomer.plate_number) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Phone validation: numbers only, 9-15 digits
+    const cleanPhone = newCustomer.phone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length < 9 || cleanPhone.length > 15) {
+      toast.error('Phone number must contain between 9 and 15 digits');
       return;
     }
 
     try {
-      const response = await axios.post('/api/anpr/register', newCustomer);
+      const response = await axios.post('/api/anpr/register', {
+        ...newCustomer,
+        phone: cleanPhone
+      });
       const createdCustomer = response.data.customer;
       toast.success('Customer registered successfully!');
       
       // Update customers local state & select the newly created customer
       fetchCustomers();
       setSelectedCustomer(createdCustomer);
-      setCustomerSearch(createdCustomer.name + ' (' + createdCustomer.vehicle_plate + ')');
+      setCustomerSearch(`${createdCustomer.name} (${createdCustomer.vehicle_plate})`);
       
       // Reset registration form
       setNewCustomer({
         name: '',
         phone: '',
-        vehicle_plate: '',
-        vehicle_type: 'Saloon',
-        province: 'Dubai'
+        emirate: 'Dubai',
+        plate_code: '',
+        plate_number: '',
+        vehicle_type: 'Saloon'
       });
       setShowQuickRegister(false);
     } catch (error) {
@@ -561,43 +598,81 @@ const Sales = () => {
 
               {/* Quick Customer Registration Form Modal Inside Card */}
               {showQuickRegister && (
-                <div className="bg-gray-50 border p-4 rounded-xl space-y-3">
+                <div className="bg-gray-50 border p-4 rounded-xl space-y-3 text-left">
                   <h4 className="text-sm font-bold text-gray-700">Quick Register Customer</h4>
                   <form onSubmit={handleQuickRegisterSubmit} className="space-y-3">
                     <input
                       type="text"
                       required
-                      placeholder="Name *"
+                      placeholder="Customer Name *"
                       value={newCustomer.name}
                       onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
                       className="w-full px-3 py-1.5 border rounded-lg text-sm"
                     />
                     <input
-                      type="text"
+                      type="tel"
                       required
-                      placeholder="Plate Number (e.g. DXB123) *"
-                      value={newCustomer.vehicle_plate}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_plate: e.target.value.toUpperCase() })}
-                      className="w-full px-3 py-1.5 border rounded-lg text-sm font-mono"
+                      placeholder="Phone (+971...) *"
+                      value={newCustomer.phone}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                      className="w-full px-3 py-1.5 border rounded-lg text-sm"
                     />
-                    <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={newCustomer.vehicle_type}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_type: e.target.value })}
+                      className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                    >
+                      <option value="Saloon">Saloon</option>
+                      <option value="4x4">4x4</option>
+                    </select>
+
+                    <div className="border-t pt-2 mt-2 space-y-2">
+                      <p className="text-xs font-bold text-gray-500">Vehicle Registration</p>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          value={newCustomer.emirate}
+                          onChange={(e) => setNewCustomer({ ...newCustomer, emirate: e.target.value })}
+                          className="w-full px-2 py-1.5 border rounded-lg text-xs"
+                        >
+                          <option value="Dubai">Dubai</option>
+                          <option value="Abu Dhabi">Abu Dhabi</option>
+                          <option value="Sharjah">Sharjah</option>
+                          <option value="Ajman">Ajman</option>
+                          <option value="Umm Al Quwain">Umm Al Quwain</option>
+                          <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                          <option value="Fujairah">Fujairah</option>
+                        </select>
+
+                        <select
+                          value={newCustomer.plate_code}
+                          onChange={(e) => setNewCustomer({ ...newCustomer, plate_code: e.target.value })}
+                          className="w-full px-2 py-1.5 border rounded-lg text-xs"
+                          disabled={plateCodes.length === 0}
+                        >
+                          {plateCodes.map(code => (
+                            <option key={code} value={code}>{code}</option>
+                          ))}
+                        </select>
+                      </div>
+
                       <input
-                        type="tel"
-                        placeholder="Phone (+971)"
-                        value={newCustomer.phone}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                        className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                        type="text"
+                        required
+                        placeholder="Plate Number (e.g. 12345) *"
+                        value={newCustomer.plate_number}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                        className="w-full px-3 py-1.5 border rounded-lg text-sm font-mono"
                       />
-                      <select
-                        value={newCustomer.vehicle_type}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_type: e.target.value })}
-                        className="w-full px-3 py-1.5 border rounded-lg text-sm"
-                      >
-                        <option value="Saloon">Saloon</option>
-                        <option value="4x4">4x4</option>
-                      </select>
+
+                      <VehiclePlatePreview 
+                        emirate={newCustomer.emirate} 
+                        plateCode={newCustomer.plate_code} 
+                        plateNumber={newCustomer.plate_number} 
+                      />
                     </div>
-                    <div className="flex gap-2 justify-end">
+
+                    <div className="flex gap-2 justify-end pt-1">
                       <button
                         type="button"
                         onClick={() => setShowQuickRegister(false)}

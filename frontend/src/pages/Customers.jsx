@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
+import VehiclePlatePreview from '../components/VehiclePlatePreview';
 
 const Customers = () => {
   const navigate = useNavigate();
@@ -127,26 +128,68 @@ const Customers = () => {
   );
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '',
-    vehicle_plate: '',
-    vehicle_type: 'Saloon',
-    province: 'Dubai'
+    emirate: 'Dubai',
+    plate_code: '',
+    plate_number: '',
+    vehicle_type: 'Saloon'
   });
+
+  // Fetch plate codes dynamically based on selected Emirate
+  useEffect(() => {
+    const fetchPlateCodes = async () => {
+      try {
+        const response = await axios.get(`/api/vehicle-registration/plate-codes/${newCustomer.emirate}`);
+        const codes = response.data.codes || [];
+        setPlateCodes(codes);
+        
+        // Auto-select first plate code if available
+        setNewCustomer(prev => ({
+          ...prev,
+          plate_code: codes.length > 0 ? codes[0] : ''
+        }));
+      } catch (error) {
+        console.error('Failed to load plate codes:', error);
+      }
+    };
+    
+    if (showAddModal && newCustomer.emirate) {
+      fetchPlateCodes();
+    }
+  }, [newCustomer.emirate, showAddModal]);
 
   const handleAddSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!newCustomer.name || !newCustomer.phone || !newCustomer.plate_number) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Phone validation: numbers only, 9-15 digits
+    const cleanPhone = newCustomer.phone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length < 9 || cleanPhone.length > 15) {
+      toast.error('Phone number must contain between 9 and 15 digits');
+      return;
+    }
+
     try {
-      await axios.post('/api/anpr/register', newCustomer);
+      await axios.post('/api/anpr/register', {
+        ...newCustomer,
+        phone: cleanPhone // send sanitized number
+      });
       toast.success('Customer registered successfully!');
       setShowAddModal(false);
       setNewCustomer({
         name: '',
         phone: '',
-        vehicle_plate: '',
-        vehicle_type: 'Saloon',
-        province: 'Dubai'
+        emirate: 'Dubai',
+        plate_code: '',
+        plate_number: '',
+        vehicle_type: 'Saloon'
       });
       fetchCustomers();
     } catch (error) {
@@ -208,15 +251,17 @@ const Customers = () => {
       </div>
 
       {/* Add Customer Modal */}
+      {/* Add Customer Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="bg-primary-600 p-6 text-white text-center">
+            <div className="bg-primary-600 p-5 text-white text-center">
               <h2 className="text-2xl font-bold">Register New Customer</h2>
-              <p className="text-primary-100 text-sm mt-1">Vehicle and Owner Information</p>
+              <p className="text-primary-100 text-sm mt-1">UAE Vehicle & Owner Information</p>
             </div>
-            <form onSubmit={handleAddSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleAddSubmit} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <div className="space-y-4">
+                {/* Customer Name */}
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">Customer Name *</label>
                   <input
@@ -225,65 +270,108 @@ const Customers = () => {
                     value={newCustomer.name}
                     onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
                     className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                    placeholder="Enter customer name"
+                    placeholder="Ahmed Al Mansoori"
                   />
                 </div>
+
+                {/* Telephone Number */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Phone Number (971...)</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Telephone Number *</label>
                   <input
                     type="tel"
+                    required
                     value={newCustomer.phone}
                     onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
                     className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                    placeholder="+971XXXXXXXXX"
+                    placeholder="+971501234567"
                   />
+                  <p className="text-xs text-gray-400 mt-1">Numbers only, minimum 9 digits</p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Vehicle Plate *</label>
+
+                {/* Vehicle Model / Type */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Vehicle Model *</label>
+                  <select
+                    value={newCustomer.vehicle_type}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_type: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                  >
+                    <option value="Saloon">Saloon</option>
+                    <option value="4x4">4x4</option>
+                  </select>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="text-md font-bold text-gray-800 mb-3">Vehicle Registration</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Emirate Dropdown */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Emirate *</label>
+                      <select
+                        value={newCustomer.emirate}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, emirate: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                      >
+                        <option value="Dubai">Dubai</option>
+                        <option value="Abu Dhabi">Abu Dhabi</option>
+                        <option value="Sharjah">Sharjah</option>
+                        <option value="Ajman">Ajman</option>
+                        <option value="Umm Al Quwain">Umm Al Quwain</option>
+                        <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                        <option value="Fujairah">Fujairah</option>
+                      </select>
+                    </div>
+
+                    {/* Plate Code Dropdown */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
+                      <select
+                        value={newCustomer.plate_code}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, plate_code: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                        disabled={plateCodes.length === 0}
+                      >
+                        {plateCodes.map(code => (
+                          <option key={code} value={code}>{code}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Plate Number Input */}
+                  <div className="mt-3">
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
                     <input
                       type="text"
                       required
-                      value={newCustomer.vehicle_plate}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_plate: e.target.value.toUpperCase() })}
+                      value={newCustomer.plate_number}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
                       className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono"
-                      placeholder="DXB123"
+                      placeholder="12345"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Vehicle Type *</label>
-                    <select
-                      value={newCustomer.vehicle_type}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_type: e.target.value })}
-                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                    >
-                      <option value="Saloon">Saloon</option>
-                      <option value="4x4">4x4</option>
-                    </select>
-                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Province</label>
-                  <input
-                    type="text"
-                    value={newCustomer.province}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, province: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                    placeholder="e.g. Dubai"
-                  />
-                </div>
+
+                {/* Plate Preview */}
+                <VehiclePlatePreview 
+                  emirate={newCustomer.emirate} 
+                  plateCode={newCustomer.plate_code} 
+                  plateNumber={newCustomer.plate_number} 
+                />
               </div>
-              <div className="flex gap-3 pt-4">
+
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-bold transition"
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-bold transition text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 font-bold transition shadow-lg shadow-primary-200"
+                  className="flex-1 px-4 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 font-bold transition shadow-lg shadow-primary-200 text-sm"
                 >
                   Save Registration
                 </button>

@@ -91,30 +91,64 @@ const getCustomer = asyncHandler(async (req, res) => {
   res.json({ customer: customers[0], orders });
 });
 
+// Helper to parse Plate string into Emirate, Code and Plate Number
+function parsePlateComponents(plateStr) {
+  if (!plateStr) return { plateCode: '', emirate: 'Dubai', plateNumber: '' };
+  
+  const parts = plateStr.trim().split(/\s+/);
+  if (parts.length >= 3) {
+    const plateCode = parts[0];
+    const plateNumber = parts[parts.length - 1];
+    const emirate = parts.slice(1, parts.length - 1).join(' ');
+    return { plateCode, emirate, plateNumber };
+  }
+  
+  // Fallback if formatting doesn't match
+  return { plateCode: '', emirate: 'Dubai', plateNumber: plateStr };
+}
+
 // @desc    Create customer
 // @route   POST /api/customers
 // @access  Private
 const createCustomer = asyncHandler(async (req, res) => {
   const { name, phone, vehicle_plate, vehicle_type, province } = req.body;
 
-  if (!name || !phone || !vehicle_plate || !vehicle_type) {
+  let finalPlate = vehicle_plate;
+  if (req.body.plate_code && req.body.emirate && req.body.plate_number) {
+    finalPlate = `${req.body.plate_code} ${req.body.emirate} ${req.body.plate_number}`;
+  }
+
+  if (!name || !phone || !finalPlate || !vehicle_type) {
     return res.status(400).json({ message: 'Please provide all required fields' });
   }
 
   // Check if customer with same plate exists
   const [existing] = await pool.query(
     'SELECT id FROM customers WHERE vehicle_plate = ?',
-    [vehicle_plate]
+    [finalPlate]
   );
 
   if (existing.length > 0) {
     return res.status(400).json({ message: 'Customer with this vehicle plate already exists' });
   }
 
+  const finalProvince = province || req.body.emirate || null;
+
   const [result] = await pool.query(
     'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
-    [name, phone, vehicle_plate, vehicle_type, province || null]
+    [name, phone, finalPlate, vehicle_type, finalProvince]
   );
+
+  // Parse components and insert into vehicles table
+  const { plateCode, emirate: parsedEmirate, plateNumber } = parsePlateComponents(finalPlate);
+  try {
+    await pool.query(
+      'INSERT INTO vehicles (CustomerId, Emirate, PlateCode, PlateNumber, VehicleRegistrationNumber) VALUES (?, ?, ?, ?, ?)',
+      [result.insertId, parsedEmirate, plateCode, plateNumber, finalPlate]
+    );
+  } catch (vehErr) {
+    console.error('[Database] Failed to insert into vehicles table:', vehErr.message);
+  }
 
   // Initialize loyalty points
   await pool.query('INSERT INTO loyalty (customer_id, points) VALUES (?, ?)', [result.insertId, 0]);
@@ -136,10 +170,34 @@ const updateCustomer = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'Customer not found' });
   }
 
+  let finalPlate = vehicle_plate;
+  if (req.body.plate_code && req.body.emirate && req.body.plate_number) {
+    finalPlate = `${req.body.plate_code} ${req.body.emirate} ${req.body.plate_number}`;
+  }
+  const finalProvince = province || req.body.emirate || null;
+
   await pool.query(
     'UPDATE customers SET name = ?, phone = ?, vehicle_plate = ?, vehicle_type = ?, province = ? WHERE id = ?',
-    [name, phone, vehicle_plate, vehicle_type, province || null, id]
+    [name, phone, finalPlate, vehicle_type, finalProvince, id]
   );
+
+  // Sync vehicles table
+  const { plateCode, emirate: parsedEmirate, plateNumber } = parsePlateComponents(finalPlate);
+  try {
+    const [existingVehicles] = await pool.query(
+      'SELECT VehicleId FROM vehicles WHERE CustomerId = ? AND VehicleRegistrationNumber = ?',
+      [id, finalPlate]
+    );
+    
+    if (existingVehicles.length === 0) {
+      await pool.query(
+        'INSERT INTO vehicles (CustomerId, Emirate, PlateCode, PlateNumber, VehicleRegistrationNumber) VALUES (?, ?, ?, ?, ?)',
+        [id, parsedEmirate, plateCode, plateNumber, finalPlate]
+      );
+    }
+  } catch (vehErr) {
+    console.error('[Database] Failed to sync vehicles table on update:', vehErr.message);
+  }
 
   const [updated] = await pool.query('SELECT * FROM customers WHERE id = ?', [id]);
 

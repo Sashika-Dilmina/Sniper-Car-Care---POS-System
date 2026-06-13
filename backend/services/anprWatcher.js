@@ -14,10 +14,12 @@ async function handleDetection(plateNumber, imageUrl = null) {
 
   try {
     // Check if plate has been scanned in the last 24 hours
-    const [recentScans] = await pool.query(
-      'SELECT id FROM anpr_logs WHERE plate_number = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) LIMIT 1',
-      [plateNumber]
-    );
+    const [recentScans] = await pool.query(`
+      SELECT id FROM anpr_logs 
+      WHERE (plate_number = ? OR REPLACE(plate_number, ' ', '') = REPLACE(?, ' ', '')) 
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) 
+      LIMIT 1
+    `, [plateNumber, plateNumber]);
 
     if (recentScans.length > 0) {
       console.log(`[ANPR Watcher] Plate ${plateNumber} already scanned within last 24 hours. Ignoring scan.`);
@@ -25,11 +27,16 @@ async function handleDetection(plateNumber, imageUrl = null) {
     }
 
     console.log(`[ANPR Processor] Processing plate: ${plateNumber}`);
-    // 1. Match with existing customer
-    const [customers] = await pool.query(
-      'SELECT * FROM customers WHERE vehicle_plate = ?',
-      [plateNumber]
-    );
+    // 1. Match with existing customer (including secondary vehicles, space-insensitively)
+    const [customers] = await pool.query(`
+      SELECT DISTINCT c.* FROM customers c
+      LEFT JOIN vehicles v ON c.id = v.CustomerId
+      WHERE c.vehicle_plate = ? 
+         OR REPLACE(c.vehicle_plate, ' ', '') = REPLACE(?, ' ', '')
+         OR v.VehicleRegistrationNumber = ?
+         OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = REPLACE(?, ' ', '')
+      LIMIT 1
+    `, [plateNumber, plateNumber, plateNumber, plateNumber]);
 
     let customerId = null;
     let customer = null;

@@ -3,6 +3,23 @@ const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { buildCustomerWebsiteUrl, formatPhoneNumber } = require('../utils/customerLinkUtils');
 
+// Helper to parse Plate string into Emirate, Code and Plate Number
+function parsePlateComponents(plateStr) {
+  if (!plateStr) return { plateCode: '', emirate: 'Dubai', plateNumber: '' };
+  
+  const parts = plateStr.trim().split(/\s+/);
+  if (parts.length >= 3) {
+    const plateCode = parts[0];
+    const plateNumber = parts[parts.length - 1];
+    const emirate = parts.slice(1, parts.length - 1).join(' ');
+    return { plateCode, emirate, plateNumber };
+  }
+  
+  // Fallback if formatting doesn't match
+  return { plateCode: '', emirate: 'Dubai', plateNumber: plateStr };
+}
+
+
 // @desc    Mock ANPR detection - simulate camera plate recognition
 // @route   POST /api/anpr/detect
 // @access  Private
@@ -39,11 +56,18 @@ const detectPlate = asyncHandler(async (req, res) => {
   const mockProvince = ['Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman', 'Fujairah'][Math.floor(Math.random() * 5)];
   const confidence = reqConfidence || (0.85 + Math.random() * 0.15).toFixed(2);
 
-  // Try to find existing customer with this plate
-  const [customers] = await pool.query(
-    'SELECT * FROM customers WHERE vehicle_plate = ?',
-    [detectedPlate]
-  );
+  // Try to find existing customer with this plate, checking both customers.vehicle_plate and vehicles.VehicleRegistrationNumber.
+  // We match exactly first, and then match space-insensitively.
+  const [customers] = await pool.query(`
+    SELECT DISTINCT c.* FROM customers c
+    LEFT JOIN vehicles v ON c.id = v.CustomerId
+    WHERE c.vehicle_plate = ? 
+       OR REPLACE(c.vehicle_plate, ' ', '') = REPLACE(?, ' ', '')
+       OR v.VehicleRegistrationNumber = ?
+       OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = REPLACE(?, ' ', '')
+    LIMIT 1
+  `, [detectedPlate, detectedPlate, detectedPlate, detectedPlate]);
+
 
   let customer = null;
   if (customers.length > 0) {
@@ -104,30 +128,53 @@ const getLatestDetections = asyncHandler(async (req, res) => {
 // @access  Private
 const registerFromANPR = asyncHandler(async (req, res) => {
   const { plate_number, vehicle_plate, province, vehicle_type, name, phone } = req.body;
-  const plateToRegister = plate_number || vehicle_plate;
+  
+  let finalPlate = plate_number || vehicle_plate;
+  if (req.body.plate_code && req.body.emirate && req.body.plate_number) {
+    finalPlate = `${req.body.plate_code} ${req.body.emirate} ${req.body.plate_number}`;
+  }
 
-  if (!plateToRegister || !vehicle_type) {
+  if (!finalPlate || !vehicle_type) {
     return res.status(400).json({ message: 'Plate number and vehicle type are required' });
   }
 
   // Check if exists
-  const [existing] = await pool.query(
-    'SELECT * FROM customers WHERE vehicle_plate = ?',
-    [plateToRegister]
-  );
+  const [existing] = await pool.query(`
+    SELECT DISTINCT c.id FROM customers c
+    LEFT JOIN vehicles v ON c.id = v.CustomerId
+    WHERE c.vehicle_plate = ? 
+       OR REPLACE(c.vehicle_plate, ' ', '') = REPLACE(?, ' ', '')
+       OR v.VehicleRegistrationNumber = ?
+       OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = REPLACE(?, ' ', '')
+    LIMIT 1
+  `, [finalPlate, finalPlate, finalPlate, finalPlate]);
 
   if (existing.length > 0) {
+    const [custRows] = await pool.query('SELECT * FROM customers WHERE id = ?', [existing[0].id]);
     return res.status(400).json({
       message: 'Vehicle already registered',
-      customer: existing[0]
+      customer: custRows[0]
     });
   }
+
+  const finalProvince = province || req.body.emirate || null;
 
   // Create new customer
   const [result] = await pool.query(
     'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
-    [name || 'Unknown', phone || null, plateToRegister, vehicle_type, province || null]
+    [name || 'Unknown', phone || null, finalPlate, vehicle_type, finalProvince]
   );
+
+  // Parse components and insert into vehicles table
+  const { plateCode, emirate: parsedEmirate, plateNumber } = parsePlateComponents(finalPlate);
+  try {
+    await pool.query(
+      'INSERT INTO vehicles (CustomerId, Emirate, PlateCode, PlateNumber, VehicleRegistrationNumber) VALUES (?, ?, ?, ?, ?)',
+      [result.insertId, parsedEmirate, plateCode, plateNumber, finalPlate]
+    );
+  } catch (vehErr) {
+    console.error('[Database] Failed to insert into vehicles table during ANPR registration:', vehErr.message);
+  }
 
   // Initialize loyalty
   await pool.query('INSERT INTO loyalty (customer_id, points) VALUES (?, ?)', [result.insertId, 0]);
@@ -135,14 +182,16 @@ const registerFromANPR = asyncHandler(async (req, res) => {
   const [newCustomer] = await pool.query('SELECT * FROM customers WHERE id = ?', [result.insertId]);
 
   // Update ANY existing logs for this plate to point to this new customer
-  await pool.query(
-    'UPDATE anpr_logs SET customer_id = ? WHERE plate_number = ? AND customer_id IS NULL',
-    [result.insertId, plateToRegister]
-  );
+  await pool.query(`
+    UPDATE anpr_logs 
+    SET customer_id = ? 
+    WHERE (plate_number = ? OR REPLACE(plate_number, ' ', '') = REPLACE(?, ' ', '')) 
+      AND customer_id IS NULL
+  `, [result.insertId, finalPlate, finalPlate]);
 
   // Send SMS with product page link for new customers too
   try {
-    await sendProductPageSMS(newCustomer[0], plateToRegister);
+    await sendProductPageSMS(newCustomer[0], finalPlate);
   } catch (error) {
     console.error('Failed to send welcome SMS:', error.message);
   }
@@ -247,10 +296,15 @@ function generateMockPlateNumber() {
 const manualCheckIn = asyncHandler(async (req, res) => {
   const { customer_id, name, phone, vehicle_plate, vehicle_type, province, notes } = req.body;
 
+  let finalPlate = vehicle_plate;
+  if (req.body.plate_code && req.body.emirate && req.body.plate_number) {
+    finalPlate = `${req.body.plate_code} ${req.body.emirate} ${req.body.plate_number}`;
+  }
+
   if (!customer_id) {
     return res.status(400).json({ message: 'Customer ID is required' });
   }
-  if (!vehicle_plate || !vehicle_type) {
+  if (!finalPlate || !vehicle_type) {
     return res.status(400).json({ message: 'Vehicle plate and vehicle type are required' });
   }
 
@@ -261,19 +315,45 @@ const manualCheckIn = asyncHandler(async (req, res) => {
   }
 
   // Check if another customer already has this vehicle plate (excluding current customer)
-  const [existingPlate] = await pool.query(
-    'SELECT id FROM customers WHERE vehicle_plate = ? AND id != ?',
-    [vehicle_plate, customer_id]
-  );
+  const [existingPlate] = await pool.query(`
+    SELECT DISTINCT c.id FROM customers c
+    LEFT JOIN vehicles v ON c.id = v.CustomerId
+    WHERE (c.vehicle_plate = ? 
+       OR REPLACE(c.vehicle_plate, ' ', '') = REPLACE(?, ' ', '')
+       OR v.VehicleRegistrationNumber = ?
+       OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = REPLACE(?, ' ', ''))
+      AND c.id != ?
+    LIMIT 1
+  `, [finalPlate, finalPlate, finalPlate, finalPlate, customer_id]);
+
   if (existingPlate.length > 0) {
     return res.status(400).json({ message: 'Another customer with this vehicle plate already exists' });
   }
 
+  const finalProvince = province || req.body.emirate || null;
+
   // 2. Update customer details and last_seen
   await pool.query(
     'UPDATE customers SET name = ?, phone = ?, vehicle_plate = ?, vehicle_type = ?, province = ?, last_seen = NOW() WHERE id = ?',
-    [name || customers[0].name, phone || customers[0].phone, vehicle_plate, vehicle_type, province || customers[0].province, customer_id]
+    [name || customers[0].name, phone || customers[0].phone, finalPlate, vehicle_type, finalProvince, customer_id]
   );
+
+  // Sync vehicles table
+  const { plateCode, emirate: parsedEmirate, plateNumber } = parsePlateComponents(finalPlate);
+  try {
+    const [existingVehicles] = await pool.query(
+      'SELECT VehicleId FROM vehicles WHERE CustomerId = ? AND VehicleRegistrationNumber = ?',
+      [customer_id, finalPlate]
+    );
+    if (existingVehicles.length === 0) {
+      await pool.query(
+        'INSERT INTO vehicles (CustomerId, Emirate, PlateCode, PlateNumber, VehicleRegistrationNumber) VALUES (?, ?, ?, ?, ?)',
+        [customer_id, parsedEmirate, plateCode, plateNumber, finalPlate]
+      );
+    }
+  } catch (vehErr) {
+    console.error('[Database] Failed to sync vehicles table on manual check-in:', vehErr.message);
+  }
 
   // Get the updated customer record
   const [updatedCustomers] = await pool.query('SELECT * FROM customers WHERE id = ?', [customer_id]);
@@ -283,7 +363,7 @@ const manualCheckIn = asyncHandler(async (req, res) => {
   const checkinNote = notes || 'Camera offline - manual scan';
   await pool.query(
     'INSERT INTO anpr_logs (plate_number, camera_id, confidence, image_url, customer_id, notes, is_manual) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [vehicle_plate, 'MANUAL', 1.00, null, customer_id, checkinNote, 1]
+    [finalPlate, 'MANUAL', 1.00, null, customer_id, checkinNote, 1]
   );
 
   // 4. Send welcome SMS with portal link
@@ -291,7 +371,7 @@ const manualCheckIn = asyncHandler(async (req, res) => {
   let smsError = null;
   if (updatedCustomer.phone) {
     try {
-      await sendProductPageSMS(updatedCustomer, vehicle_plate, vehicle_type);
+      await sendProductPageSMS(updatedCustomer, finalPlate, vehicle_type);
       smsSent = true;
     } catch (error) {
       smsError = error.message;
