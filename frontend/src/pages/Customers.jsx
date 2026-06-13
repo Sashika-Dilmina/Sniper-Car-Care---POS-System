@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import VehiclePlatePreview from '../components/VehiclePlatePreview';
+import SearchableSelect from '../components/SearchableSelect';
 
 const Customers = () => {
   const navigate = useNavigate();
@@ -326,16 +327,12 @@ const Customers = () => {
                     {/* Plate Code Dropdown */}
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
-                      <select
+                      <SearchableSelect
+                        options={plateCodes}
                         value={newCustomer.plate_code}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, plate_code: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                        onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
                         disabled={plateCodes.length === 0}
-                      >
-                        {plateCodes.map(code => (
-                          <option key={code} value={code}>{code}</option>
-                        ))}
-                      </select>
+                      />
                     </div>
                   </div>
 

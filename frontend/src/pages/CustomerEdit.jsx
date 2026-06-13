@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import VehiclePlatePreview from '../components/VehiclePlatePreview';
+import SearchableSelect from '../components/SearchableSelect';
 
 const CustomerEdit = () => {
   const { id } = useParams();
@@ -222,19 +223,12 @@ const CustomerEdit = () => {
                   <label htmlFor="plate_code" className="block text-sm font-bold text-gray-700 mb-2">
                     Plate Code <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    id="plate_code"
-                    name="plate_code"
+                  <SearchableSelect
+                    options={plateCodes}
                     value={formData.plate_code}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                    required
+                    onChange={(val) => setFormData(prev => ({ ...prev, plate_code: val }))}
                     disabled={plateCodes.length === 0}
-                  >
-                    {plateCodes.map(code => (
-                      <option key={code} value={code}>{code}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 {/* Plate Number */}

@@ -4,6 +4,7 @@ import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import VehiclePlatePreview from '../components/VehiclePlatePreview';
+import SearchableSelect from '../components/SearchableSelect';
 
 const Sales = () => {
   const { user } = useAuth();
@@ -644,16 +645,12 @@ const Sales = () => {
                           <option value="Fujairah">Fujairah</option>
                         </select>
 
-                        <select
+                        <SearchableSelect
+                          options={plateCodes}
                           value={newCustomer.plate_code}
-                          onChange={(e) => setNewCustomer({ ...newCustomer, plate_code: e.target.value })}
-                          className="w-full px-2 py-1.5 border rounded-lg text-xs"
+                          onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
                           disabled={plateCodes.length === 0}
-                        >
-                          {plateCodes.map(code => (
-                            <option key={code} value={code}>{code}</option>
-                          ))}
-                        </select>
+                        />
                       </div>
 
                       <input

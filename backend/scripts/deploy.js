@@ -59,6 +59,7 @@ conn.on('ready', async () => {
     await uploadFile(conn, path.join(rootDir, 'database', 'migration_seed_vip_services_v2.sql'), '/tmp/migration_seed_vip_services_v2.sql');
     await uploadFile(conn, path.join(rootDir, 'database', 'migration_add_order_id_to_services.sql'), '/tmp/migration_add_order_id_to_services.sql');
     await uploadFile(conn, path.join(rootDir, 'database', 'migration_uae_vehicle_reg.sql'), '/tmp/migration_uae_vehicle_reg.sql');
+    await uploadFile(conn, path.join(rootDir, 'database', 'migration_uae_plate_codes_v2.sql'), '/tmp/migration_uae_plate_codes_v2.sql');
 
     // 2. Repo path
     const repoPath = '~/Sniper-Car-Care---POS-System';
@@ -77,6 +78,7 @@ conn.on('ready', async () => {
     await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_seed_vip_services_v2.sql`);
     await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_add_order_id_to_services.sql`);
     await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_uae_vehicle_reg.sql`);
+    await executeCommand(conn, `mysql -u root -p123456 < /tmp/migration_uae_plate_codes_v2.sql`);
 
     console.log('🌱 Seeding services into database...');
     await executeCommand(conn, `cd ${backendPath} && node scripts/seedNewServices.js`);
@@ -111,7 +113,7 @@ conn.on('ready', async () => {
 
     // 6. Cleanup
     console.log('🧹 Cleaning up remote temporary files...');
-    await executeCommand(conn, 'rm -f /tmp/frontend.tar.gz /tmp/saloon.tar.gz /tmp/4x4.tar.gz /tmp/migration_add_service_timestamps.sql /tmp/migration_update_payment_methods_v2.sql /tmp/migration_seed_vip_services_v2.sql /tmp/migration_add_order_id_to_services.sql /tmp/migration_uae_vehicle_reg.sql');
+    await executeCommand(conn, 'rm -f /tmp/frontend.tar.gz /tmp/saloon.tar.gz /tmp/4x4.tar.gz /tmp/migration_add_service_timestamps.sql /tmp/migration_update_payment_methods_v2.sql /tmp/migration_seed_vip_services_v2.sql /tmp/migration_add_order_id_to_services.sql /tmp/migration_uae_vehicle_reg.sql /tmp/migration_uae_plate_codes_v2.sql');
 
     console.log('🚀 DEPLOYMENT COMPLETED SUCCESSFULLY!');
   } catch (err) {
