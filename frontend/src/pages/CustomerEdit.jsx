@@ -13,7 +13,7 @@ const CustomerEdit = () => {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    emirate: 'Dubai',
+    emirate: '',
     plate_code: '',
     plate_number: '',
     vehicle_type: 'Saloon'
@@ -31,11 +31,11 @@ const CustomerEdit = () => {
         const codes = response.data.codes || [];
         setPlateCodes(codes);
         
-        // If the current plate code is NOT in the new codes list, select the first one
+        // Reset code if invalid or change to empty
         if (formData.emirate && !codes.includes(formData.plate_code)) {
           setFormData(prev => ({
             ...prev,
-            plate_code: codes.length > 0 ? codes[0] : ''
+            plate_code: ''
           }));
         }
       } catch (error) {
@@ -45,6 +45,8 @@ const CustomerEdit = () => {
     
     if (formData.emirate) {
       fetchPlateCodes();
+    } else {
+      setPlateCodes([]);
     }
   }, [formData.emirate]);
 
@@ -56,13 +58,15 @@ const CustomerEdit = () => {
       const plateStr = customer.vehicle_plate || '';
       const parts = plateStr.trim().split(/\s+/);
       let plateCode = '';
-      let emirate = 'Dubai';
-      let plateNumber = plateStr;
+      let emirate = '';
+      let plateNumber = '';
       
       if (parts.length >= 3) {
         plateCode = parts[0];
         plateNumber = parts[parts.length - 1];
         emirate = parts.slice(1, parts.length - 1).join(' ');
+      } else if (plateStr) {
+        plateNumber = plateStr;
       }
 
       setFormData({
@@ -208,6 +212,7 @@ const CustomerEdit = () => {
                     className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
                     required
                   >
+                    <option value="">Select Emirate</option>
                     <option value="Dubai">Dubai</option>
                     <option value="Abu Dhabi">Abu Dhabi</option>
                     <option value="Sharjah">Sharjah</option>

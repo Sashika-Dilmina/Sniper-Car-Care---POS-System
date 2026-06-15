@@ -30,7 +30,7 @@ const Sales = () => {
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '',
-    emirate: 'Dubai',
+    emirate: '',
     plate_code: '',
     plate_number: '',
     vehicle_type: 'Saloon'
@@ -44,11 +44,13 @@ const Sales = () => {
         const codes = response.data.codes || [];
         setPlateCodes(codes);
         
-        // Auto-select first plate code if available
-        setNewCustomer(prev => ({
-          ...prev,
-          plate_code: codes.length > 0 ? codes[0] : ''
-        }));
+        // Reset code if invalid or change to empty
+        if (newCustomer.emirate && !codes.includes(newCustomer.plate_code)) {
+          setNewCustomer(prev => ({
+            ...prev,
+            plate_code: ''
+          }));
+        }
       } catch (error) {
         console.error('Failed to load plate codes:', error);
       }
@@ -56,6 +58,8 @@ const Sales = () => {
     
     if (showQuickRegister && newCustomer.emirate) {
       fetchPlateCodes();
+    } else {
+      setPlateCodes([]);
     }
   }, [newCustomer.emirate, showQuickRegister]);
 
@@ -212,7 +216,7 @@ const Sales = () => {
       setNewCustomer({
         name: '',
         phone: '',
-        emirate: 'Dubai',
+        emirate: '',
         plate_code: '',
         plate_number: '',
         vehicle_type: 'Saloon'
@@ -636,6 +640,7 @@ const Sales = () => {
                           onChange={(e) => setNewCustomer({ ...newCustomer, emirate: e.target.value })}
                           className="w-full px-2 py-1.5 border rounded-lg text-xs"
                         >
+                          <option value="">Select Emirate</option>
                           <option value="Dubai">Dubai</option>
                           <option value="Abu Dhabi">Abu Dhabi</option>
                           <option value="Sharjah">Sharjah</option>

@@ -133,7 +133,7 @@ const Customers = () => {
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '',
-    emirate: 'Dubai',
+    emirate: '',
     plate_code: '',
     plate_number: '',
     vehicle_type: 'Saloon'
@@ -147,11 +147,13 @@ const Customers = () => {
         const codes = response.data.codes || [];
         setPlateCodes(codes);
         
-        // Auto-select first plate code if available
-        setNewCustomer(prev => ({
-          ...prev,
-          plate_code: codes.length > 0 ? codes[0] : ''
-        }));
+        // Reset code if invalid or change to empty
+        if (newCustomer.emirate && !codes.includes(newCustomer.plate_code)) {
+          setNewCustomer(prev => ({
+            ...prev,
+            plate_code: ''
+          }));
+        }
       } catch (error) {
         console.error('Failed to load plate codes:', error);
       }
@@ -159,13 +161,15 @@ const Customers = () => {
     
     if (showAddModal && newCustomer.emirate) {
       fetchPlateCodes();
+    } else {
+      setPlateCodes([]);
     }
   }, [newCustomer.emirate, showAddModal]);
 
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     
-    if (!newCustomer.name || !newCustomer.phone || !newCustomer.plate_number) {
+    if (!newCustomer.name || !newCustomer.phone || !newCustomer.emirate || !newCustomer.plate_number) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -187,7 +191,7 @@ const Customers = () => {
       setNewCustomer({
         name: '',
         phone: '',
-        emirate: 'Dubai',
+        emirate: '',
         plate_code: '',
         plate_number: '',
         vehicle_type: 'Saloon'
@@ -313,7 +317,9 @@ const Customers = () => {
                         value={newCustomer.emirate}
                         onChange={(e) => setNewCustomer({ ...newCustomer, emirate: e.target.value })}
                         className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                        required
                       >
+                        <option value="">Select Emirate</option>
                         <option value="Dubai">Dubai</option>
                         <option value="Abu Dhabi">Abu Dhabi</option>
                         <option value="Sharjah">Sharjah</option>

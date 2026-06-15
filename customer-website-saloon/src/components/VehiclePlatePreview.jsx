@@ -34,8 +34,15 @@ const VehiclePlatePreview = ({ emirate, plateCode, plateNumber }) => {
           fontFamily: "'Outfit', 'Inter', monospace",
         }}
       >
-        {/* Left Segment: Emirate name (English & Arabic) */}
-        <div className="flex flex-col items-center justify-center h-full px-3 bg-gray-50 border-r-2 border-gray-300 w-[95px]">
+        {/* Left Segment: Plate Code */}
+        <div className="flex items-center justify-center w-[75px] h-full border-r-2 border-gray-300 bg-white">
+          <span className="text-3xl font-extrabold text-blue-900 tracking-tighter">
+            {displayCode || '—'}
+          </span>
+        </div>
+
+        {/* Middle Segment: Emirate name (English & Arabic) */}
+        <div className="flex flex-col items-center justify-center flex-1 h-full px-2 bg-gray-50 border-r-2 border-gray-300 w-[105px]">
           <span 
             className="text-[10px] font-black text-gray-800 uppercase tracking-tight leading-none mb-0.5"
             style={{ fontSize: displayEmirate.length > 10 ? '8px' : '10px' }}
@@ -48,16 +55,9 @@ const VehiclePlatePreview = ({ emirate, plateCode, plateNumber }) => {
           </span>
         </div>
 
-        {/* Middle Segment: Plate Code */}
-        <div className="flex items-center justify-center flex-1 h-full px-2 border-r-2 border-gray-300">
-          <span className="text-3xl font-extrabold text-blue-900 tracking-tighter">
-            {displayCode || '—'}
-          </span>
-        </div>
-
         {/* Right Segment: Plate Number */}
         <div className="flex items-center justify-center w-[140px] h-full bg-white px-4">
-          <span className="text-3xl font-black text-gray-900 tracking-normal">
+          <span className="text-3xl font-black text-gray-900 tracking-normal font-mono">
             {displayNumber || '•••••'}
           </span>
         </div>

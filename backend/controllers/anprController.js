@@ -5,18 +5,50 @@ const { buildCustomerWebsiteUrl, formatPhoneNumber } = require('../utils/custome
 
 // Helper to parse Plate string into Emirate, Code and Plate Number
 function parsePlateComponents(plateStr) {
-  if (!plateStr) return { plateCode: '', emirate: 'Dubai', plateNumber: '' };
+  if (!plateStr) return { plateCode: '', emirate: '', plateNumber: '' };
   
-  const parts = plateStr.trim().split(/\s+/);
-  if (parts.length >= 3) {
-    const plateCode = parts[0];
-    const plateNumber = parts[parts.length - 1];
-    const emirate = parts.slice(1, parts.length - 1).join(' ');
-    return { plateCode, emirate, plateNumber };
+  const cleanStr = plateStr.trim().replace(/\s+/g, ' ');
+  const emiratesList = [
+    'dubai',
+    'abu dhabi',
+    'sharjah',
+    'ajman',
+    'umm al quwain',
+    'ras al khaimah',
+    'fujairah'
+  ];
+  
+  let detectedEmirate = '';
+  let remainingStr = cleanStr;
+  
+  for (const emirate of emiratesList) {
+    const regex = new RegExp(`\\b${emirate}\\b`, 'i');
+    if (regex.test(cleanStr)) {
+      detectedEmirate = emirate.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      remainingStr = cleanStr.replace(regex, '').trim().replace(/\s+/g, ' ');
+      break;
+    }
   }
   
-  // Fallback if formatting doesn't match
-  return { plateCode: '', emirate: 'Dubai', plateNumber: plateStr };
+  const parts = remainingStr.split(' ').filter(Boolean);
+  let plateCode = '';
+  let plateNumber = '';
+  
+  if (parts.length >= 2) {
+    plateCode = parts[0];
+    plateNumber = parts[parts.length - 1];
+  } else if (parts.length === 1) {
+    const part = parts[0];
+    const match = part.match(/^([A-Za-z]+)?([0-9]+)$/);
+    if (match) {
+      plateCode = match[1] || '';
+      plateNumber = match[2];
+    } else {
+      plateNumber = part;
+    }
+  }
+  
+  return { plateCode, emirate: detectedEmirate, plateNumber };
 }
 
 
@@ -72,7 +104,24 @@ const detectPlate = asyncHandler(async (req, res) => {
   let customer = null;
   if (customers.length > 0) {
     customer = customers[0];
+  } else {
+    // Robust fallback match: parse the detected plate and match by PlateCode and PlateNumber
+    const { plateCode, emirate: parsedEmirate, plateNumber: parsedPlateNum } = parsePlateComponents(detectedPlate);
+    if (parsedPlateNum) {
+      const [fallbackCustomers] = await pool.query(`
+        SELECT DISTINCT c.* FROM customers c
+        JOIN vehicles v ON c.id = v.CustomerId
+        WHERE v.PlateNumber = ? AND (v.PlateCode = ? OR (? = '' AND (v.PlateCode = '' OR v.PlateCode IS NULL)))
+        LIMIT 1
+      `, [parsedPlateNum, plateCode, plateCode]);
+      
+      if (fallbackCustomers.length > 0) {
+        customer = fallbackCustomers[0];
+      }
+    }
+  }
 
+  if (customer) {
     // Update last seen
     await pool.query(
       'UPDATE customers SET last_seen = NOW() WHERE id = ?',

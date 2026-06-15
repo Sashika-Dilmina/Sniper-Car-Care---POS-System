@@ -92,12 +92,60 @@ function formatPhoneNumber(rawPhone) {
   return `${defaultCode}${digits}`;
 }
 
+function parsePlateComponents(plateStr) {
+  if (!plateStr) return { plateCode: '', emirate: '', plateNumber: '' };
+  
+  const cleanStr = plateStr.trim().replace(/\s+/g, ' ');
+  const emiratesList = [
+    'dubai',
+    'abu dhabi',
+    'sharjah',
+    'ajman',
+    'umm al quwain',
+    'ras al khaimah',
+    'fujairah'
+  ];
+  
+  let detectedEmirate = '';
+  let remainingStr = cleanStr;
+  
+  for (const emirate of emiratesList) {
+    const regex = new RegExp(`\\b${emirate}\\b`, 'i');
+    if (regex.test(cleanStr)) {
+      detectedEmirate = emirate.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      remainingStr = cleanStr.replace(regex, '').trim().replace(/\s+/g, ' ');
+      break;
+    }
+  }
+  
+  const parts = remainingStr.split(' ').filter(Boolean);
+  let plateCode = '';
+  let plateNumber = '';
+  
+  if (parts.length >= 2) {
+    plateCode = parts[0];
+    plateNumber = parts[parts.length - 1];
+  } else if (parts.length === 1) {
+    const part = parts[0];
+    const match = part.match(/^([A-Za-z]+)?([0-9]+)$/);
+    if (match) {
+      plateCode = match[1] || '';
+      plateNumber = match[2];
+    } else {
+      plateNumber = part;
+    }
+  }
+  
+  return { plateCode, emirate: detectedEmirate, plateNumber };
+}
+
 module.exports = {
   buildCustomerWebsiteUrl,
   buildFeedbackUrl,
   buildPaymentUrl,
   formatPhoneNumber,
   isFourByFour,
+  parsePlateComponents,
 };
 
 

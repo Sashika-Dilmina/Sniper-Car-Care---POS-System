@@ -4,7 +4,7 @@ const fs = require('fs');
 const { extractPlate } = require('./ocrService');
 const pool = require('../config/database');
 const { sendReson8Message } = require('./reson8Service');
-const { buildCustomerWebsiteUrl, formatPhoneNumber } = require('../utils/customerLinkUtils');
+const { buildCustomerWebsiteUrl, formatPhoneNumber, parsePlateComponents } = require('../utils/customerLinkUtils');
 
 /**
  * Main detection logic (reused from logic in anprController)
@@ -44,6 +44,25 @@ async function handleDetection(plateNumber, imageUrl = null) {
     if (customers.length > 0) {
       customer = customers[0];
       customerId = customer.id;
+    } else {
+      // Robust fallback match: parse the detected plate and match by PlateCode and PlateNumber
+      const { plateCode, emirate: parsedEmirate, plateNumber: parsedPlateNum } = parsePlateComponents(plateNumber);
+      if (parsedPlateNum) {
+        const [fallbackCustomers] = await pool.query(`
+          SELECT DISTINCT c.* FROM customers c
+          JOIN vehicles v ON c.id = v.CustomerId
+          WHERE v.PlateNumber = ? AND (v.PlateCode = ? OR (? = '' AND (v.PlateCode = '' OR v.PlateCode IS NULL)))
+          LIMIT 1
+        `, [parsedPlateNum, plateCode, plateCode]);
+        
+        if (fallbackCustomers.length > 0) {
+          customer = fallbackCustomers[0];
+          customerId = customer.id;
+        }
+      }
+    }
+
+    if (customer) {
       console.log(`[ANPR Processor] Match FOUND: ${customer.name}`);
 
       // Update last seen
