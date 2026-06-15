@@ -74,13 +74,15 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
           return (
             <div key={n} className="flex flex-col items-center">
               <div
-                className={`flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center rounded-full border border-gray-200 text-[8px] sm:text-xs shadow-sm transition-all duration-300 ${
+                className={`flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center rounded-full border border-gray-200 shadow-sm transition-all duration-300 ${
                   isFilled
                     ? 'border-red-600 bg-red-600 text-white'
                     : 'bg-white text-gray-400'
                 }`}
               >
-                🚗
+                <svg viewBox="0 0 640 512" fill="currentColor" className="w-3.5 h-3.5 sm:w-5 sm:h-5">
+                  <path d="M624 288h-16v-64c0-17.67-14.33-32-32-32h-48L419.22 56.02A64.025 64.025 0 0 0 369.24 32H256c-17.67 0-32 14.33-32 32v128H64c-17.67 0-32 14.33-32 32v64H16c-8.84 0-16 7.16-16 16v32c0 8.84 7.16 16 16 16h49.61c-.76 5.27-1.61 10.52-1.61 16 0 61.86 50.14 112 112 112s112-50.14 112-112c0-5.48-.85-10.73-1.61-16h171.22c-.76 5.27-1.61 10.52-1.61 16 0 61.86 50.14 112 112 112s112-50.14 112-112c0-5.48-.85-10.73-1.61-16H624c8.84 0 16-7.16 16-16v-32c0-8.84-7.16-16-16-16zM176 432c-26.51 0-48-21.49-48-48s21.49-48 48-48 48 21.49 48 48-21.49 48-48 48zm320 0c-26.51 0-48-21.49-48-48s21.49-48 48-48 48 21.49 48 48-21.49 48-48 48z"/>
+                </svg>
               </div>
             </div>
           );

@@ -796,11 +796,10 @@ const Sales = () => {
                   {/* Payment Method */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       {[
                         { key: 'cash', label: '💵 Cash' },
-                        { key: 'card', label: '💳 Card' },
-                        { key: 'credit', label: '📝 Credit' }
+                        { key: 'card', label: '💳 Card' }
                       ].map(pm => (
                         <button
                           key={pm.key}

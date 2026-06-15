@@ -9,6 +9,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState(null);
   const [vipAppointments, setVipAppointments] = useState([]);
+  const [period, setPeriod] = useState('today');
   const [vipLoading, setVipLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [completedServices, setCompletedServices] = useState([]);
@@ -36,14 +37,14 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    fetchAnalytics();
+    fetchAnalytics(false, period);
     fetchVIPAppointments();
     if (isAdmin) {
       fetchCompletedServices();
     }
 
     const interval = setInterval(() => {
-      fetchAnalytics(true);
+      fetchAnalytics(true, period);
       fetchVIPAppointments(true);
       if (isAdmin) {
         fetchCompletedServices(true);
@@ -51,7 +52,7 @@ const Dashboard = () => {
     }, 7000);
 
     return () => clearInterval(interval);
-  }, [isAdmin]);
+  }, [isAdmin, period]);
 
   const fetchCompletedServices = async (silent = false) => {
     if (!silent) setServicesLoading(true);
@@ -79,10 +80,10 @@ const Dashboard = () => {
     }
   };
 
-  const fetchAnalytics = async (silent = false) => {
+  const fetchAnalytics = async (silent = false, currentPeriod = period) => {
     if (!silent) setLoading(true);
     try {
-      const response = await axios.get('/api/analytics/dashboard?period=today');
+      const response = await axios.get(`/api/analytics/dashboard?period=${currentPeriod}`);
       console.log('Analytics response:', response.data);
       if (response.data) {
         setAnalytics(response.data);
@@ -156,19 +157,8 @@ const Dashboard = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
         <select
-          onChange={(e) => {
-            setLoading(true);
-            axios.get(`/api/analytics/dashboard?period=${e.target.value}`)
-              .then(res => {
-                setAnalytics(res.data);
-                setLoading(false);
-              })
-              .catch(err => {
-                console.error('Analytics error:', err);
-                toast.error('Failed to load analytics');
-                setLoading(false);
-              });
-          }}
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
           className="px-4 py-2 border rounded-lg"
         >
           <option value="today">Today</option>
@@ -464,12 +454,6 @@ const Dashboard = () => {
                         </div>
                         <span className="text-xs text-gray-500">({feedback.rating}/5)</span>
                       </div>
-                      <span className={`px-2 py-1 text-xs rounded-full ${feedback.status === 'approved' ? 'bg-green-100 text-green-800' :
-                          feedback.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
-                        }`}>
-                        {feedback.status}
-                      </span>
                     </div>
                     {feedback.customer_name && (
                       <p className="text-sm font-semibold text-gray-800 mb-1">

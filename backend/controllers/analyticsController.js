@@ -123,14 +123,13 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
     pendingPayments = [{ pending_amount: 0, pending_count: 0 }];
   }
 
-  // New customers (based on period)
+  // New customers (most recent 10 overall)
   let newCustomers = [];
   try {
     const [newCustomersResult] = await pool.query(`
       SELECT c.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, 
              DATE_FORMAT(c.created_at, '%Y-%m-%d') as joined_date
       FROM customers c
-      WHERE ${dateFilter}
       ORDER BY c.created_at DESC
       LIMIT 10
     `);
