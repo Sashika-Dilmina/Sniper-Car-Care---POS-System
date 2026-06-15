@@ -267,10 +267,7 @@ const Sales = () => {
         });
       }
 
-      // 3. Complete the order/service
-      await axios.put(`/api/orders/${createdOrder.id}/status`, {
-        status: 'completed'
-      });
+      // 3. Keep status as 'pending' to process in the Services/Orders queue
 
       toast.success('Sale completed successfully! Receipt generated.', {
         duration: 4000,
@@ -376,9 +373,17 @@ const Sales = () => {
 
   return (
     <div className="space-y-6 print:space-y-0 print:p-0">
-      {/* Print Styles */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
+          @page {
+            size: A4;
+            margin: 10mm;
+          }
+          html, body {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           aside, nav, header, button, input, select, .no-print {
             display: none !important;
           }
@@ -389,6 +394,7 @@ const Sales = () => {
           body {
             background-color: white !important;
             color: black !important;
+            width: 100% !important;
           }
           .print-full-width {
             width: 100% !important;
@@ -396,7 +402,30 @@ const Sales = () => {
             box-shadow: none !important;
             border: none !important;
             padding: 0 !important;
+            margin: 0 !important;
+            overflow: visible !important;
           }
+          .overflow-x-auto {
+            overflow: visible !important;
+          }
+          table {
+            width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+          }
+          th, td {
+            padding: 8px 4px !important;
+            font-size: 10px !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+          }
+          th:nth-child(1), td:nth-child(1) { width: 10% !important; }
+          th:nth-child(2), td:nth-child(2) { width: 22% !important; }
+          th:nth-child(3), td:nth-child(3) { width: 20% !important; }
+          th:nth-child(4), td:nth-child(4) { width: 16% !important; }
+          th:nth-child(5), td:nth-child(5) { width: 11% !important; }
+          th:nth-child(6), td:nth-child(6) { width: 11% !important; }
+          th:nth-child(7), td:nth-child(7) { width: 10% !important; }
         }
       `}} />
 

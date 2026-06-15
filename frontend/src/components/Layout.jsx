@@ -262,8 +262,8 @@ const Layout = () => {
       </aside>
 
       {/* Main Content */}
-      <div className={`transition-all duration-300 ${isCollapsed ? 'ml-20' : 'ml-64'}`}>
-        <main className="p-8">
+      <div className={`transition-all duration-300 ${isCollapsed ? 'ml-20' : 'ml-64'} print:ml-0 print:p-0 print:w-full`}>
+        <main className="p-8 print:p-0">
           <Outlet />
         </main>
       </div>
