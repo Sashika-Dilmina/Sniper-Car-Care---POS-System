@@ -366,7 +366,6 @@ const LandingPage = () => {
   });
 
   const [notifications, setNotifications] = useState([]);
-  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   const fetchNotifications = async () => {
@@ -700,6 +699,10 @@ const LandingPage = () => {
       const response = await axios.post('/api/public/orders', orderData);
       const order = response.data.order;
 
+      if (form.vehicle_plate) {
+        setSearchParams({ plate: form.vehicle_plate });
+      }
+
       if (response.data.loyalty?.wash_stamps !== undefined) {
         setWashStamps(response.data.loyalty.wash_stamps);
       }
@@ -899,6 +902,10 @@ const LandingPage = () => {
         notes: vipBookingForm.notes
       });
 
+      if (plateStr) {
+        setSearchParams({ plate: plateStr });
+      }
+
       toast.success('VIP booking request submitted! We will contact you soon with confirmation details.', { duration: 5000 });
       setShowVIPModal(false);
       setVipStep(1);
@@ -1057,10 +1064,7 @@ const LandingPage = () => {
           <div className="relative">
             <button
               onClick={() => {
-                setShowNotificationsDropdown(!showNotificationsDropdown);
-                if (!showNotificationsDropdown && unreadCount > 0) {
-                  handleMarkNotificationsAsRead();
-                }
+                navigate(`/notifications?plate=${encodeURIComponent(vehiclePlate)}`);
               }}
               className="relative p-2 text-gray-800 hover:text-red-600 transition outline-none"
               aria-label="View notifications"
@@ -1075,45 +1079,6 @@ const LandingPage = () => {
                 </span>
               )}
             </button>
-
-            {/* Notifications Dropdown */}
-            {showNotificationsDropdown && vehiclePlate && (
-              <div className="absolute right-0 mt-2 w-80 rounded-xl border border-gray-100 bg-white p-4 shadow-xl ring-1 ring-black/5 z-50 text-left">
-                <div className="flex items-center justify-between border-b pb-2 mb-2">
-                  <h4 className="font-bold text-gray-900 text-sm">Notifications</h4>
-                  {unreadCount > 0 && (
-                    <button
-                      onClick={handleMarkNotificationsAsRead}
-                      className="text-xs font-semibold text-red-600 hover:text-red-700 transition"
-                    >
-                      Mark all as read
-                    </button>
-                  )}
-                </div>
-                <div className="max-h-60 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
-                  {notifications.length === 0 ? (
-                    <p className="text-xs text-gray-500 text-center py-4">No notifications yet</p>
-                  ) : (
-                    notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        className={`p-2.5 rounded-lg border text-xs transition ${
-                          n.is_read ? 'bg-white border-gray-100 text-gray-600' : 'bg-red-50/50 border-red-100 text-gray-900 font-medium'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-gray-900">{n.title}</span>
-                          <span className="text-[10px] text-gray-400">
-                            {new Date(n.created_at).toLocaleDateString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <p className="text-[11px] leading-snug">{n.message}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         </nav>
         {mobileMenuOpen && (
