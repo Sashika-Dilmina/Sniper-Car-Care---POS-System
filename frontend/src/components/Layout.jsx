@@ -229,8 +229,8 @@ const Layout = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-full bg-white shadow-lg z-50 transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className="p-6 border-b flex items-center justify-between">
+      <aside className={`fixed left-0 top-0 h-screen bg-white shadow-lg z-50 transition-all duration-300 flex flex-col ${isCollapsed ? 'w-20' : 'w-64'}`}>
+        <div className="p-6 border-b flex items-center justify-between flex-shrink-0">
           <div className={`transition-opacity duration-300 ${isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
             <h1 className="text-2xl font-bold text-primary-600 whitespace-nowrap">Sniper Car Care</h1>
           </div>
@@ -242,7 +242,7 @@ const Layout = () => {
         {/* Toggle Button */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="absolute -right-3 top-8 bg-white border-2 border-gray-200 rounded-full p-1 hover:bg-gray-100 transition-colors shadow-md"
+          className="absolute -right-3 top-8 bg-white border-2 border-gray-200 rounded-full p-1 hover:bg-gray-100 transition-colors shadow-md z-10"
           title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
         >
           <svg className={`w-4 h-4 text-gray-600 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -250,7 +250,7 @@ const Layout = () => {
           </svg>
         </button>
         
-        <nav className="mt-6">
+        <nav className="mt-6 flex-1 overflow-y-auto min-h-0 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
           {navItems.map((item) => (
             <Link
               key={item.path}
@@ -268,7 +268,7 @@ const Layout = () => {
           ))}
         </nav>
 
-        <div className="absolute bottom-0 w-full p-6 border-t">
+        <div className="p-6 border-t flex-shrink-0 bg-white">
           {!isCollapsed ? (
             <>
               <div className="mb-4">
