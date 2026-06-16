@@ -170,26 +170,61 @@ const Layout = () => {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
       </svg>
     ),
+    purchases: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+    suppliers: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+    expenses: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    credits: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+      </svg>
+    ),
   };
 
-  // Define all navigation items with their allowed roles
-  const allNavItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['admin', 'staff'] },
-    { path: '/sales', label: 'Sells', icon: 'sells', roles: ['admin', 'staff'] },
-    { path: '/customers', label: 'Customers', icon: 'customers', roles: ['admin', 'staff'] },
-    { path: '/products', label: 'Products', icon: 'products', roles: ['admin', 'staff'] },
-    { path: '/orders', label: 'Orders', icon: 'orders', roles: ['admin', 'staff'] },
-    { path: '/services', label: 'Services', icon: 'services', roles: ['admin', 'staff'] },
-    { path: '/employees', label: 'Employees', icon: 'employees', roles: ['admin'] },
-    { path: '/vip', label: 'VIP', icon: 'vip', roles: ['admin', 'staff'] },
-    { path: '/anpr', label: 'ANPR', icon: 'anpr', roles: ['admin', 'staff'] },
-    { path: '/reports', label: 'Reports', icon: 'reports', roles: ['admin'] },
-  ];
-
-  // Filter nav items based on user role - staff will not see Employees and Reports
-  const navItems = allNavItems.filter(item => 
-    item.roles.includes(user?.role || '')
-  );
+  // Define nav items based on user role to ensure custom layout ordering for admin and staff
+  let navItems = [];
+  if (user?.role === 'admin') {
+    navItems = [
+      { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+      { path: '/orders', label: 'Orders', icon: 'orders' },
+      { path: '/sales', label: 'Sells', icon: 'sells' },
+      { path: '/purchases', label: 'Purchases', icon: 'purchases' },
+      { path: '/suppliers', label: 'Suppliers', icon: 'suppliers' },
+      { path: '/customers', label: 'Customers', icon: 'customers' },
+      { path: '/credits', label: 'Credits', icon: 'credits' },
+      { path: '/products', label: 'Products', icon: 'products' },
+      { path: '/services', label: 'Services', icon: 'services' },
+      { path: '/employees', label: 'Employees', icon: 'employees' },
+      { path: '/vip', label: 'VIP', icon: 'vip' },
+      { path: '/expenses', label: 'Expenses', icon: 'expenses' },
+      { path: '/anpr', label: 'ANPR', icon: 'anpr' },
+      { path: '/reports', label: 'Reports', icon: 'reports' },
+    ];
+  } else {
+    // Staff role: keeps their old layout structure
+    navItems = [
+      { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+      { path: '/sales', label: 'Sells', icon: 'sells' },
+      { path: '/customers', label: 'Customers', icon: 'customers' },
+      { path: '/credits', label: 'Credits', icon: 'credits' },
+      { path: '/products', label: 'Products', icon: 'products' },
+      { path: '/orders', label: 'Orders', icon: 'orders' },
+      { path: '/services', label: 'Services', icon: 'services' },
+      { path: '/vip', label: 'VIP', icon: 'vip' },
+      { path: '/anpr', label: 'ANPR', icon: 'anpr' },
+    ];
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

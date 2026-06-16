@@ -67,6 +67,7 @@ const Sales = () => {
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash'); // cash, card, credit (unpaid)
+  const [cardSubOption, setCardSubOption] = useState('card'); // visa, apple_pay, samsung_pay, card
   const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   // Ledger - State
@@ -239,6 +240,11 @@ const Sales = () => {
       return;
     }
 
+    if (paymentMethod === 'credit' && !selectedCustomer) {
+      toast.error('Credit checkout requires selecting a registered customer.');
+      return;
+    }
+
     setIsCheckingOut(true);
     try {
       // 1. Create order in the backend
@@ -258,12 +264,24 @@ const Sales = () => {
       const orderResponse = await axios.post('/api/orders', orderData);
       const createdOrder = orderResponse.data.order;
 
-      // 2. If Cash or Card, record manual payment
-      if (paymentMethod === 'cash' || paymentMethod === 'card') {
+      // 2. Process payment based on method
+      if (paymentMethod === 'cash') {
         await axios.post('/api/payments/manual', {
           order_id: createdOrder.id,
           amount: total,
-          method: paymentMethod
+          method: 'cash'
+        });
+      } else if (paymentMethod === 'card') {
+        await axios.post('/api/payments/manual', {
+          order_id: createdOrder.id,
+          amount: total,
+          method: cardSubOption
+        });
+      } else if (paymentMethod === 'credit') {
+        await axios.post('/api/credits', {
+          customer_id: selectedCustomer.id,
+          order_id: createdOrder.id,
+          amount: total
         });
       }
 
@@ -280,6 +298,7 @@ const Sales = () => {
       setSelectedCustomer(null);
       setCustomerSearch('');
       setPaymentMethod('cash');
+      setCardSubOption('card');
       
       // Refresh local products (for updated stock counts)
       fetchProducts();
@@ -796,15 +815,21 @@ const Sales = () => {
                   {/* Payment Method */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       {[
                         { key: 'cash', label: '💵 Cash' },
-                        { key: 'card', label: '💳 Card' }
+                        { key: 'card', label: '💳 Card' },
+                        { key: 'credit', label: '🏦 Credit' }
                       ].map(pm => (
                         <button
                           key={pm.key}
                           type="button"
-                          onClick={() => setPaymentMethod(pm.key)}
+                          onClick={() => {
+                            setPaymentMethod(pm.key);
+                            if (pm.key === 'card') {
+                              setCardSubOption('card');
+                            }
+                          }}
                           className={`py-2 text-xs font-bold rounded-xl border transition-all ${
                             paymentMethod === pm.key
                               ? 'bg-primary-600 text-white border-primary-600 shadow'
@@ -816,6 +841,34 @@ const Sales = () => {
                       ))}
                     </div>
                   </div>
+
+                  {/* Card Sub-payment methods */}
+                  {paymentMethod === 'card' && (
+                    <div className="space-y-1.5 p-3 bg-gray-50 border border-gray-150 rounded-xl">
+                      <label className="block text-[11px] font-black uppercase text-gray-500">Card Processor</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { key: 'visa', label: '💳 Visa' },
+                          { key: 'apple_pay', label: ' Apple Pay' },
+                          { key: 'samsung_pay', label: '📱 Samsung Pay' },
+                          { key: 'card', label: 'Standard Card' }
+                        ].map(sub => (
+                          <button
+                            key={sub.key}
+                            type="button"
+                            onClick={() => setCardSubOption(sub.key)}
+                            className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition-all ${
+                              cardSubOption === sub.key
+                                ? 'bg-gray-800 text-white border-gray-800 shadow-sm'
+                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            {sub.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                 </div>
               )}

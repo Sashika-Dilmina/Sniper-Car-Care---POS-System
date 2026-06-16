@@ -872,6 +872,75 @@ const getPurchasesReport = asyncHandler(async (req, res) => {
   res.json(reportData);
 });
 
+// @desc    Get Profit & Loss statement report
+// @route   GET /api/analytics/reports/profit-loss
+// @access  Private (Admin)
+const getProfitLossReport = asyncHandler(async (req, res) => {
+  const { start_date, end_date } = req.query;
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({ success: false, message: 'Start date and end date are required' });
+  }
+
+  // 1. Get total sales
+  const [salesResult] = await pool.query(
+    "SELECT COALESCE(SUM(total), 0) as total_sales, COUNT(*) as sales_count FROM orders WHERE payment_status = 'paid' AND DATE(created_at) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
+  // 2. Get total purchases
+  const [purchasesResult] = await pool.query(
+    "SELECT COALESCE(SUM(total_price), 0) as total_purchases, COUNT(*) as purchases_count FROM purchases WHERE DATE(purchase_date) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
+  // 3. Get total expenses
+  const [expensesResult] = await pool.query(
+    "SELECT COALESCE(SUM(amount), 0) as total_expenses, COUNT(*) as expenses_count FROM expenses WHERE DATE(expense_date) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
+  // 4. Get purchases by category
+  const [purchasesByCategory] = await pool.query(
+    "SELECT category, COALESCE(SUM(total_price), 0) as total, COUNT(*) as count FROM purchases WHERE DATE(purchase_date) BETWEEN ? AND ? GROUP BY category",
+    [start_date, end_date]
+  );
+
+  // 5. Get expenses by category
+  const [expensesByCategory] = await pool.query(
+    "SELECT category, COALESCE(SUM(amount), 0) as total, COUNT(*) as count FROM expenses WHERE DATE(expense_date) BETWEEN ? AND ? GROUP BY category",
+    [start_date, end_date]
+  );
+
+  // 6. Get credits outstanding summary
+  const [creditsResult] = await pool.query(
+    "SELECT COALESCE(SUM(remaining_amount), 0) as total_outstanding, COUNT(*) as count FROM customer_credits WHERE status != 'fully_paid'"
+  );
+
+  const totalSales = parseFloat(salesResult[0].total_sales || 0);
+  const totalPurchases = parseFloat(purchasesResult[0].total_purchases || 0);
+  const totalExpenses = parseFloat(expensesResult[0].total_expenses || 0);
+  const netProfit = totalSales - totalPurchases - totalExpenses;
+
+  res.json({
+    success: true,
+    period: { start_date, end_date },
+    summary: {
+      total_sales: totalSales,
+      sales_count: salesResult[0].sales_count,
+      total_purchases: totalPurchases,
+      purchases_count: purchasesResult[0].purchases_count,
+      total_expenses: totalExpenses,
+      expenses_count: expensesResult[0].expenses_count,
+      net_profit: netProfit,
+      outstanding_credit: parseFloat(creditsResult[0].total_outstanding || 0),
+      outstanding_credit_count: creditsResult[0].count
+    },
+    purchases_by_category: purchasesByCategory || [],
+    expenses_by_category: expensesByCategory || []
+  });
+});
+
 module.exports = {
   getDashboardAnalytics,
   getSalesReport,
@@ -880,6 +949,7 @@ module.exports = {
   getPaymentTypeReport,
   getCustomerWiseReport,
   getSupplierPaymentReport,
-  getPurchasesReport
+  getPurchasesReport,
+  getProfitLossReport
 };
 

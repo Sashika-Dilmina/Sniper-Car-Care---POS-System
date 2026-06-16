@@ -19,6 +19,10 @@ import Employees from './pages/Employees';
 import Reports from './pages/Reports';
 import ANPR from './pages/ANPR';
 import VIPDashboard from './components/VIPDashboard';
+import Suppliers from './pages/Suppliers';
+import Purchases from './pages/Purchases';
+import Expenses from './pages/Expenses';
+import Credits from './pages/Credits';
 
 function App() {
   return (
@@ -62,6 +66,31 @@ function App() {
                 </AdminRoute>
               } 
             />
+            <Route 
+              path="suppliers" 
+              element={
+                <AdminRoute>
+                  <Suppliers />
+                </AdminRoute>
+              } 
+            />
+            <Route 
+              path="purchases" 
+              element={
+                <AdminRoute>
+                  <Purchases />
+                </AdminRoute>
+              } 
+            />
+            <Route 
+              path="expenses" 
+              element={
+                <AdminRoute>
+                  <Expenses />
+                </AdminRoute>
+              } 
+            />
+            <Route path="credits" element={<Credits />} />
             <Route path="anpr" element={<ANPR />} />
             <Route path="vip" element={<VIPDashboard />} />
           </Route>

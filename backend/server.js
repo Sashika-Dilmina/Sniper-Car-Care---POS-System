@@ -21,6 +21,10 @@ const mockRoutes = require('./routes/mockRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const vipBookingRoutes = require('./routes/vipBookingRoutes');
 const vehicleRegistrationRoutes = require('./routes/vehicleRegistrationRoutes');
+const supplierRoutes = require('./routes/supplierRoutes');
+const purchaseRoutes = require('./routes/purchaseRoutes');
+const expenseRoutes = require('./routes/expenseRoutes');
+const creditRoutes = require('./routes/creditRoutes');
 const { startFtpServer } = require('./services/ftpServer');
 const { startFileWatcher } = require('./services/anprWatcher');
 
@@ -78,6 +82,10 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/mock', mockRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/purchases', purchaseRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/credits', creditRoutes);
 app.use('/api/vehicle-registration', vehicleRegistrationRoutes);
 
 // Error handling middleware

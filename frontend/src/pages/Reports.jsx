@@ -40,6 +40,12 @@ const Reports = () => {
   const [purchaseReport, setPurchaseReport] = useState(null);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
 
+  // Profit & Loss State
+  const [plStartDate, setPlStartDate] = useState('');
+  const [plEndDate, setPlEndDate] = useState('');
+  const [plReport, setPlReport] = useState(null);
+  const [plLoading, setPlLoading] = useState(false);
+
   // Daily Business Summary
   const fetchDailySummary = async () => {
     setDailyLoading(true);
@@ -131,6 +137,27 @@ const Reports = () => {
       toast.error('Failed to generate purchases report');
     } finally {
       setPurchaseLoading(false);
+    }
+  };
+
+  // Profit & Loss Summary
+  const fetchProfitLossReport = async () => {
+    if (!plStartDate || !plEndDate) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+    setPlLoading(true);
+    try {
+      const response = await axios.get(`/api/analytics/reports/profit-loss?start_date=${plStartDate}&end_date=${plEndDate}`);
+      if (response.data.success) {
+        setPlReport(response.data);
+      } else {
+        toast.error(response.data.message || 'Failed to generate Profit & Loss report');
+      }
+    } catch (error) {
+      toast.error('Failed to generate Profit & Loss report');
+    } finally {
+      setPlLoading(false);
     }
   };
 
@@ -266,6 +293,7 @@ const Reports = () => {
     { id: 'customer', label: 'Customer Wise Report' },
     { id: 'supplier', label: 'Supplier Payment' },
     { id: 'purchases', label: 'Purchase of Items' },
+    { id: 'profit_loss', label: 'Profit & Loss Statement' },
   ];
 
   return (
@@ -875,6 +903,169 @@ const Reports = () => {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Profit & Loss Statement */}
+      {activeTab === 'profit_loss' && (
+        <div className="bg-white p-6 rounded-lg shadow space-y-6">
+          <h2 className="text-xl font-bold mb-4">Profit & Loss Statement</h2>
+          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-end bg-gray-50 p-4 rounded-xl border">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <input
+                type="date"
+                value={plStartDate}
+                onChange={(e) => setPlStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <input
+                type="date"
+                value={plEndDate}
+                onChange={(e) => setPlEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <button
+              onClick={fetchProfitLossReport}
+              disabled={plLoading}
+              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-bold"
+            >
+              {plLoading ? 'Generating...' : 'Generate P&L'}
+            </button>
+          </div>
+
+          {plReport && plReport.summary && (
+            <div className="space-y-6">
+              {/* Financial Metrics Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Sales Revenue</span>
+                  <h3 className="text-3xl font-black text-blue-600 mt-2">
+                    AED {plReport.summary.total_sales.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </h3>
+                  <span className="text-xs text-gray-400 mt-4">{plReport.summary.sales_count} sales transactions</span>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Purchases</span>
+                  <h3 className="text-3xl font-black text-orange-600 mt-2">
+                    AED {plReport.summary.total_purchases.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </h3>
+                  <span className="text-xs text-gray-400 mt-4">{plReport.summary.purchases_count} purchase orders</span>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Expenses</span>
+                  <h3 className="text-3xl font-black text-red-500 mt-2">
+                    AED {plReport.summary.total_expenses.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </h3>
+                  <span className="text-xs text-gray-400 mt-4">{plReport.summary.expenses_count} expense entries</span>
+                </div>
+                <div className={`p-6 rounded-2xl shadow-sm border flex flex-col justify-between ${
+                  plReport.summary.net_profit >= 0 
+                    ? 'bg-green-50/50 border-green-200 text-green-900' 
+                    : 'bg-red-50/50 border-red-200 text-red-900'
+                }`}>
+                  <span className="text-sm font-bold uppercase tracking-wider text-gray-500">Net Profit / Loss</span>
+                  <h3 className={`text-3xl font-black mt-2 ${
+                    plReport.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    AED {plReport.summary.net_profit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </h3>
+                  <span className="text-xs font-semibold mt-4">
+                    {plReport.summary.net_profit >= 0 ? '🟢 Profit generated' : '🔴 Net loss in period'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Secondary Details (Credits Summary) */}
+              <div className="bg-gray-50 p-4 rounded-xl border flex justify-between items-center text-sm">
+                <div>
+                  <h4 className="font-bold text-gray-800">Outstanding Customer Credit Ledger</h4>
+                  <p className="text-xs text-gray-500 mt-0.5">Total credit currently active (not yet paid by customers)</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-black text-red-600">
+                    AED {plReport.summary.outstanding_credit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </p>
+                  <p className="text-xs font-bold text-gray-400">{plReport.summary.outstanding_credit_count} active credits</p>
+                </div>
+              </div>
+
+              {/* Categorized breakdown sections */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                
+                {/* Purchases by Category */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-black text-gray-800 border-b pb-2">📦 Purchases by Category</h3>
+                  {plReport.purchases_by_category && plReport.purchases_by_category.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Category</th>
+                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Count</th>
+                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {plReport.purchases_by_category.map((cat, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50/50">
+                              <td className="px-4 py-2 text-sm font-semibold text-gray-700 capitalize">{cat.category}</td>
+                              <td className="px-4 py-2 text-sm text-center font-mono text-gray-600">{cat.count}</td>
+                              <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
+                                AED {parseFloat(cat.total).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 bg-gray-50 rounded-xl text-gray-400 text-xs">
+                      No purchases recorded in this range.
+                    </div>
+                  )}
+                </div>
+
+                {/* Expenses by Category */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-black text-gray-800 border-b pb-2">💸 Expenses by Category</h3>
+                  {plReport.expenses_by_category && plReport.expenses_by_category.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Category</th>
+                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Count</th>
+                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {plReport.expenses_by_category.map((cat, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50/50">
+                              <td className="px-4 py-2 text-sm font-semibold text-gray-700 capitalize">{cat.category}</td>
+                              <td className="px-4 py-2 text-sm text-center font-mono text-gray-600">{cat.count}</td>
+                              <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
+                                AED {parseFloat(cat.total).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 bg-gray-50 rounded-xl text-gray-400 text-xs">
+                      No expenses recorded in this range.
+                    </div>
+                  )}
+                </div>
+
+              </div>
             </div>
           )}
         </div>
