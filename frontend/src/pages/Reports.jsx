@@ -10,11 +10,11 @@ const Reports = () => {
   const [dailyReport, setDailyReport] = useState(null);
   const [dailyLoading, setDailyLoading] = useState(false);
 
-  // Monthly Summary State
-  const [monthlyYear, setMonthlyYear] = useState(new Date().getFullYear());
-  const [monthlyMonth, setMonthlyMonth] = useState(new Date().getMonth() + 1);
-  const [monthlyReport, setMonthlyReport] = useState(null);
-  const [monthlyLoading, setMonthlyLoading] = useState(false);
+  // Credit Report State
+  const [creditStartDate, setCreditStartDate] = useState('');
+  const [creditEndDate, setCreditEndDate] = useState('');
+  const [creditReport, setCreditReport] = useState(null);
+  const [creditLoading, setCreditLoading] = useState(false);
 
   // Payment Type State
   const [paymentStartDate, setPaymentStartDate] = useState('');
@@ -59,16 +59,30 @@ const Reports = () => {
     }
   };
 
-  // Monthly Summary
-  const fetchMonthlySummary = async () => {
-    setMonthlyLoading(true);
+  // Credit Report
+  const fetchCreditReport = async () => {
+    if (!creditStartDate || !creditEndDate) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+    setCreditLoading(true);
     try {
-      const response = await axios.get(`/api/analytics/reports/monthly-summary?year=${monthlyYear}&month=${monthlyMonth}`);
-      setMonthlyReport(response.data);
+      const response = await axios.get('/api/credits');
+      if (response.data.success) {
+        const start = new Date(creditStartDate + 'T00:00:00');
+        const end = new Date(creditEndDate + 'T23:59:59');
+        const filtered = (response.data.credits || []).filter(c => {
+          const date = new Date(c.created_at);
+          return date >= start && date <= end;
+        });
+        setCreditReport(filtered);
+      } else {
+        toast.error('Failed to generate credit report');
+      }
     } catch (error) {
-      toast.error('Failed to generate monthly summary');
+      toast.error('Failed to generate credit report');
     } finally {
-      setMonthlyLoading(false);
+      setCreditLoading(false);
     }
   };
 
@@ -180,23 +194,6 @@ const Reports = () => {
     }
   };
 
-  const downloadMonthlyExcel = async () => {
-    try {
-      const response = await axios.get(`/api/analytics/reports/monthly-summary?year=${monthlyYear}&month=${monthlyMonth}&format=excel`, {
-        responseType: 'blob'
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `monthly-summary-${monthlyYear}-${monthlyMonth}.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      toast.success('Excel file downloaded successfully');
-    } catch (error) {
-      toast.error('Failed to download Excel file');
-    }
-  };
 
   const downloadPaymentTypeExcel = async () => {
     if (!paymentStartDate || !paymentEndDate) {
@@ -288,22 +285,87 @@ const Reports = () => {
 
   const tabs = [
     { id: 'daily', label: 'Daily Business Summary' },
-    { id: 'monthly', label: 'Monthly Summary' },
+    { id: 'business_summary', label: 'Business Summary Report' },
     { id: 'payment', label: 'Payment Type Report' },
     { id: 'customer', label: 'Customer Wise Report' },
     { id: 'supplier', label: 'Supplier Payment' },
     { id: 'purchases', label: 'Purchase of Items' },
-    { id: 'profit_loss', label: 'Profit & Loss Statement' },
+    { id: 'credit', label: 'Credit Report' },
   ];
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const printStyle = `
+    @media print {
+      aside, nav, .no-print, button, input, select, header {
+        display: none !important;
+      }
+      body, html {
+        background: white !important;
+        color: black !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      main {
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .print-full-width {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+      }
+      h1, h2, h3, h4, p, td, th {
+        color: black !important;
+      }
+      table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin-top: 15px !important;
+      }
+      th, td {
+        border: 1px solid #ccc !important;
+        padding: 6px 10px !important;
+        text-align: left !important;
+        font-size: 10pt !important;
+      }
+      th {
+        background-color: #f3f4f6 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  `;
+
+  const totalCreditGranted = creditReport ? creditReport.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0) : 0;
+  const totalOutstanding = creditReport ? creditReport.reduce((sum, c) => sum + parseFloat(c.remaining_amount || 0), 0) : 0;
+  const totalRecovered = totalCreditGranted - totalOutstanding;
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-gray-800">Reports</h1>
+      <style>{printStyle}</style>
+      <div className="flex justify-between items-center no-print">
+        <h1 className="text-3xl font-bold text-gray-800">Reports</h1>
+        <button
+          onClick={handlePrint}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm font-semibold"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          Print Report
+        </button>
+      </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow no-print">
         <div className="border-b border-gray-200">
-          <nav className="flex space-x-1 p-2">
+          <nav className="flex flex-wrap space-x-1 p-2">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -324,7 +386,7 @@ const Reports = () => {
       {activeTab === 'daily' && (
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold mb-4">Daily Business Summary</h2>
-          <div className="mb-4 flex gap-4 items-end">
+          <div className="mb-4 flex gap-4 items-end no-print">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
               <input
@@ -440,121 +502,12 @@ const Reports = () => {
         </div>
       )}
 
-      {/* Monthly Summary */}
-      {activeTab === 'monthly' && (
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-bold mb-4">Monthly Summary Report</h2>
-          <div className="mb-4 flex gap-4 items-end">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-              <input
-                type="number"
-                value={monthlyYear}
-                onChange={(e) => setMonthlyYear(parseInt(e.target.value))}
-                className="w-32 px-4 py-2 border rounded-lg"
-                min="2020"
-                max="2099"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
-              <select
-                value={monthlyMonth}
-                onChange={(e) => setMonthlyMonth(parseInt(e.target.value))}
-                className="w-32 px-4 py-2 border rounded-lg"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                  <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString('default', { month: 'long' })}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={fetchMonthlySummary}
-              disabled={monthlyLoading}
-              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
-            >
-              {monthlyLoading ? 'Loading...' : 'Generate Report'}
-            </button>
-            <button
-              onClick={downloadMonthlyExcel}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
-              title="Download as Excel"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Download Excel
-            </button>
-          </div>
-
-          {monthlyReport && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Revenue</p>
-                  <p className="text-2xl font-bold text-primary-600">
-                    AED {parseFloat(monthlyReport.totals?.total_revenue || 0).toLocaleString()}
-                  </p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Orders</p>
-                  <p className="text-2xl font-bold">{monthlyReport.totals?.total_orders || 0}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Services Revenue</p>
-                  <p className="text-2xl font-bold text-green-600">
-                    AED {parseFloat(monthlyReport.totals?.total_services_revenue || 0).toLocaleString()}
-                  </p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Services</p>
-                  <p className="text-2xl font-bold">{monthlyReport.totals?.total_services || 0}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Unique Customers</p>
-                  <p className="text-2xl font-bold">{monthlyReport.totals?.unique_customers || 0}</p>
-                </div>
-              </div>
-
-              {monthlyReport.daily_orders && monthlyReport.daily_orders.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Daily Orders Breakdown</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left">Date</th>
-                          <th className="px-4 py-2 text-right">Orders</th>
-                          <th className="px-4 py-2 text-right">Paid Orders</th>
-                          <th className="px-4 py-2 text-right">Daily Revenue</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {monthlyReport.daily_orders.map((day, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="px-4 py-2">{new Date(day.date).toLocaleDateString()}</td>
-                            <td className="px-4 py-2 text-right">{day.orders_count}</td>
-                            <td className="px-4 py-2 text-right">{day.paid_orders}</td>
-                            <td className="px-4 py-2 text-right">
-                              AED {parseFloat(day.daily_revenue || 0).toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Payment Type Report */}
       {activeTab === 'payment' && (
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold mb-4">Payment Type Report</h2>
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <input
@@ -638,7 +591,7 @@ const Reports = () => {
       {activeTab === 'customer' && (
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold mb-4">Customer Wise Report</h2>
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <input
@@ -727,7 +680,7 @@ const Reports = () => {
       {activeTab === 'supplier' && (
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold mb-4">Supplier Payment Report</h2>
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <input
@@ -806,7 +759,7 @@ const Reports = () => {
       {activeTab === 'purchases' && (
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold mb-4">Purchase of Items Report</h2>
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <input
@@ -908,11 +861,11 @@ const Reports = () => {
         </div>
       )}
 
-      {/* Profit & Loss Statement */}
-      {activeTab === 'profit_loss' && (
+      {/* Business Summary Report */}
+      {activeTab === 'business_summary' && (
         <div className="bg-white p-6 rounded-lg shadow space-y-6">
-          <h2 className="text-xl font-bold mb-4">Profit & Loss Statement</h2>
-          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-end bg-gray-50 p-4 rounded-xl border">
+          <h2 className="text-xl font-bold mb-4">Business Summary Report</h2>
+          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-end bg-gray-50 p-4 rounded-xl border no-print">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <input
@@ -1065,6 +1018,118 @@ const Reports = () => {
                   )}
                 </div>
 
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Credit Report */}
+      {activeTab === 'credit' && (
+        <div className="bg-white p-6 rounded-lg shadow space-y-6">
+          <h2 className="text-xl font-bold mb-4">Credit Report</h2>
+          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-end bg-gray-50 p-4 rounded-xl border no-print">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <input
+                type="date"
+                value={creditStartDate}
+                onChange={(e) => setCreditStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <input
+                type="date"
+                value={creditEndDate}
+                onChange={(e) => setCreditEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <button
+              onClick={fetchCreditReport}
+              disabled={creditLoading}
+              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-bold"
+            >
+              {creditLoading ? 'Generating...' : 'Generate Report'}
+            </button>
+          </div>
+
+          {creditReport && (
+            <div className="space-y-6">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Credit Granted</span>
+                  <h3 className="text-3xl font-black text-orange-600 mt-2">
+                    AED {totalCreditGranted.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </h3>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Recovered</span>
+                  <h3 className="text-3xl font-black text-green-600 mt-2">
+                    AED {totalRecovered.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </h3>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Outstanding Balance</span>
+                  <h3 className="text-3xl font-black text-red-600 mt-2">
+                    AED {totalOutstanding.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </h3>
+                </div>
+              </div>
+
+              {/* Credits List Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Date</th>
+                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Customer</th>
+                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Plate</th>
+                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Credit</th>
+                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Recovered</th>
+                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Remaining</th>
+                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {creditReport.length > 0 ? (
+                      creditReport.map((c) => (
+                        <tr key={c.id} className="hover:bg-gray-50/50">
+                          <td className="px-4 py-2 text-sm text-gray-600">{new Date(c.created_at).toLocaleDateString()}</td>
+                          <td className="px-4 py-2 text-sm font-semibold text-gray-800">{c.customer_name}</td>
+                          <td className="px-4 py-2 text-sm font-mono text-gray-700">{c.vehicle_plate}</td>
+                          <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
+                            AED {parseFloat(c.amount || 0).toFixed(2)}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-right text-green-600">
+                            AED {parseFloat(c.amount - c.remaining_amount || 0).toFixed(2)}
+                          </td>
+                          <td className="px-4 py-2 text-sm font-bold text-right text-red-600">
+                            AED {parseFloat(c.remaining_amount || 0).toFixed(2)}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                              c.status === 'fully_paid' ? 'bg-green-100 text-green-800' :
+                              c.status === 'partially_paid' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {c.status.replace('_', ' ')}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="7" className="text-center py-6 text-gray-500 text-sm">
+                          No credit records found in this range.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

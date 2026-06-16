@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const Services = () => {
+  const { user } = useAuth();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Saloon'); // 'Saloon' or '4x4'
@@ -13,6 +15,7 @@ const Services = () => {
     name: '',
     description: '',
     price: '',
+    purchase_price: '',
     vehicle_type: 'Saloon',
     image_url: ''
   });
@@ -79,7 +82,12 @@ const Services = () => {
     e.preventDefault();
 
     if (formData.price < 0) {
-      toast.error('Price cannot be negative');
+      toast.error('Selling price cannot be negative');
+      return;
+    }
+
+    if (formData.purchase_price < 0) {
+      toast.error('Cost price cannot be negative');
       return;
     }
 
@@ -88,6 +96,7 @@ const Services = () => {
       description: formData.description,
       category: 'Services',
       price: parseFloat(formData.price),
+      purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0,
       stock: 0,
       image_url: formData.image_url,
       vehicle_type: formData.vehicle_type
@@ -115,6 +124,7 @@ const Services = () => {
       name: service.name,
       description: service.description || '',
       price: service.price,
+      purchase_price: service.purchase_price || '',
       vehicle_type: service.vehicle_type || 'Saloon',
       image_url: service.image_url || ''
     });
@@ -139,6 +149,7 @@ const Services = () => {
       name: '',
       description: '',
       price: '',
+      purchase_price: '',
       vehicle_type: activeTab,
       image_url: ''
     });
@@ -155,18 +166,20 @@ const Services = () => {
           <h1 className="text-3xl font-bold text-gray-800">Service Offerings</h1>
           <p className="text-gray-500 text-sm mt-1">Configure and manage services offered on Saloon and 4x4 websites.</p>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold shadow-sm flex items-center gap-1.5"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add Service
-        </button>
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold shadow-sm flex items-center gap-1.5"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Service
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -229,8 +242,13 @@ const Services = () => {
                     <span className="text-xs">No image uploaded</span>
                   </div>
                 )}
-                <div className="absolute top-3 right-3 bg-primary-600 text-white font-black px-3 py-1 rounded-full text-sm shadow-md">
-                  AED {parseFloat(service.price).toLocaleString()}
+                <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
+                  <span className="bg-primary-600 text-white font-black px-3 py-1 rounded-full text-xs shadow-md">
+                    Sell: AED {parseFloat(service.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </span>
+                  <span className="bg-gray-800 text-white font-semibold px-2 py-0.5 rounded-full text-[10px] shadow-md">
+                    Cost: AED {parseFloat(service.purchase_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </span>
                 </div>
               </div>
               
@@ -244,20 +262,22 @@ const Services = () => {
                   </p>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-5 mt-4 border-t border-gray-100">
-                  <button
-                    onClick={() => handleEdit(service)}
-                    className="px-3.5 py-1.5 text-sm font-semibold border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(service.id)}
-                    className="px-3.5 py-1.5 text-sm font-semibold border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
-                  >
-                    Delete
-                  </button>
-                </div>
+                {user?.role === 'admin' && (
+                  <div className="flex justify-end gap-3 pt-5 mt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => handleEdit(service)}
+                      className="px-3.5 py-1.5 text-sm font-semibold border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(service.id)}
+                      className="px-3.5 py-1.5 text-sm font-semibold border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -268,15 +288,17 @@ const Services = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
           </svg>
           <p className="text-gray-600 font-medium">No service offerings configured for {activeTab}.</p>
-          <button
-            onClick={() => {
-              resetForm();
-              setShowModal(true);
-            }}
-            className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold"
-          >
-            + Create First Service
-          </button>
+          {user?.role === 'admin' && (
+            <button
+              onClick={() => {
+                resetForm();
+                setShowModal(true);
+              }}
+              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold"
+            >
+              + Create First Service
+            </button>
+          )}
         </div>
       )}
 
@@ -314,7 +336,7 @@ const Services = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="col-span-2">
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                     Vehicle Type
                   </label>
@@ -329,7 +351,22 @@ const Services = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-                    Price (AED)
+                    Cost / Purchase Price (AED)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.purchase_price}
+                    onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
+                    placeholder="15.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Selling Price (AED)
                   </label>
                   <input
                     type="number"

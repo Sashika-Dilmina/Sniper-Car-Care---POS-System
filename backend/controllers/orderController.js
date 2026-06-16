@@ -56,7 +56,9 @@ const getOrders = asyncHandler(async (req, res) => {
     params.push(customer_id);
   }
 
-  if (date) {
+  if (req.user && req.user.role === 'staff') {
+    query += ' AND DATE(o.created_at) = CURDATE()';
+  } else if (date) {
     query += ' AND DATE(o.created_at) = ?';
     params.push(date);
   }

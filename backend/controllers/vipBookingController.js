@@ -47,7 +47,7 @@ async function sendVIPCompletionNotification(booking, customer, orderId) {
 // @route GET /api/vip-bookings
 // @access Private
 exports.getVIPBookings = asyncHandler(async (req, res) => {
-  const [bookings] = await db.query(`
+  let query = `
     SELECT 
       vb.*,
       vc.name,
@@ -62,8 +62,16 @@ exports.getVIPBookings = asyncHandler(async (req, res) => {
     JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     LEFT JOIN users u ON vb.assigned_staff_id = u.id
     LEFT JOIN orders o ON o.vip_booking_id = vb.id
-    ORDER BY vb.id DESC
-  `);
+  `;
+  const params = [];
+
+  if (req.user && req.user.role === 'staff') {
+    query += ' WHERE YEAR(vb.booking_date) = YEAR(CURDATE()) AND MONTH(vb.booking_date) = MONTH(CURDATE())';
+  }
+
+  query += ' ORDER BY vb.id DESC';
+
+  const [bookings] = await db.query(query, params);
   
   res.status(200).json({
     success: true,

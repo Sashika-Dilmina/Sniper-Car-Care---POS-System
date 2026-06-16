@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const Products = () => {
+  const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -13,6 +15,7 @@ const Products = () => {
     description: '',
     category: 'Accessories',
     price: '',
+    purchase_price: '',
     stock: '',
     image_url: ''
   });
@@ -107,7 +110,12 @@ const Products = () => {
 
     // Validate price is not negative
     if (formData.price < 0) {
-      toast.error('Price cannot be negative');
+      toast.error('Selling price cannot be negative');
+      return;
+    }
+
+    if (formData.purchase_price < 0) {
+      toast.error('Purchase price cannot be negative');
       return;
     }
 
@@ -126,6 +134,7 @@ const Products = () => {
         description: '',
         category: 'Accessories',
         price: '',
+        purchase_price: '',
         stock: '',
         image_url: ''
       });
@@ -142,6 +151,7 @@ const Products = () => {
       description: product.description || '',
       category: product.category,
       price: product.price,
+      purchase_price: product.purchase_price || '',
       stock: product.stock,
       image_url: product.image_url || ''
     });
@@ -251,23 +261,26 @@ const Products = () => {
             </svg>
             Export to Excel
           </button>
-          <button
-            onClick={() => {
-              setEditingProduct(null);
-              setFormData({
-                name: '',
-                description: '',
-                category: 'Accessories',
-                price: '',
-                stock: '',
-                image_url: ''
-              });
-              setShowModal(true);
-            }}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-          >
-            + Add Product
-          </button>
+          {user?.role === 'admin' && (
+            <button
+              onClick={() => {
+                setEditingProduct(null);
+                setFormData({
+                  name: '',
+                  description: '',
+                  category: 'Accessories',
+                  price: '',
+                  purchase_price: '',
+                  stock: '',
+                  image_url: ''
+                });
+                setShowModal(true);
+              }}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+            >
+              + Add Product
+            </button>
+          )}
         </div>
       </div>
 
@@ -302,9 +315,12 @@ const Products = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Image</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Price</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Selling Price</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              {user?.role === 'admin' && (
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -343,8 +359,11 @@ const Products = () => {
                       {product.category}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    AED {parseFloat(product.price).toLocaleString()}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    AED {parseFloat(product.purchase_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                    AED {parseFloat(product.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
@@ -365,20 +384,22 @@ const Products = () => {
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap space-x-2">
-                    <button
-                      onClick={() => handleEdit(product)}
-                      className="text-primary-600 hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(product.id)}
-                      className="text-red-600 hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </td>
+                  {user?.role === 'admin' && (
+                    <td className="px-6 py-4 whitespace-nowrap space-x-2">
+                      <button
+                        onClick={() => handleEdit(product)}
+                        className="text-primary-600 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(product.id)}
+                        className="text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             ) : (
@@ -478,33 +499,19 @@ const Products = () => {
                   </div>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg"
-                >
-                  <option value="Accessories">Accessories</option>
-                  <option value="Spare Parts">Spare Parts</option>
-                </select>
-              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Price
+                    Category
                   </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full px-4 py-2 border rounded-lg"
-                  />
+                  >
+                    <option value="Accessories">Accessories</option>
+                    <option value="Spare Parts">Spare Parts</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -516,6 +523,36 @@ const Products = () => {
                     min="0"
                     value={formData.stock}
                     onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Purchase Price
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.purchase_price}
+                    onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Selling Price
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     className="w-full px-4 py-2 border rounded-lg"
                   />
                 </div>

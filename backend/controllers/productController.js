@@ -53,15 +53,15 @@ const getProduct = asyncHandler(async (req, res) => {
 // @route   POST /api/products
 // @access  Private
 const createProduct = asyncHandler(async (req, res) => {
-  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type } = req.body;
+  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price } = req.body;
 
   if (!name || !category || !price || stock === undefined) {
     return res.status(400).json({ message: 'Please provide all required fields' });
   }
 
   const [result] = await pool.query(
-    'INSERT INTO products (name, description, category, price, stock, image_url, supplier_id, vehicle_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [name, description || null, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both']
+    'INSERT INTO products (name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [name, description || null, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00]
   );
 
   const [newProduct] = await pool.query('SELECT * FROM products WHERE id = ?', [result.insertId]);
@@ -74,7 +74,7 @@ const createProduct = asyncHandler(async (req, res) => {
 // @access  Private
 const updateProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type } = req.body;
+  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price } = req.body;
 
   const [products] = await pool.query('SELECT id FROM products WHERE id = ?', [id]);
   if (products.length === 0) {
@@ -82,8 +82,8 @@ const updateProduct = asyncHandler(async (req, res) => {
   }
 
   await pool.query(
-    'UPDATE products SET name = ?, description = ?, category = ?, price = ?, stock = ?, image_url = ?, supplier_id = ?, vehicle_type = ? WHERE id = ?',
-    [name, description, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', id]
+    'UPDATE products SET name = ?, description = ?, category = ?, price = ?, stock = ?, image_url = ?, supplier_id = ?, vehicle_type = ?, purchase_price = ? WHERE id = ?',
+    [name, description, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00, id]
   );
 
   const [updated] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
