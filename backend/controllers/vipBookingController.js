@@ -56,12 +56,13 @@ exports.getVIPBookings = asyncHandler(async (req, res) => {
       u.name as staff_name,
       o.id as order_id,
       o.payment_status as order_payment_status,
-      o.total as order_total
+      o.total as order_total,
+      (SELECT method FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) as payment_method
     FROM vip_bookings vb
     JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     LEFT JOIN users u ON vb.assigned_staff_id = u.id
     LEFT JOIN orders o ON o.vip_booking_id = vb.id
-    ORDER BY vb.appointment_date DESC, vb.appointment_time DESC
+    ORDER BY vb.id DESC
   `);
   
   res.status(200).json({
@@ -88,7 +89,8 @@ exports.getVIPBookingById = asyncHandler(async (req, res) => {
       vs.description as service_description,
       o.id as order_id,
       o.payment_status as order_payment_status,
-      o.total as order_total
+      o.total as order_total,
+      (SELECT method FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) as payment_method
     FROM vip_bookings vb
     JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     LEFT JOIN users u ON vb.assigned_staff_id = u.id
@@ -151,8 +153,8 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
     
     // Create booking
     const [bookingResult] = await db.query(
-      'INSERT INTO vip_bookings (vip_customer_id, service_type, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?, ?)',
-      [vipCustomerId, service_type, appointment_date || null, appointment_time || null, 'pending']
+      'INSERT INTO vip_bookings (vip_customer_id, service_type, appointment_date, appointment_time, status, notes) VALUES (?, ?, ?, ?, ?, ?)',
+      [vipCustomerId, service_type, appointment_date || null, appointment_time || null, 'pending', notes || null]
     );
 
     // Fetch price for VIP service from vip_services by service_type name
@@ -201,7 +203,7 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
 // @route PATCH /api/vip-bookings/:id
 // @access Private
 exports.updateVIPBooking = asyncHandler(async (req, res) => {
-  const { status, assigned_staff_id, notes, appointment_date, appointment_time } = req.body;
+  const { status, assigned_staff_id, notes, staff_notes, appointment_date, appointment_time } = req.body;
   
   const [booking] = await db.query(
     'SELECT * FROM vip_bookings WHERE id = ?',
@@ -231,6 +233,10 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
   if (notes !== undefined) {
     updateFields.push('notes = ?');
     updateValues.push(notes);
+  }
+  if (staff_notes !== undefined) {
+    updateFields.push('staff_notes = ?');
+    updateValues.push(staff_notes);
   }
   if (appointment_date !== undefined) {
     updateFields.push('appointment_date = ?');
@@ -269,7 +275,7 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
       [orderStatus, req.params.id]
     );
 
-    // If confirmed, send scheduling/confirmation SMS to customer
+    // If confirmed, send in-app notification to customer (no SMS)
     if (status === 'confirmed') {
       try {
         const [bookingRows] = await db.query('SELECT * FROM vip_bookings WHERE id = ?', [req.params.id]);
@@ -278,33 +284,21 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
           const [customerRows] = await db.query('SELECT * FROM vip_customers WHERE id = ?', [currentBooking.vip_customer_id]);
           if (customerRows.length > 0) {
             const customer = customerRows[0];
+            const formattedDate = currentBooking.appointment_date 
+              ? new Date(currentBooking.appointment_date).toLocaleDateString('en-GB') // e.g. DD/MM/YYYY
+              : '';
+            const formattedTime = currentBooking.appointment_time || '';
+            const message = `Your VIP ${currentBooking.service_type} booking has been confirmed! Your appointment is scheduled for ${formattedDate} at ${formattedTime}. Thank you for choosing Sniper Car Care!`;
             
-            // Format the phone
-            const formattedPhone = formatPhoneNumber(customer.phone);
-            if (formattedPhone) {
-              const formattedDate = currentBooking.appointment_date 
-                ? new Date(currentBooking.appointment_date).toLocaleDateString('en-GB') // e.g. DD/MM/YYYY
-                : '';
-              const formattedTime = currentBooking.appointment_time || '';
-              const firstName = customer.name ? customer.name.split(' ')[0] : 'Customer';
-              
-              const message = `Hi ${firstName}, your VIP ${currentBooking.service_type} booking has been confirmed! Your appointment is scheduled for ${formattedDate} at ${formattedTime}. Thank you for choosing Sniper Car Care!`;
-              
-              await sendReson8Message({
-                to: formattedPhone,
-                message,
-                campaignName: 'VIP_BOOKING_CONFIRMED',
-                metadata: {
-                  bookingId: currentBooking.id,
-                  vipCustomerId: customer.id
-                }
-              });
-              console.log(`[SMS] VIP Booking Confirmation SMS sent to ${customer.phone}`);
-            }
+            await db.query(
+              'INSERT INTO customer_notifications (vehicle_plate, title, message) VALUES (?, ?, ?)',
+              [customer.vehicle_model, 'Appointment Confirmed 📅', message]
+            );
+            console.log(`[Notification] VIP Booking Confirmation saved for plate ${customer.vehicle_model}`);
           }
         }
       } catch (err) {
-        console.error('Error sending VIP booking confirmation SMS:', err.message);
+        console.error('Error creating VIP booking confirmation notification:', err.message);
       }
     }
 

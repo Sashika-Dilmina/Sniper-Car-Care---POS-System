@@ -142,9 +142,53 @@ const getCustomerOrders = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Get notifications for customer (public)
+// @route   GET /api/public/customer/notifications
+// @access  Public
+const getCustomerNotifications = asyncHandler(async (req, res) => {
+  const { plate } = req.query;
+
+  if (!plate) {
+    return res.status(400).json({ message: 'Vehicle plate is required' });
+  }
+
+  const [notifications] = await pool.query(
+    'SELECT * FROM customer_notifications WHERE vehicle_plate = ? ORDER BY created_at DESC LIMIT 50',
+    [plate]
+  );
+
+  res.json({
+    success: true,
+    notifications
+  });
+});
+
+// @desc    Mark customer notifications as read (public)
+// @route   POST /api/public/customer/notifications/mark-read
+// @access  Public
+const markNotificationsAsRead = asyncHandler(async (req, res) => {
+  const { plate } = req.body;
+
+  if (!plate) {
+    return res.status(400).json({ message: 'Vehicle plate is required' });
+  }
+
+  await pool.query(
+    'UPDATE customer_notifications SET is_read = 1 WHERE vehicle_plate = ? AND is_read = 0',
+    [plate]
+  );
+
+  res.json({
+    success: true,
+    message: 'Notifications marked as read'
+  });
+});
+
 module.exports = {
   getCustomerByPlate,
   getCustomerById,
-  getCustomerOrders
+  getCustomerOrders,
+  getCustomerNotifications,
+  markNotificationsAsRead
 };
 

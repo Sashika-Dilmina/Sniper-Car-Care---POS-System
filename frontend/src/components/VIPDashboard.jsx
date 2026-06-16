@@ -16,6 +16,7 @@ const VIPDashboard = () => {
   const [bookingUpdate, setBookingUpdate] = useState({
     status: '',
     notes: '',
+    staff_notes: '',
     assigned_staff_id: ''
   });
 
@@ -26,6 +27,7 @@ const VIPDashboard = () => {
 
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
 
   // Fetch VIP bookings
   useEffect(() => {
@@ -107,6 +109,7 @@ const VIPDashboard = () => {
         setBookingUpdate({
           status: freshBooking.status,
           notes: freshBooking.notes || '',
+          staff_notes: freshBooking.staff_notes || '',
           assigned_staff_id: freshBooking.assigned_staff_id || ''
         });
         setScheduleData({
@@ -123,7 +126,7 @@ const VIPDashboard = () => {
     setUpdatingBookingId(bookingId);
     try {
       await axios.patch(`/api/vip/bookings/${bookingId}`, {
-        notes: bookingUpdate.notes,
+        staff_notes: bookingUpdate.staff_notes,
         assigned_staff_id: bookingUpdate.assigned_staff_id || null
       }, {
         headers: {
@@ -153,7 +156,7 @@ const VIPDashboard = () => {
         status: 'confirmed',
         appointment_date: scheduleData.appointment_date,
         appointment_time: scheduleData.appointment_time,
-        notes: bookingUpdate.notes,
+        staff_notes: bookingUpdate.staff_notes,
         assigned_staff_id: bookingUpdate.assigned_staff_id || null
       }, {
         headers: {
@@ -193,14 +196,14 @@ const VIPDashboard = () => {
     }
   };
 
-  const handleRecordManualPayment = async (orderId, amount) => {
+  const handleRecordManualPayment = async (orderId, amount, method = 'cash') => {
     if (!orderId) return;
     setManualPaymentLoading(true);
     try {
       await axios.post('/api/payments/manual', {
         order_id: orderId,
         amount: amount,
-        method: 'cash'
+        method: method
       }, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -241,6 +244,7 @@ const VIPDashboard = () => {
     setBookingUpdate({
       status: booking.status,
       notes: booking.notes || '',
+      staff_notes: booking.staff_notes || '',
       assigned_staff_id: booking.assigned_staff_id || ''
     });
     setScheduleData({
@@ -505,14 +509,32 @@ const VIPDashboard = () => {
                       </span>
                     </div>
                   </div>
+                  {selectedBooking.order_payment_status === 'paid' && (
+                    <div className="text-[10px] font-bold text-gray-500 uppercase text-right mt-1">
+                      Paid via: {selectedBooking.payment_method || 'manual'}
+                    </div>
+                  )}
                   {selectedBooking.order_payment_status !== 'paid' && (
-                    <button
-                      onClick={() => handleRecordManualPayment(selectedBooking.order_id, selectedBooking.order_total)}
-                      disabled={manualPaymentLoading}
-                      className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50"
-                    >
-                      💳 Record Cash/Manual Payment (AED {parseFloat(selectedBooking.order_total || 0).toLocaleString()})
-                    </button>
+                    <div className="border-t pt-2 mt-1 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-bold text-gray-600 uppercase">Select Payment Method</label>
+                        <select
+                          value={selectedPaymentMethod}
+                          onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                          className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-red-500 focus:border-red-500 outline-none"
+                        >
+                          <option value="cash">💵 Cash</option>
+                          <option value="card">💳 Card</option>
+                        </select>
+                      </div>
+                      <button
+                        onClick={() => handleRecordManualPayment(selectedBooking.order_id, selectedBooking.order_total, selectedPaymentMethod)}
+                        disabled={manualPaymentLoading}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50"
+                      >
+                        ⚡ Record Payment (AED {parseFloat(selectedBooking.order_total || 0).toLocaleString()})
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -556,7 +578,7 @@ const VIPDashboard = () => {
                       disabled={updatingBookingId === selectedBooking.id}
                       className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 rounded-lg transition"
                     >
-                      {updatingBookingId === selectedBooking.id ? 'Scheduling...' : 'Save & Send Confirm SMS'}
+                      {updatingBookingId === selectedBooking.id ? 'Scheduling...' : 'Save & Confirm'}
                     </button>
                     {isRescheduling && (
                       <button
@@ -651,16 +673,27 @@ const VIPDashboard = () => {
                   </select>
                 </div>
 
+                {/* Customer Notes (Read-Only) */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Notes
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    Customer Notes
+                  </label>
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700 italic">
+                    {selectedBooking.notes || 'No notes left by customer'}
+                  </div>
+                </div>
+
+                {/* Staff Notes */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    Staff Notes
                   </label>
                   <textarea
-                    value={bookingUpdate.notes}
-                    onChange={(e) => setBookingUpdate({ ...bookingUpdate, notes: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm resize-none"
+                    value={bookingUpdate.staff_notes}
+                    onChange={(e) => setBookingUpdate({ ...bookingUpdate, staff_notes: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-xs resize-none"
                     rows="3"
-                    placeholder="Add notes about this booking..."
+                    placeholder="Add notes from staff members..."
                   />
                 </div>
 

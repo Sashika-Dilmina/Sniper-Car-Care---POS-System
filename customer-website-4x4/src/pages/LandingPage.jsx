@@ -364,6 +364,39 @@ const LandingPage = () => {
     notes: ''
   });
 
+  const [notifications, setNotifications] = useState([]);
+  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const fetchNotifications = async () => {
+    if (!vehiclePlate) return;
+    try {
+      const response = await axios.get(`/api/public/customer/notifications?plate=${encodeURIComponent(vehiclePlate)}`);
+      if (response.data.success) {
+        setNotifications(response.data.notifications || []);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
+
+  const handleMarkNotificationsAsRead = async () => {
+    if (!vehiclePlate) return;
+    try {
+      await axios.post('/api/public/customer/notifications/mark-read', { plate: vehiclePlate });
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!vehiclePlate) return;
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 10000);
+    return () => clearInterval(interval);
+  }, [vehiclePlate]);
+
   useEffect(() => {
     const fetchServices = async () => {
       try {
@@ -837,7 +870,12 @@ const LandingPage = () => {
   const submitVIPBooking = async (e) => {
     e.preventDefault();
 
-    if (!vipBookingForm.name || !vipBookingForm.phone || !vipBookingForm.emirate || !vipBookingForm.plate_number || !vipBookingForm.service_type) {
+    const isRegistered = !!customerInfo;
+    const requiredFields = isRegistered
+      ? (vipBookingForm.name && vipBookingForm.phone && vipBookingForm.service_type)
+      : (vipBookingForm.name && vipBookingForm.phone && vipBookingForm.emirate && vipBookingForm.plate_number && vipBookingForm.service_type);
+
+    if (!requiredFields) {
       toast.error('Please fill all required fields');
       return;
     }
@@ -848,7 +886,9 @@ const LandingPage = () => {
       return;
     }
 
-    const plateStr = `${vipBookingForm.plate_code} ${vipBookingForm.emirate} ${vipBookingForm.plate_number}`;
+    const plateStr = isRegistered
+      ? (vehiclePlate || customerInfo.vehicle_plate || '')
+      : `${vipBookingForm.plate_code} ${vipBookingForm.emirate} ${vipBookingForm.plate_number}`;
 
     try {
       await axios.post('/api/vip/bookings', {
@@ -1014,11 +1054,67 @@ const LandingPage = () => {
               <SniperBrandLogo variant="header" />
             )}
           </a>
-          <div className="relative p-2 text-gray-800" aria-hidden="true">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
+          {/* Notification Bell */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowNotificationsDropdown(!showNotificationsDropdown);
+                if (!showNotificationsDropdown && unreadCount > 0) {
+                  handleMarkNotificationsAsRead();
+                }
+              }}
+              className="relative p-2 text-gray-800 hover:text-red-600 transition outline-none"
+              aria-label="View notifications"
+              disabled={!vehiclePlate}
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {vehiclePlate && unreadCount > 0 && (
+                <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white ring-2 ring-white">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Notifications Dropdown */}
+            {showNotificationsDropdown && vehiclePlate && (
+              <div className="absolute right-0 mt-2 w-80 rounded-xl border border-gray-100 bg-white p-4 shadow-xl ring-1 ring-black/5 z-50 text-left">
+                <div className="flex items-center justify-between border-b pb-2 mb-2">
+                  <h4 className="font-bold text-gray-900 text-sm">Notifications</h4>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkNotificationsAsRead}
+                      className="text-xs font-semibold text-red-600 hover:text-red-700 transition"
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+                  {notifications.length === 0 ? (
+                    <p className="text-xs text-gray-500 text-center py-4">No notifications yet</p>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`p-2.5 rounded-lg border text-xs transition ${
+                          n.is_read ? 'bg-white border-gray-100 text-gray-600' : 'bg-red-50/50 border-red-100 text-gray-900 font-medium'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-gray-900">{n.title}</span>
+                          <span className="text-[10px] text-gray-400">
+                            {new Date(n.created_at).toLocaleDateString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-[11px] leading-snug">{n.message}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </nav>
         {mobileMenuOpen && (
@@ -1489,62 +1585,66 @@ const LandingPage = () => {
                 </select>
               </div>
 
-              <div className="border-t pt-3">
-                <h4 className="text-sm font-bold text-gray-800 mb-2">Vehicle Registration</h4>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Emirate Dropdown */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Emirate *</label>
-                    <select
-                      value={vipBookingForm.emirate}
-                      onChange={(e) => setVipBookingForm({ ...vipBookingForm, emirate: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
-                      required
-                    >
-                      <option value="">Select Emirate</option>
-                      <option value="Dubai">Dubai</option>
-                      <option value="Abu Dhabi">Abu Dhabi</option>
-                      <option value="Sharjah">Sharjah</option>
-                      <option value="Ajman">Ajman</option>
-                      <option value="Umm Al Quwain">Umm Al Quwain</option>
-                      <option value="Ras Al Khaimah">Ras Al Khaimah</option>
-                      <option value="Fujairah">Fujairah</option>
-                    </select>
+              {!customerInfo && (
+                <>
+                  <div className="border-t pt-3">
+                    <h4 className="text-sm font-bold text-gray-800 mb-2">Vehicle Registration</h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Emirate Dropdown */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Emirate *</label>
+                        <select
+                          value={vipBookingForm.emirate}
+                          onChange={(e) => setVipBookingForm({ ...vipBookingForm, emirate: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                          required={!customerInfo}
+                        >
+                          <option value="">Select Emirate</option>
+                          <option value="Dubai">Dubai</option>
+                          <option value="Abu Dhabi">Abu Dhabi</option>
+                          <option value="Sharjah">Sharjah</option>
+                          <option value="Ajman">Ajman</option>
+                          <option value="Umm Al Quwain">Umm Al Quwain</option>
+                          <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                          <option value="Fujairah">Fujairah</option>
+                        </select>
+                      </div>
+
+                      {/* Plate Code Dropdown */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
+                        <SearchableSelect
+                          options={vipPlateCodes}
+                          value={vipBookingForm.plate_code}
+                          onChange={(val) => setVipBookingForm(prev => ({ ...prev, plate_code: val }))}
+                          disabled={vipPlateCodes.length === 0}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Plate Number Input */}
+                    <div className="mt-3">
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
+                      <input
+                        type="text"
+                        required={!customerInfo}
+                        value={vipBookingForm.plate_number}
+                        onChange={(e) => setVipBookingForm({ ...vipBookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                        className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
+                        placeholder="12345"
+                      />
+                    </div>
                   </div>
 
-                  {/* Plate Code Dropdown */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
-                    <SearchableSelect
-                      options={vipPlateCodes}
-                      value={vipBookingForm.plate_code}
-                      onChange={(val) => setVipBookingForm(prev => ({ ...prev, plate_code: val }))}
-                      disabled={vipPlateCodes.length === 0}
-                    />
-                  </div>
-                </div>
-
-                {/* Plate Number Input */}
-                <div className="mt-3">
-                  <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
-                  <input
-                    type="text"
-                    required
-                    value={vipBookingForm.plate_number}
-                    onChange={(e) => setVipBookingForm({ ...vipBookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
-                    placeholder="12345"
+                  {/* Plate Live Preview */}
+                  <VehiclePlatePreview 
+                    emirate={vipBookingForm.emirate}
+                    plateCode={vipBookingForm.plate_code}
+                    plateNumber={vipBookingForm.plate_number}
                   />
-                </div>
-              </div>
-
-              {/* Plate Live Preview */}
-              <VehiclePlatePreview 
-                emirate={vipBookingForm.emirate}
-                plateCode={vipBookingForm.plate_code}
-                plateNumber={vipBookingForm.plate_number}
-              />
+                </>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Note (Optional)</label>

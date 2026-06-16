@@ -13,6 +13,8 @@ router.get('/products/:id', publicProductController.getProduct);
 router.get('/customer/by-plate', publicCustomerController.getCustomerByPlate);
 router.get('/customer/by-id', publicCustomerController.getCustomerById);
 router.get('/customer/orders', publicCustomerController.getCustomerOrders);
+router.get('/customer/notifications', publicCustomerController.getCustomerNotifications);
+router.post('/customer/notifications/mark-read', publicCustomerController.markNotificationsAsRead);
 
 // Public order routes
 router.post('/orders', publicOrderController.createOrder);
