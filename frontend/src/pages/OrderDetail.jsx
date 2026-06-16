@@ -143,6 +143,7 @@ const OrderDetail = () => {
 
   const remainingAmount = parseFloat(order.total) - (order.payments?.reduce((sum, p) => sum + (p.status === 'completed' ? parseFloat(p.amount) : 0), 0) || 0);
   const isCashOrder = !order.payments || order.payments.length === 0 || order.payments.every(p => p.method === 'cash');
+  const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
 
   return (
     <div className="space-y-6">
@@ -182,9 +183,9 @@ const OrderDetail = () => {
                 {order.status === 'pending' && (
                   <button
                     onClick={() => handleStatusUpdate('processing')}
-                    disabled={order.payment_status !== 'paid'}
+                    disabled={!isVipOrder && order.payment_status !== 'paid'}
                     className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-green-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={order.payment_status !== 'paid' ? 'Payment must be completed to start service' : ''}
+                    title={!isVipOrder && order.payment_status !== 'paid' ? 'Payment must be completed to start service' : ''}
                   >
                     ⚡ Service Start
                   </button>

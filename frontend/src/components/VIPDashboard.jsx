@@ -5,20 +5,32 @@ import toast from 'react-hot-toast';
 const VIPDashboard = () => {
   const [vipBookings, setVipBookings] = useState([]);
   const [vipCustomers, setVipCustomers] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedView, setSelectedView] = useState('bookings'); // 'bookings' or 'customers'
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
+  
   const [bookingUpdate, setBookingUpdate] = useState({
     status: '',
-    notes: ''
+    notes: '',
+    assigned_staff_id: ''
   });
+
+  const [scheduleData, setScheduleData] = useState({
+    appointment_date: '',
+    appointment_time: ''
+  });
+
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
 
   // Fetch VIP bookings
   useEffect(() => {
     fetchVIPBookings();
+    fetchEmployees();
 
     const interval = setInterval(() => {
       fetchVIPBookings(true);
@@ -26,6 +38,19 @@ const VIPDashboard = () => {
 
     return () => clearInterval(interval);
   }, []);
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await axios.get('/api/employees', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      setEmployees(response.data.employees || []);
+    } catch (error) {
+      console.error('Failed to load employees:', error);
+    }
+  };
 
   const fetchVIPBookings = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -69,28 +94,128 @@ const VIPDashboard = () => {
     }
   };
 
-  const updateBookingStatus = async (bookingId) => {
-    if (!bookingUpdate.status && !bookingUpdate.notes) {
-      toast.error('Please update at least one field');
-      return;
-    }
-
-    setUpdatingBookingId(bookingId);
+  const fetchSingleBookingDetails = async (bookingId) => {
     try {
-      await axios.patch(`/api/vip/bookings/${bookingId}`, bookingUpdate, {
+      const response = await axios.get(`/api/vip/bookings/${bookingId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      toast.success('Booking updated successfully');
-      setShowBookingModal(false);
-      setBookingUpdate({ status: '', notes: '' });
+      if (response.data.success && response.data.data) {
+        const freshBooking = response.data.data;
+        setSelectedBooking(freshBooking);
+        setBookingUpdate({
+          status: freshBooking.status,
+          notes: freshBooking.notes || '',
+          assigned_staff_id: freshBooking.assigned_staff_id || ''
+        });
+        setScheduleData({
+          appointment_date: freshBooking.appointment_date ? freshBooking.appointment_date.split('T')[0] : '',
+          appointment_time: freshBooking.appointment_time || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching fresh booking details:', error);
+    }
+  };
+
+  const updateBookingDetails = async (bookingId) => {
+    setUpdatingBookingId(bookingId);
+    try {
+      await axios.patch(`/api/vip/bookings/${bookingId}`, {
+        notes: bookingUpdate.notes,
+        assigned_staff_id: bookingUpdate.assigned_staff_id || null
+      }, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      toast.success('Notes & assignment updated');
       fetchVIPBookings();
+      fetchSingleBookingDetails(bookingId);
     } catch (error) {
       console.error('Error updating booking:', error);
       toast.error('Failed to update booking');
     } finally {
       setUpdatingBookingId(null);
+    }
+  };
+
+  const handleConfirmAndSchedule = async (bookingId) => {
+    if (!scheduleData.appointment_date || !scheduleData.appointment_time) {
+      toast.error('Please select both Date and Time');
+      return;
+    }
+
+    setUpdatingBookingId(bookingId);
+    try {
+      await axios.patch(`/api/vip/bookings/${bookingId}`, {
+        status: 'confirmed',
+        appointment_date: scheduleData.appointment_date,
+        appointment_time: scheduleData.appointment_time,
+        notes: bookingUpdate.notes,
+        assigned_staff_id: bookingUpdate.assigned_staff_id || null
+      }, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      toast.success('Booking confirmed & customer scheduled!');
+      setIsRescheduling(false);
+      fetchVIPBookings();
+      fetchSingleBookingDetails(bookingId);
+    } catch (error) {
+      console.error('Error scheduling booking:', error);
+      toast.error('Failed to schedule and confirm booking');
+    } finally {
+      setUpdatingBookingId(null);
+    }
+  };
+
+  const handleStatusChange = async (bookingId, newStatus) => {
+    setUpdatingBookingId(bookingId);
+    try {
+      await axios.patch(`/api/vip/bookings/${bookingId}`, {
+        status: newStatus
+      }, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      toast.success(`Booking status changed to ${newStatus}`);
+      fetchVIPBookings();
+      fetchSingleBookingDetails(bookingId);
+    } catch (error) {
+      console.error('Error changing booking status:', error);
+      toast.error('Failed to change booking status');
+    } finally {
+      setUpdatingBookingId(null);
+    }
+  };
+
+  const handleRecordManualPayment = async (orderId, amount) => {
+    if (!orderId) return;
+    setManualPaymentLoading(true);
+    try {
+      await axios.post('/api/payments/manual', {
+        order_id: orderId,
+        amount: amount,
+        method: 'cash'
+      }, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      toast.success('Payment recorded successfully');
+      if (selectedBooking) {
+        fetchSingleBookingDetails(selectedBooking.id);
+      }
+      fetchVIPBookings();
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      toast.error('Failed to record payment');
+    } finally {
+      setManualPaymentLoading(false);
     }
   };
 
@@ -115,9 +240,17 @@ const VIPDashboard = () => {
     setSelectedBooking(booking);
     setBookingUpdate({
       status: booking.status,
-      notes: booking.notes || ''
+      notes: booking.notes || '',
+      assigned_staff_id: booking.assigned_staff_id || ''
     });
+    setScheduleData({
+      appointment_date: booking.appointment_date ? booking.appointment_date.split('T')[0] : '',
+      appointment_time: booking.appointment_time || ''
+    });
+    setIsRescheduling(false);
     setShowBookingModal(true);
+    // Fetch fresh details to get synced order information
+    fetchSingleBookingDetails(booking.id);
   };
 
   const getStatusColor = (status) => {
@@ -233,7 +366,13 @@ const VIPDashboard = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <p className="text-sm text-gray-900">
-                            {new Date(booking.appointment_date).toLocaleDateString()} {booking.appointment_time}
+                            {booking.appointment_date ? (
+                              `${new Date(booking.appointment_date).toLocaleDateString('en-GB')} ${booking.appointment_time || ''}`
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                                Not Scheduled
+                              </span>
+                            )}
                           </p>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -242,7 +381,13 @@ const VIPDashboard = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <div className="flex gap-2">
+                          <div className="flex gap-4">
+                            <button
+                              onClick={() => openBookingModal(booking)}
+                              className="text-indigo-600 hover:text-indigo-900 font-bold"
+                            >
+                              Action View
+                            </button>
                             <button
                               onClick={() => deleteBooking(booking.id)}
                               className="text-red-600 hover:text-red-900 font-semibold"
@@ -296,10 +441,10 @@ const VIPDashboard = () => {
         )}
       </div>
 
-      {/* Edit Booking Modal */}
+      {/* Detailed Action Modal */}
       {showBookingModal && selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-md rounded-lg bg-white p-8 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-xl bg-white p-6 sm:p-8 shadow-2xl max-h-[90vh] flex flex-col my-8">
             <button
               onClick={() => setShowBookingModal(false)}
               className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-600 transition"
@@ -309,65 +454,225 @@ const VIPDashboard = () => {
               </svg>
             </button>
 
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">Update Booking</h3>
-            
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-1">Customer: {selectedBooking.name}</p>
-              <p className="text-sm text-gray-600">Service: {selectedBooking.service_type}</p>
-              <p className="text-sm text-gray-600">Date: {new Date(selectedBooking.appointment_date).toLocaleDateString()} {selectedBooking.appointment_time}</p>
+            <div className="shrink-0 border-b pb-4 mb-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Action View & Manage</h3>
+                  <p className="text-sm text-gray-500 font-medium">VIP Booking #{selectedBooking.id}</p>
+                </div>
+                <span className={`px-3 py-1.5 text-xs font-black uppercase rounded-full ${getStatusColor(selectedBooking.status)}`}>
+                  {selectedBooking.status}
+                </span>
+              </div>
             </div>
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              updateBookingStatus(selectedBooking.id);
-            }} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Status
-                </label>
-                <select
-                  value={bookingUpdate.status}
-                  onChange={(e) => setBookingUpdate({ ...bookingUpdate, status: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
+            <div className="flex-1 overflow-y-auto pr-2 space-y-5 text-sm">
+              {/* Customer and Booking Info */}
+              <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                <div>
+                  <p className="text-xs text-gray-400 font-bold uppercase">Customer</p>
+                  <p className="font-semibold text-gray-800">{selectedBooking.name}</p>
+                  <p className="text-xs text-gray-500">{selectedBooking.phone}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-bold uppercase">Vehicle</p>
+                  <p className="font-semibold text-gray-800 font-mono">{selectedBooking.vehicle_model}</p>
+                  <p className="text-xs text-gray-500">{selectedBooking.vehicle_type}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-400 font-bold uppercase">Requested VIP Service</p>
+                  <p className="font-semibold text-red-600 font-medium">{selectedBooking.service_type}</p>
+                  {selectedBooking.order_total && (
+                    <p className="text-xs font-semibold text-gray-600">Price: AED {parseFloat(selectedBooking.order_total).toLocaleString()}</p>
+                  )}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Notes
-                </label>
-                <textarea
-                  value={bookingUpdate.notes}
-                  onChange={(e) => setBookingUpdate({ ...bookingUpdate, notes: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 resize-none"
-                  rows="3"
-                  placeholder="Add notes about this booking..."
-                />
+              {/* Order Synced & Payment Details */}
+              {selectedBooking.order_id && (
+                <div className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm flex flex-col gap-2">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-xs text-gray-400 font-bold uppercase">Synced POS Order</p>
+                      <p className="font-semibold text-gray-800">Order #{selectedBooking.order_id}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 font-bold uppercase text-right">Payment Status</p>
+                      <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded-full ${
+                        selectedBooking.order_payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {selectedBooking.order_payment_status || 'pending'}
+                      </span>
+                    </div>
+                  </div>
+                  {selectedBooking.order_payment_status !== 'paid' && (
+                    <button
+                      onClick={() => handleRecordManualPayment(selectedBooking.order_id, selectedBooking.order_total)}
+                      disabled={manualPaymentLoading}
+                      className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50"
+                    >
+                      💳 Record Cash/Manual Payment (AED {parseFloat(selectedBooking.order_total || 0).toLocaleString()})
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Appointment Scheduling section */}
+              {selectedBooking.status === 'pending' || isRescheduling ? (
+                <div className="border border-yellow-200 bg-yellow-50/50 rounded-lg p-4 space-y-3">
+                  <h4 className="font-bold text-yellow-900 text-xs uppercase tracking-wider">
+                    {isRescheduling ? 'Reschedule Appointment' : 'Schedule & Confirm Appointment'}
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Appointment Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={scheduleData.appointment_date}
+                        onChange={(e) => setScheduleData({ ...scheduleData, appointment_date: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Appointment Time *</label>
+                      <select
+                        required
+                        value={scheduleData.appointment_time}
+                        onChange={(e) => setScheduleData({ ...scheduleData, appointment_time: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                      >
+                        <option value="">Select time...</option>
+                        {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleConfirmAndSchedule(selectedBooking.id)}
+                      disabled={updatingBookingId === selectedBooking.id}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 rounded-lg transition"
+                    >
+                      {updatingBookingId === selectedBooking.id ? 'Scheduling...' : 'Save & Send Confirm SMS'}
+                    </button>
+                    {isRescheduling && (
+                      <button
+                        onClick={() => setIsRescheduling(false)}
+                        className="px-4 py-2.5 border rounded-lg text-xs hover:bg-gray-100 transition"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-lg p-4 bg-white flex justify-between items-center shadow-sm">
+                  <div>
+                    <p className="text-xs text-gray-400 font-bold uppercase">Scheduled Appointment</p>
+                    <p className="font-bold text-gray-800 mt-1">
+                      {selectedBooking.appointment_date
+                        ? `${new Date(selectedBooking.appointment_date).toLocaleDateString('en-GB')} at ${selectedBooking.appointment_time}`
+                        : 'Not Scheduled'}
+                    </p>
+                  </div>
+                  {['confirmed', 'in_progress'].includes(selectedBooking.status) && (
+                    <button
+                      onClick={() => setIsRescheduling(true)}
+                      className="text-indigo-600 hover:underline font-bold text-xs"
+                    >
+                      Reschedule
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Status Actions Flow */}
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400 font-bold uppercase">Status Actions</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedBooking.status === 'confirmed' && (
+                    <button
+                      onClick={() => handleStatusChange(selectedBooking.id, 'in_progress')}
+                      disabled={updatingBookingId === selectedBooking.id}
+                      className="flex-1 min-w-[150px] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                    >
+                      ⚡ Start Service
+                    </button>
+                  )}
+                  {selectedBooking.status === 'in_progress' && (
+                    <button
+                      onClick={() => handleStatusChange(selectedBooking.id, 'completed')}
+                      disabled={updatingBookingId === selectedBooking.id}
+                      className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                    >
+                      ✓ Complete Service
+                    </button>
+                  )}
+                  {['pending', 'confirmed', 'in_progress'].includes(selectedBooking.status) && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to cancel this booking?')) {
+                          handleStatusChange(selectedBooking.id, 'cancelled');
+                        }
+                      }}
+                      disabled={updatingBookingId === selectedBooking.id}
+                      className="px-4 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg transition"
+                    >
+                      Cancel Booking
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex gap-4 pt-4">
+              {/* Notes & Assignment form */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  updateBookingDetails(selectedBooking.id);
+                }}
+                className="space-y-4 pt-3 border-t"
+              >
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Assign Staff Member
+                  </label>
+                  <select
+                    value={bookingUpdate.assigned_staff_id}
+                    onChange={(e) => setBookingUpdate({ ...bookingUpdate, assigned_staff_id: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                  >
+                    <option value="">Unassigned</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    value={bookingUpdate.notes}
+                    onChange={(e) => setBookingUpdate({ ...bookingUpdate, notes: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm resize-none"
+                    rows="3"
+                    placeholder="Add notes about this booking..."
+                  />
+                </div>
+
                 <button
                   type="submit"
                   disabled={updatingBookingId === selectedBooking.id}
-                  className="flex-1 bg-red-600 text-white py-2 rounded-lg font-semibold hover:bg-red-700 transition disabled:opacity-50"
+                  className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg transition"
                 >
-                  {updatingBookingId === selectedBooking.id ? 'Updating...' : 'Update Booking'}
+                  Save Notes & Assignment
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowBookingModal(false)}
-                  className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-50 transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}

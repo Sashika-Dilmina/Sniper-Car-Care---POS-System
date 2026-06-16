@@ -53,10 +53,14 @@ exports.getVIPBookings = asyncHandler(async (req, res) => {
       vc.name,
       vc.phone,
       vc.vehicle_model,
-      u.name as staff_name
+      u.name as staff_name,
+      o.id as order_id,
+      o.payment_status as order_payment_status,
+      o.total as order_total
     FROM vip_bookings vb
     JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     LEFT JOIN users u ON vb.assigned_staff_id = u.id
+    LEFT JOIN orders o ON o.vip_booking_id = vb.id
     ORDER BY vb.appointment_date DESC, vb.appointment_time DESC
   `);
   
@@ -81,11 +85,15 @@ exports.getVIPBookingById = asyncHandler(async (req, res) => {
       vc.vehicle_type,
       u.name as staff_name,
       vs.name as service_name,
-      vs.description as service_description
+      vs.description as service_description,
+      o.id as order_id,
+      o.payment_status as order_payment_status,
+      o.total as order_total
     FROM vip_bookings vb
     JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     LEFT JOIN users u ON vb.assigned_staff_id = u.id
     LEFT JOIN vip_services vs ON vb.service_type = vs.name
+    LEFT JOIN orders o ON o.vip_booking_id = vb.id
     WHERE vb.id = ?
   `, [req.params.id]);
   
@@ -108,8 +116,8 @@ exports.getVIPBookingById = asyncHandler(async (req, res) => {
 exports.createVIPBooking = asyncHandler(async (req, res) => {
   const { name, phone, email, vehicle_model, vehicle_type, service_type, appointment_date, appointment_time, notes } = req.body;
   
-  // Validate required fields
-  if (!name || !phone || !vehicle_model || !vehicle_type || !service_type || !appointment_date || !appointment_time) {
+  // Validate required fields (appointment_date and appointment_time are now optional for registration)
+  if (!name || !phone || !vehicle_model || !vehicle_type || !service_type) {
     return res.status(400).json({
       success: false,
       message: 'Please provide all required fields'
@@ -144,7 +152,7 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
     // Create booking
     const [bookingResult] = await db.query(
       'INSERT INTO vip_bookings (vip_customer_id, service_type, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?, ?)',
-      [vipCustomerId, service_type, appointment_date, appointment_time, 'pending']
+      [vipCustomerId, service_type, appointment_date || null, appointment_time || null, 'pending']
     );
 
     // Fetch price for VIP service from vip_services by service_type name
@@ -193,7 +201,7 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
 // @route PATCH /api/vip-bookings/:id
 // @access Private
 exports.updateVIPBooking = asyncHandler(async (req, res) => {
-  const { status, assigned_staff_id, notes } = req.body;
+  const { status, assigned_staff_id, notes, appointment_date, appointment_time } = req.body;
   
   const [booking] = await db.query(
     'SELECT * FROM vip_bookings WHERE id = ?',
@@ -215,13 +223,22 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
     updateFields.push('status = ?');
     updateValues.push(status);
   }
-  if (assigned_staff_id) {
+  if (assigned_staff_id !== undefined) {
+    // allow setting staff to null or value
     updateFields.push('assigned_staff_id = ?');
-    updateValues.push(assigned_staff_id);
+    updateValues.push(assigned_staff_id || null);
   }
-  if (notes) {
+  if (notes !== undefined) {
     updateFields.push('notes = ?');
     updateValues.push(notes);
+  }
+  if (appointment_date !== undefined) {
+    updateFields.push('appointment_date = ?');
+    updateValues.push(appointment_date || null);
+  }
+  if (appointment_time !== undefined) {
+    updateFields.push('appointment_time = ?');
+    updateValues.push(appointment_time || null);
   }
   
   if (updateFields.length === 0) {
@@ -241,7 +258,9 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
   // Sync to orders table
   if (status) {
     let orderStatus = 'pending';
-    if (status === 'confirmed' || status === 'in_progress') orderStatus = 'processing';
+    // When booking is confirmed (scheduled), the order remains pending in orders table (so it has the Start Service button)
+    if (status === 'confirmed') orderStatus = 'pending';
+    else if (status === 'in_progress') orderStatus = 'processing';
     else if (status === 'completed') orderStatus = 'completed';
     else if (status === 'cancelled') orderStatus = 'cancelled';
 
@@ -249,6 +268,45 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
       'UPDATE orders SET status = ? WHERE vip_booking_id = ?',
       [orderStatus, req.params.id]
     );
+
+    // If confirmed, send scheduling/confirmation SMS to customer
+    if (status === 'confirmed') {
+      try {
+        const [bookingRows] = await db.query('SELECT * FROM vip_bookings WHERE id = ?', [req.params.id]);
+        if (bookingRows.length > 0) {
+          const currentBooking = bookingRows[0];
+          const [customerRows] = await db.query('SELECT * FROM vip_customers WHERE id = ?', [currentBooking.vip_customer_id]);
+          if (customerRows.length > 0) {
+            const customer = customerRows[0];
+            
+            // Format the phone
+            const formattedPhone = formatPhoneNumber(customer.phone);
+            if (formattedPhone) {
+              const formattedDate = currentBooking.appointment_date 
+                ? new Date(currentBooking.appointment_date).toLocaleDateString('en-GB') // e.g. DD/MM/YYYY
+                : '';
+              const formattedTime = currentBooking.appointment_time || '';
+              const firstName = customer.name ? customer.name.split(' ')[0] : 'Customer';
+              
+              const message = `Hi ${firstName}, your VIP ${currentBooking.service_type} booking has been confirmed! Your appointment is scheduled for ${formattedDate} at ${formattedTime}. Thank you for choosing Sniper Car Care!`;
+              
+              await sendReson8Message({
+                to: formattedPhone,
+                message,
+                campaignName: 'VIP_BOOKING_CONFIRMED',
+                metadata: {
+                  bookingId: currentBooking.id,
+                  vipCustomerId: customer.id
+                }
+              });
+              console.log(`[SMS] VIP Booking Confirmation SMS sent to ${customer.phone}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error sending VIP booking confirmation SMS:', err.message);
+      }
+    }
 
     // If completed, send feedback SMS
     if (status === 'completed') {

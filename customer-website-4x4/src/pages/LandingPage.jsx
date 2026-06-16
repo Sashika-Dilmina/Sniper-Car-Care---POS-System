@@ -837,7 +837,7 @@ const LandingPage = () => {
   const submitVIPBooking = async (e) => {
     e.preventDefault();
 
-    if (!vipBookingForm.name || !vipBookingForm.phone || !vipBookingForm.emirate || !vipBookingForm.plate_number || !vipBookingForm.service_type || !vipBookingForm.appointment_date || !vipBookingForm.appointment_time) {
+    if (!vipBookingForm.name || !vipBookingForm.phone || !vipBookingForm.emirate || !vipBookingForm.plate_number || !vipBookingForm.service_type) {
       toast.error('Please fill all required fields');
       return;
     }
@@ -851,22 +851,18 @@ const LandingPage = () => {
     const plateStr = `${vipBookingForm.plate_code} ${vipBookingForm.emirate} ${vipBookingForm.plate_number}`;
 
     try {
-      const response = await axios.post('/api/vip/bookings', {
+      await axios.post('/api/vip/bookings', {
         name: vipBookingForm.name,
         phone: cleanPhone,
         vehicle_model: plateStr,
         vehicle_type: vipBookingForm.vehicle_type,
         service_type: vipBookingForm.service_type,
-        appointment_date: vipBookingForm.appointment_date,
-        appointment_time: vipBookingForm.appointment_time,
         notes: vipBookingForm.notes
       });
 
-      toast.success('VIP booking confirmed! Redirecting to payment...');
+      toast.success('VIP booking request submitted! We will contact you soon with confirmation details.', { duration: 5000 });
       setShowVIPModal(false);
       setVipStep(1);
-      
-      const orderId = response.data.orderId;
 
       setVipBookingForm({
         name: '',
@@ -881,37 +877,9 @@ const LandingPage = () => {
         notes: ''
       });
       setAvailableTimeSlots([]);
-
-      if (orderId) {
-        setTimeout(() => {
-          navigate(`/payment?order_id=${orderId}&plate=${encodeURIComponent(plateStr)}`);
-        }, 1500);
-      }
     } catch (error) {
       console.error('VIP Booking error:', error);
       toast.error(error.response?.data?.message || 'Failed to book VIP service. Please try again.');
-    }
-  };
-
-  const handleVipNextStep = () => {
-    if (vipStep === 1) {
-      if (!vipBookingForm.name || !vipBookingForm.phone || !vipBookingForm.plate_number) {
-        toast.error('Please fill in your name, phone, and plate number');
-        return;
-      }
-      const cleanPhone = vipBookingForm.phone.replace(/[^0-9]/g, '');
-      if (cleanPhone.length < 9 || cleanPhone.length > 15) {
-        toast.error('Phone number must contain between 9 and 15 digits');
-        return;
-      }
-      setAvailableTimeSlots(['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00']);
-      setVipStep(2);
-    }
-  };
-
-  const handleVipPrevStep = () => {
-    if (vipStep === 2) {
-      setVipStep(1);
     }
   };
 
@@ -1467,8 +1435,8 @@ const LandingPage = () => {
         </div>
       )}
 
-      {/* VIP Booking Modal - Step 1: Basic Info */}
-      {showVIPModal && vipStep === 1 && (
+      {/* VIP Booking Modal */}
+      {showVIPModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 py-4">
           <div className="relative w-full max-w-md rounded-2xl bg-white border border-red-200 p-5 sm:p-7 shadow-2xl max-h-[95vh] flex flex-col">
             <button
@@ -1480,24 +1448,12 @@ const LandingPage = () => {
               </svg>
             </button>
 
-            <div className="shrink-0 mb-2">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center text-sm font-bold">1</span>
-                  <span className="text-xs text-gray-500">Details</span>
-                </div>
-                <div className="h-px w-8 bg-gray-300" />
-                <div className="flex items-center gap-2 opacity-50">
-                  <span className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-sm font-bold">2</span>
-                  <span className="text-xs text-gray-400">Schedule</span>
-                </div>
-              </div>
-
+            <div className="shrink-0 mb-4">
               <h3 className="text-2xl font-bold text-gray-900 mb-1">VIP Service Booking</h3>
-              <p className="text-sm text-gray-600">Enter your details to get started</p>
+              <p className="text-sm text-gray-600 font-medium">Register and request your premium car care service.</p>
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-1 min-h-0 space-y-4 py-2">
+            <form onSubmit={submitVIPBooking} className="flex-1 overflow-y-auto pr-1 min-h-0 space-y-4 py-2">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                 <input
@@ -1590,83 +1546,6 @@ const LandingPage = () => {
                 plateNumber={vipBookingForm.plate_number}
               />
 
-              <button
-                onClick={handleVipNextStep}
-                className="w-full mt-4 inline-flex items-center justify-center rounded-lg bg-red-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-red-700"
-              >
-                Book Appointment →
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showVIPModal && vipStep === 2 && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 py-4">
-          <div className="relative w-full max-w-md rounded-2xl bg-white border border-red-200 p-5 sm:p-7 shadow-2xl max-h-[95vh] flex flex-col">
-            <button
-              onClick={() => { setShowVIPModal(false); setVipStep(1); }}
-              className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-900 transition z-10"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            <div className="shrink-0 mb-2">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex items-center gap-2 opacity-50">
-                  <span className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold">✓</span>
-                  <span className="text-xs text-gray-400">Details</span>
-                </div>
-                <div className="h-px w-8 bg-gray-300" />
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center text-sm font-bold">2</span>
-                  <span className="text-xs text-gray-500">Schedule</span>
-                </div>
-              </div>
-
-              <h3 className="text-2xl font-bold text-gray-900 mb-1">Schedule Your Appointment</h3>
-              <p className="text-sm text-gray-600">Choose your service, date and time</p>
-            </div>
-
-            <form onSubmit={submitVIPBooking} className="flex-1 overflow-y-auto pr-1 min-h-0 space-y-4 py-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Selected Service</label>
-                <div className="w-full px-4 py-3 rounded-lg bg-gray-100 border border-gray-200 text-gray-900 font-semibold flex justify-between items-center text-sm">
-                  <span>{vipBookingForm.service_type === '4x4 VIP Service' ? '4x4 VIP Service' : 'Saloon VIP Service'}</span>
-                  <span className="text-red-600 font-bold">{vipBookingForm.service_type === '4x4 VIP Service' ? '90 AED' : '75 AED'}</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Preferred Date *</label>
-                <input
-                  type="date"
-                  required
-                  value={vipBookingForm.appointment_date}
-                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, appointment_date: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
-                  min={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Preferred Time *</label>
-                <select
-                  required
-                  value={vipBookingForm.appointment_time}
-                  onChange={(e) => setVipBookingForm({ ...vipBookingForm, appointment_time: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
-                >
-                  <option value="">Select a time...</option>
-                  {availableTimeSlots.length > 0 ? (
-                    availableTimeSlots.map((slot) => (
-                      <option key={slot} value={slot}>{slot}</option>
-                    ))
-                  ) : (
-                    <option disabled>No slots available - select another date</option>
-                  )}
-                </select>
-              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Note (Optional)</label>
                 <textarea
@@ -1677,21 +1556,13 @@ const LandingPage = () => {
                   placeholder="Any additional information..."
                 />
               </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleVipPrevStep}
-                  className="flex-1 inline-flex items-center justify-center rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
-                >
-                  ← Back
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 inline-flex items-center justify-center rounded-lg bg-red-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-red-700"
-                >
-                  Confirm VIP Booking
-                </button>
-              </div>
+
+              <button
+                type="submit"
+                className="w-full mt-4 inline-flex items-center justify-center rounded-lg bg-red-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-red-700"
+              >
+                Confirm VIP Booking
+              </button>
             </form>
           </div>
         </div>
