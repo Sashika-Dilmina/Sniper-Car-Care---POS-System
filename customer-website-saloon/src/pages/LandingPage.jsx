@@ -319,6 +319,7 @@ const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const vehiclePlate = searchParams.get('plate') || '';
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showVIPModal, setShowVIPModal] = useState(false);
   const [vipStep, setVipStep] = useState(1);
@@ -426,8 +427,6 @@ const LandingPage = () => {
     fetchServices();
     fetchDbProducts();
   }, []);
-
-  const vehiclePlate = searchParams.get('plate') || '';
 
   // Real-time order status notifications
   useEffect(() => {
