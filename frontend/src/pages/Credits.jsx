@@ -46,9 +46,7 @@ const Credits = () => {
     return Object.values(grouped);
   };
 
-  const groupedCustomers = selectedStatus === 'grouped_customers' 
-    ? groupCreditsByCustomer(filteredCredits).sort((a, b) => b.total_remaining - a.total_remaining)
-    : [];
+
 
   // Modal State for Recovery
   const [isRecoverModalOpen, setIsRecoverModalOpen] = useState(false);
@@ -163,6 +161,10 @@ const Credits = () => {
 
     return matchesSearch && matchesStatus;
   });
+
+  const groupedCustomers = selectedStatus === 'grouped_customers' 
+    ? groupCreditsByCustomer(filteredCredits).sort((a, b) => b.total_remaining - a.total_remaining)
+    : [];
 
   // Calculate totals
   const totalOutstanding = credits.filter(c => c.status !== 'fully_paid').reduce((sum, c) => sum + parseFloat(c.remaining_amount), 0);
