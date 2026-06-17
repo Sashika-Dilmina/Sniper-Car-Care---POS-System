@@ -12,6 +12,11 @@ const VIPDashboard = () => {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
+
+  const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState(null);
+  const [customerHistory, setCustomerHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   
   const [bookingUpdate, setBookingUpdate] = useState({
     status: '',
@@ -93,6 +98,25 @@ const VIPDashboard = () => {
       toast.error('Failed to fetch VIP customers');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewCustomerHistory = async (customer) => {
+    setSelectedHistoryCustomer(customer);
+    setShowHistoryModal(true);
+    setLoadingHistory(true);
+    try {
+      const response = await axios.get(`/api/vip/customers/${customer.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      setCustomerHistory(response.data.data.bookings || []);
+    } catch (error) {
+      console.error('Error fetching customer history:', error);
+      toast.error('Failed to load customer service history');
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -454,9 +478,18 @@ const VIPDashboard = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
                 {vipCustomers.map((customer) => (
-                  <div key={customer.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition">
+                  <div
+                    key={customer.id}
+                    onClick={() => handleViewCustomerHistory(customer)}
+                    className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition cursor-pointer hover:border-red-500 bg-white"
+                  >
                     <div className="mb-3">
-                      <h3 className="font-bold text-gray-900">{customer.name}</h3>
+                      <h3 className="font-bold text-gray-900 flex justify-between items-center">
+                        <span>{customer.name}</span>
+                        <span className="text-[11px] text-red-650 font-bold bg-red-50 px-2 py-0.5 rounded-full border border-red-100 hover:bg-red-100 transition duration-200">
+                          History 🗓️
+                        </span>
+                      </h3>
                       <p className="text-sm text-gray-500">{customer.phone}</p>
                       {customer.email && <p className="text-sm text-gray-500">{customer.email}</p>}
                     </div>
@@ -742,6 +775,121 @@ const VIPDashboard = () => {
                   Save Notes & Assignment
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIP Customer Service History Modal */}
+      {showHistoryModal && selectedHistoryCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-xl bg-white p-6 sm:p-8 shadow-2xl max-h-[90vh] flex flex-col my-8">
+            <button
+              onClick={() => {
+                setShowHistoryModal(false);
+                setSelectedHistoryCustomer(null);
+                setCustomerHistory([]);
+              }}
+              className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-600 transition"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="shrink-0 border-b pb-4 mb-4 text-left">
+              <h3 className="text-2xl font-bold text-gray-900">VIP Service History</h3>
+              <p className="text-sm text-gray-550 font-medium mt-1">
+                {selectedHistoryCustomer.name} • {selectedHistoryCustomer.phone}
+              </p>
+            </div>
+
+            <div className="flex-grow overflow-y-auto pr-2 space-y-4">
+              {loadingHistory ? (
+                <div className="py-12 text-center text-gray-500">Loading history...</div>
+              ) : customerHistory.length === 0 ? (
+                <div className="py-12 text-center text-gray-500">No VIP services found for this customer.</div>
+              ) : (
+                <div className="space-y-4">
+                  {customerHistory.map((historyItem) => (
+                    <div key={historyItem.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50 shadow-sm space-y-2 text-sm text-left">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-gray-800 text-base">{historyItem.service_type}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">Booking ID: #{historyItem.id}</p>
+                        </div>
+                        <span className={`px-2.5 py-1 text-xs font-bold uppercase rounded-full ${getStatusColor(historyItem.status)}`}>
+                          {historyItem.status}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-gray-600 border-t pt-2 mt-2">
+                        <div>
+                          <span className="font-semibold">Scheduled Date:</span>{' '}
+                          {historyItem.appointment_date 
+                            ? `${new Date(historyItem.appointment_date).toLocaleDateString('en-GB')} at ${historyItem.appointment_time || 'N/A'}`
+                            : 'Not Scheduled'}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Vehicle:</span>{' '}
+                          <span className="font-mono">{historyItem.vehicle_model || selectedHistoryCustomer.vehicle_model}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold">Staff Assigned:</span>{' '}
+                          {historyItem.staff_name || 'Unassigned'}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Total Price:</span>{' '}
+                          {historyItem.order_total ? `AED ${parseFloat(historyItem.order_total).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A'}
+                        </div>
+                        {historyItem.order_id && (
+                          <div className="col-span-2 flex justify-between items-center bg-white border border-gray-150 p-2 rounded mt-1">
+                            <span>
+                              <span className="font-semibold">Synced Order:</span> #{historyItem.order_id} (
+                              <span className={`font-semibold ${historyItem.order_payment_status === 'paid' ? 'text-green-600' : 'text-red-650'}`}>
+                                {historyItem.order_payment_status || 'pending'}
+                              </span>
+                              )
+                            </span>
+                            {historyItem.service_started_at && (
+                              <span className="text-[10px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded font-bold">
+                                ⏱️ {calculateElapsedTime(historyItem.service_started_at, historyItem.service_completed_at)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {historyItem.staff_notes && (
+                        <div className="text-xs bg-white border border-gray-100 p-2.5 rounded-lg text-gray-700 mt-2">
+                          <span className="font-bold block text-gray-500 uppercase tracking-wider text-[10px] mb-1">Staff Notes</span>
+                          {historyItem.staff_notes}
+                        </div>
+                      )}
+                      
+                      {historyItem.notes && (
+                        <div className="text-xs bg-white border border-gray-100 p-2.5 rounded-lg text-gray-700 mt-1 italic">
+                          <span className="font-bold block text-gray-500 uppercase tracking-wider text-[10px] mb-1 not-italic">Customer Request Notes</span>
+                          "{historyItem.notes}"
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 border-t pt-4 mt-4 text-right">
+              <button
+                onClick={() => {
+                  setShowHistoryModal(false);
+                  setSelectedHistoryCustomer(null);
+                  setCustomerHistory([]);
+                }}
+                className="px-5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg font-bold transition text-sm shadow-sm"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

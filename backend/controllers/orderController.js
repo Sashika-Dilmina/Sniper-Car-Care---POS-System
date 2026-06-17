@@ -190,13 +190,14 @@ const createOrder = asyncHandler(async (req, res) => {
       }
     }
 
-    const orderStatus = hasService ? 'processing' : 'pending';
+    const orderStatus = hasService ? 'processing' : 'completed';
     const serviceStartedAt = hasService ? new Date() : null;
+    const serviceCompletedAt = hasService ? null : new Date();
 
     // Create order
     const [orderResult] = await connection.query(
-      'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [customer_id || null, total, discount || 0, orderStatus, 'pending', serviceStartedAt]
+      'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at, service_completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [customer_id || null, total, discount || 0, orderStatus, 'pending', serviceStartedAt, serviceCompletedAt]
     );
 
     const orderId = orderResult.insertId;

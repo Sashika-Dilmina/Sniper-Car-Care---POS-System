@@ -463,13 +463,18 @@ exports.getVIPServices = asyncHandler(async (req, res) => {
 exports.getVIPCustomers = asyncHandler(async (req, res) => {
   const [customers] = await db.query(`
     SELECT 
-      vc.*,
+      MIN(vc.id) as id,
+      vc.phone,
+      MAX(vc.name) as name,
+      MAX(vc.email) as email,
+      MAX(vc.vehicle_model) as vehicle_model,
+      MAX(vc.vehicle_type) as vehicle_type,
       COUNT(vb.id) as total_bookings,
       MAX(vb.appointment_date) as last_booking_date
     FROM vip_customers vc
     LEFT JOIN vip_bookings vb ON vc.id = vb.vip_customer_id
-    GROUP BY vc.id
-    ORDER BY vc.created_at DESC
+    GROUP BY vc.phone
+    ORDER BY MAX(vc.created_at) DESC
   `);
   
   res.status(200).json({
@@ -522,27 +527,48 @@ exports.getTodayVIPAppointments = asyncHandler(async (req, res) => {
 // @route GET /api/vip-customers/:id
 // @access Private
 exports.getVIPCustomerById = asyncHandler(async (req, res) => {
-  const [customer] = await db.query(
+  const [customerRows] = await db.query(
     'SELECT * FROM vip_customers WHERE id = ?',
     [req.params.id]
   );
   
-  if (customer.length === 0) {
+  if (customerRows.length === 0) {
     return res.status(404).json({
       success: false,
       message: 'VIP customer not found'
     });
   }
   
-  const [bookings] = await db.query(
-    'SELECT * FROM vip_bookings WHERE vip_customer_id = ? ORDER BY appointment_date DESC',
-    [req.params.id]
+  const customer = customerRows[0];
+  
+  // Get all VIP customer IDs matching this customer's phone number
+  const [phoneCustomers] = await db.query(
+    'SELECT id FROM vip_customers WHERE phone = ?',
+    [customer.phone]
   );
+  const customerIds = phoneCustomers.map(c => c.id);
+  
+  // Get bookings for all matching customer IDs
+  const [bookings] = await db.query(`
+    SELECT 
+      vb.*,
+      u.name as staff_name,
+      o.id as order_id,
+      o.payment_status as order_payment_status,
+      o.total as order_total,
+      o.service_started_at,
+      o.service_completed_at
+    FROM vip_bookings vb
+    LEFT JOIN users u ON vb.assigned_staff_id = u.id
+    LEFT JOIN orders o ON o.vip_booking_id = vb.id
+    WHERE vb.vip_customer_id IN (?)
+    ORDER BY vb.appointment_date DESC, vb.id DESC
+  `, [customerIds]);
   
   res.status(200).json({
     success: true,
     data: {
-      customer: customer[0],
+      customer,
       bookings
     }
   });
