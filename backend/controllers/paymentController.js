@@ -60,7 +60,7 @@ const confirmPayment = asyncHandler(async (req, res) => {
 
         // Update order payment status
         const [orders] = await connection.query(
-          'SELECT total FROM orders WHERE id = ?',
+          'SELECT total, vip_booking_id FROM orders WHERE id = ?',
           [order_id]
         );
 
@@ -78,6 +78,22 @@ const confirmPayment = asyncHandler(async (req, res) => {
             'UPDATE orders SET payment_status = ? WHERE id = ?',
             [newPaymentStatus, order_id]
           );
+
+          // If payment status becomes "paid", automatically start VIP service if it's a VIP booking
+          if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined) {
+            await connection.query(
+              `UPDATE orders 
+               SET status = 'processing', 
+                   service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) 
+               WHERE id = ?`,
+              [order_id]
+            );
+            await connection.query(
+              `UPDATE vip_bookings SET status = 'in_progress' WHERE id = ?`,
+              [orders[0].vip_booking_id]
+            );
+            console.log(`[VIP] Auto-started service for VIP booking ${orders[0].vip_booking_id} after Stripe payment`);
+          }
 
           // If payment status becomes "paid", send Feedback SMS
           if (newPaymentStatus === 'paid') {
@@ -170,7 +186,7 @@ const processManualPayment = asyncHandler(async (req, res) => {
 
     // Update order payment status
     const [orders] = await connection.query(
-      'SELECT total FROM orders WHERE id = ?',
+      'SELECT total, vip_booking_id FROM orders WHERE id = ?',
       [order_id]
     );
 
@@ -188,6 +204,22 @@ const processManualPayment = asyncHandler(async (req, res) => {
         'UPDATE orders SET payment_status = ? WHERE id = ?',
         [newPaymentStatus, order_id]
       );
+
+      // If payment status becomes "paid", automatically start VIP service if it's a VIP booking
+      if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined) {
+        await connection.query(
+          `UPDATE orders 
+           SET status = 'processing', 
+               service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) 
+           WHERE id = ?`,
+          [order_id]
+        );
+        await connection.query(
+          `UPDATE vip_bookings SET status = 'in_progress' WHERE id = ?`,
+          [orders[0].vip_booking_id]
+        );
+        console.log(`[VIP] Auto-started service for VIP booking ${orders[0].vip_booking_id} after manual payment`);
+      }
 
       // If payment status becomes "paid", send Feedback SMS
       if (newPaymentStatus === 'paid') {

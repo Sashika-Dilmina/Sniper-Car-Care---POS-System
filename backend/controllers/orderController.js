@@ -14,6 +14,8 @@ const getOrders = asyncHandler(async (req, res) => {
            COALESCE(c.phone, vc.phone) as customer_phone,
            COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
            COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
+           cc.status as credit_status,
+           cc.remaining_amount as credit_remaining,
            -- Service time: Duration from service start to service completion
            -- Start: o.service_started_at
            -- End: o.service_completed_at
@@ -37,6 +39,7 @@ const getOrders = asyncHandler(async (req, res) => {
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
     LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+    LEFT JOIN customer_credits cc ON o.id = cc.order_id
     WHERE 1=1
   `;
   const params = [];
@@ -125,11 +128,14 @@ const getOrder = asyncHandler(async (req, res) => {
            COALESCE(c.name, vc.name) as customer_name, 
            COALESCE(c.phone, vc.phone) as customer_phone,
            COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
-           COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type
+           COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
+           cc.status as credit_status,
+           cc.remaining_amount as credit_remaining
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
     LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+    LEFT JOIN customer_credits cc ON o.id = cc.order_id
     WHERE o.id = ?
   `, [id]);
 
@@ -324,7 +330,14 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
 
     // If order status is set to 'completed', automatically handle payment status and record cash payments if unpaid
     if (status === 'completed') {
-      if (order.payment_status !== 'paid') {
+      // Check if this order is linked to a customer credit
+      const [creditRecords] = await connection.query(
+        'SELECT id FROM customer_credits WHERE order_id = ?',
+        [id]
+      );
+      const hasCredit = creditRecords.length > 0;
+
+      if (!hasCredit && order.payment_status !== 'paid') {
         const [payments] = await connection.query(
           'SELECT SUM(amount) as total_paid FROM payments WHERE order_id = ? AND status = "completed"',
           [id]
@@ -400,9 +413,12 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     // Refetch the fully updated order for response
     const [finalOrderRows] = await pool.query(`
       SELECT o.*, c.name as customer_name, c.phone as customer_phone,
-             c.vehicle_plate, c.vehicle_type
+             c.vehicle_plate, c.vehicle_type,
+             cc.status as credit_status,
+             cc.remaining_amount as credit_remaining
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN customer_credits cc ON o.id = cc.order_id
       WHERE o.id = ?
     `, [id]);
 

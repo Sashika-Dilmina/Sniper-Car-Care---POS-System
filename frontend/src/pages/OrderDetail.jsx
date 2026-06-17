@@ -217,12 +217,28 @@ const OrderDetail = () => {
             )}
             <div>
               <p className="text-sm text-gray-600">Payment Status</p>
-              <span className={`px-3 py-1 text-sm rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
-                order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                {order.payment_status}
-              </span>
+              {order.credit_status ? (
+                order.credit_status === 'unpaid' ? (
+                  <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold">
+                    Credit / Unpaid
+                  </span>
+                ) : order.credit_status === 'partially_paid' ? (
+                  <span className="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800 font-semibold">
+                    Credit / Partial
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800 font-semibold">
+                    Paid
+                  </span>
+                )
+              ) : (
+                <span className={`px-3 py-1 text-sm rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                  order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                  {order.payment_status}
+                </span>
+              )}
             </div>
             {order.source && (
               <div>

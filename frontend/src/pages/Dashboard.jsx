@@ -61,6 +61,7 @@ const Dashboard = () => {
       if (resp.data.success) {
         toast.success('Register opened successfully');
         setOpeningBalanceInput('');
+        setShowOpenRegisterModal(false);
         fetchRegisterStatus();
       }
     } catch (err) {
@@ -111,7 +112,23 @@ const Dashboard = () => {
     }
     const hours = Math.floor(mins / 60);
     const minutes = mins % 60;
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  };
+
+  const calculateElapsedTime = (startedAt, completedAt) => {
+    if (!startedAt) return '0 min';
+    const start = new Date(startedAt);
+    const end = completedAt ? new Date(completedAt) : new Date();
+    const diffMs = end - start;
+    if (diffMs < 0) return '0 min';
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 60) {
+      return `${diffMins} min`;
+    }
+    const hours = Math.floor(diffMins / 60);
+    const minutes = diffMins % 60;
+    return `${hours}h ${minutes}m`;
   };
 
   useEffect(() => {
@@ -157,6 +174,25 @@ const Dashboard = () => {
       console.error('Error fetching VIP appointments:', error);
     } finally {
       if (!silent) setVipLoading(false);
+    }
+  };
+
+  const handleCompleteVIPBooking = async (bookingId) => {
+    try {
+      const resp = await axios.patch(`/api/vip/bookings/${bookingId}`, {
+        status: 'completed'
+      }, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (resp.data.success) {
+        toast.success('VIP Booking marked as completed');
+        fetchVIPAppointments();
+      }
+    } catch (err) {
+      console.error('Error completing VIP booking:', err);
+      toast.error('Failed to complete VIP booking');
     }
   };
 
@@ -437,16 +473,31 @@ const Dashboard = () => {
                   <p className="text-sm"><span className="font-semibold">Service:</span> {appt.service_type}</p>
                   <p className="text-sm"><span className="font-semibold">Time:</span> {appt.appointment_time}</p>
                 </div>
-                <div className="mt-2">
-                  <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                    appt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                    appt.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                    appt.status === 'completed' ? 'bg-gray-100 text-gray-700' :
-                    'bg-yellow-100 text-yellow-700'
-                  }`}>
-                    {appt.status === 'in_progress' ? 'In Progress' : 
-                     appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
-                  </span>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2">
+                  <div className="flex flex-col">
+                    <span className={`px-2 py-1 text-xs rounded-full font-medium w-max ${
+                      appt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                      appt.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                      appt.status === 'completed' ? 'bg-gray-100 text-gray-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {appt.status === 'in_progress' ? 'In Progress' : 
+                       appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+                    </span>
+                    {appt.status === 'in_progress' && (
+                      <span className="text-xs font-bold text-purple-700 mt-1 flex items-center gap-0.5">
+                        ⏱️ {calculateElapsedTime(appt.service_started_at, appt.service_completed_at)}
+                      </span>
+                    )}
+                  </div>
+                  {appt.status === 'in_progress' && (
+                    <button
+                      onClick={() => handleCompleteVIPBooking(appt.id)}
+                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold transition shadow-sm"
+                    >
+                      Done
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -563,42 +614,70 @@ const Dashboard = () => {
               </thead>
               <tbody>
                 {analytics.recent_orders && analytics.recent_orders.length > 0 ? (
-                  analytics.recent_orders.map((order) => (
-                    <tr key={order.id} className="border-b hover:bg-gray-50">
-                      <td className="p-2 font-bold">#{order.id}</td>
-                      <td className="p-2">{order.customer_name || 'Walk-in'}</td>
-                      <td className="p-2 font-mono">{order.vehicle_plate || 'N/A'}</td>
-                      <td className="p-2">
-                        {order.items && order.items.length > 0 ? (
-                          <div className="flex flex-col gap-1 max-w-xs truncate">
-                            {order.items.map((item, idx) => (
-                              <span key={idx} className="text-xs text-gray-750 block bg-gray-100 px-2 py-0.5 rounded w-max">
-                                {item.product_name} x{item.quantity}
+                  analytics.recent_orders.map((order) => {
+                    const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
+                    return (
+                      <tr key={order.id} className={`border-b hover:bg-gray-50 transition-colors ${
+                        isVipOrder ? 'bg-purple-50 hover:bg-purple-100 border-l-4 border-purple-500 font-semibold' : ''
+                      }`}>
+                        <td className="p-2 font-bold flex items-center gap-2">
+                          #{order.id}
+                          {isVipOrder && (
+                            <span className="px-2 py-0.5 bg-purple-100 text-purple-750 text-[10px] font-bold rounded-full border border-purple-250" title="VIP Order">
+                              VIP ⭐
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2">{order.customer_name || 'Walk-in'}</td>
+                        <td className="p-2 font-mono">{order.vehicle_plate || 'N/A'}</td>
+                        <td className="p-2">
+                          {order.items && order.items.length > 0 ? (
+                            <div className="flex flex-col gap-1 max-w-xs truncate">
+                              {order.items.map((item, idx) => (
+                                <span key={idx} className="text-xs text-gray-750 block bg-gray-100 px-2 py-0.5 rounded w-max">
+                                  {item.product_name} x{item.quantity}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-xs">Service Booking</span>
+                          )}
+                        </td>
+                        <td className="p-2 text-right">AED {parseFloat(order.total).toLocaleString()}</td>
+                        <td className="p-2">
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${order.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            {order.status}
+                          </span>
+                        </td>
+                        <td className="p-2">
+                          {order.credit_status ? (
+                            order.credit_status === 'unpaid' ? (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800 font-semibold">
+                                Credit / Unpaid
                               </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-xs">Service Booking</span>
-                        )}
-                      </td>
-                      <td className="p-2 text-right">AED {parseFloat(order.total).toLocaleString()}</td>
-                      <td className="p-2">
-                        <span className={`px-2 py-0.5 text-xs rounded-full ${order.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="p-2">
-                        <span className={`px-2 py-0.5 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {order.payment_status}
-                        </span>
-                      </td>
-                      <td className="p-2 text-right">
-                        <Link to={`/orders/${order.id}`} className="text-primary-600 hover:underline font-bold">
-                          View
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
+                            ) : order.credit_status === 'partially_paid' ? (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-800 font-semibold">
+                                Credit / Partial
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800 font-semibold">
+                                Paid
+                              </span>
+                            )
+                          ) : (
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                              {order.payment_status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2 text-right">
+                          <Link to={`/orders/${order.id}`} className="text-primary-600 hover:underline font-bold">
+                            View
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan="8" className="p-4 text-center text-gray-500">

@@ -1113,11 +1113,27 @@ const Sales = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
-                              order.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                            }`}>
-                              {order.payment_status}
-                            </span>
+                            {order.credit_status ? (
+                              order.credit_status === 'unpaid' ? (
+                                <span className="px-2 py-0.5 text-xs rounded-full font-semibold bg-red-50 text-red-750">
+                                  Credit / Unpaid
+                                </span>
+                              ) : order.credit_status === 'partially_paid' ? (
+                                <span className="px-2 py-0.5 text-xs rounded-full font-semibold bg-yellow-50 text-yellow-750">
+                                  Credit / Partial
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 text-xs rounded-full font-semibold bg-green-50 text-green-700">
+                                  Paid
+                                </span>
+                              )
+                            ) : (
+                              <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
+                                order.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                              }`}>
+                                {order.payment_status}
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap font-extrabold text-gray-900 text-right">
                             AED {parseFloat(order.total).toFixed(2)}

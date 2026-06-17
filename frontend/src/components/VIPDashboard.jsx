@@ -268,6 +268,22 @@ const VIPDashboard = () => {
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
+  const calculateElapsedTime = (startedAt, completedAt) => {
+    if (!startedAt) return '0 min';
+    const start = new Date(startedAt);
+    const end = completedAt ? new Date(completedAt) : new Date();
+    const diffMs = end - start;
+    if (diffMs < 0) return '0 min';
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 60) {
+      return `${diffMins} min`;
+    }
+    const hours = Math.floor(diffMins / 60);
+    const minutes = diffMins % 60;
+    return `${hours}h ${minutes}m`;
+  };
+
   const filteredBookings = filterStatus === 'all' 
     ? vipBookings 
     : vipBookings.filter(b => b.status === filterStatus);
@@ -380,18 +396,33 @@ const VIPDashboard = () => {
                           </p>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(booking.status)}`}>
-                            {booking.status}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(booking.status)}`}>
+                              {booking.status}
+                            </span>
+                            {booking.status === 'in_progress' && (
+                              <span className="text-[11px] font-bold text-purple-700 flex items-center gap-0.5">
+                                ⏱️ {calculateElapsedTime(booking.service_started_at, booking.service_completed_at)}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <div className="flex gap-4">
+                          <div className="flex gap-4 items-center">
                             <button
                               onClick={() => openBookingModal(booking)}
                               className="text-indigo-600 hover:text-indigo-900 font-bold"
                             >
                               Action View
                             </button>
+                            {booking.status === 'in_progress' && (
+                              <button
+                                onClick={() => handleStatusChange(booking.id, 'completed')}
+                                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold transition shadow-sm"
+                              >
+                                Done
+                              </button>
+                            )}
                             <button
                               onClick={() => deleteBooking(booking.id)}
                               className="text-red-600 hover:text-red-900 font-semibold"
@@ -614,6 +645,12 @@ const VIPDashboard = () => {
               {/* Status Actions Flow */}
               <div className="space-y-2">
                 <p className="text-xs text-gray-400 font-bold uppercase">Status Actions</p>
+                {selectedBooking.status === 'in_progress' && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex justify-between items-center text-purple-900 font-bold text-xs">
+                    <span>⏱️ Time Elapsed:</span>
+                    <span>{calculateElapsedTime(selectedBooking.service_started_at, selectedBooking.service_completed_at)}</span>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {selectedBooking.status === 'confirmed' && (
                     <button
@@ -630,7 +667,7 @@ const VIPDashboard = () => {
                       disabled={updatingBookingId === selectedBooking.id}
                       className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
                     >
-                      ✓ Complete Service
+                      ✓ Done (Complete Service)
                     </button>
                   )}
                   {['pending', 'confirmed', 'in_progress'].includes(selectedBooking.status) && (

@@ -152,11 +152,14 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
              COALESCE(c.name, vc.name) as customer_name, 
              COALESCE(c.phone, vc.phone) as customer_phone,
              COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
-             COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type
+             COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
+             cc.status as credit_status,
+             cc.remaining_amount as credit_remaining
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
       LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+      LEFT JOIN customer_credits cc ON o.id = cc.order_id
       ORDER BY o.created_at DESC
       LIMIT 5
     `);

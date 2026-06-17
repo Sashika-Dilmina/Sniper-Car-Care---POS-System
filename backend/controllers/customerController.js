@@ -82,9 +82,15 @@ const getCustomer = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'Customer not found' });
   }
 
-  // Get customer orders
+  // Get customer orders with credit status
   const [orders] = await pool.query(
-    'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
+    `SELECT o.*, 
+            cc.status as credit_status,
+            cc.remaining_amount as credit_remaining
+     FROM orders o
+     LEFT JOIN customer_credits cc ON o.id = cc.order_id
+     WHERE o.customer_id = ? 
+     ORDER BY o.created_at DESC`,
     [id]
   );
 

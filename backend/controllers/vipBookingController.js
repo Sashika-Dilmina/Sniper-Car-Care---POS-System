@@ -57,6 +57,8 @@ exports.getVIPBookings = asyncHandler(async (req, res) => {
       o.id as order_id,
       o.payment_status as order_payment_status,
       o.total as order_total,
+      o.service_started_at,
+      o.service_completed_at,
       (SELECT method FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) as payment_method
     FROM vip_bookings vb
     JOIN vip_customers vc ON vb.vip_customer_id = vc.id
@@ -98,6 +100,8 @@ exports.getVIPBookingById = asyncHandler(async (req, res) => {
       o.id as order_id,
       o.payment_status as order_payment_status,
       o.total as order_total,
+      o.service_started_at,
+      o.service_completed_at,
       (SELECT method FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) as payment_method
     FROM vip_bookings vb
     JOIN vip_customers vc ON vb.vip_customer_id = vc.id
@@ -272,14 +276,22 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
   // Sync to orders table
   if (status) {
     let orderStatus = 'pending';
+    let additionalSets = '';
     // When booking is confirmed (scheduled), the order remains pending in orders table (so it has the Start Service button)
-    if (status === 'confirmed') orderStatus = 'pending';
-    else if (status === 'in_progress') orderStatus = 'processing';
-    else if (status === 'completed') orderStatus = 'completed';
-    else if (status === 'cancelled') orderStatus = 'cancelled';
+    if (status === 'confirmed') {
+      orderStatus = 'pending';
+    } else if (status === 'in_progress') {
+      orderStatus = 'processing';
+      additionalSets = ', service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP)';
+    } else if (status === 'completed') {
+      orderStatus = 'completed';
+      additionalSets = ', service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP), service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP)';
+    } else if (status === 'cancelled') {
+      orderStatus = 'cancelled';
+    }
 
     await db.query(
-      'UPDATE orders SET status = ? WHERE vip_booking_id = ?',
+      `UPDATE orders SET status = ?${additionalSets} WHERE vip_booking_id = ?`,
       [orderStatus, req.params.id]
     );
 
@@ -480,10 +492,15 @@ exports.getTodayVIPAppointments = asyncHandler(async (req, res) => {
       vc.phone,
       vc.vehicle_model,
       vc.vehicle_type,
-      u.name as staff_name
+      u.name as staff_name,
+      o.id as order_id,
+      o.payment_status as order_payment_status,
+      o.service_started_at,
+      o.service_completed_at
     FROM vip_bookings vb
     JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     LEFT JOIN users u ON vb.assigned_staff_id = u.id
+    LEFT JOIN orders o ON o.vip_booking_id = vb.id
     WHERE vb.appointment_date = ?
     ORDER BY vb.appointment_time ASC
   `, [today]);

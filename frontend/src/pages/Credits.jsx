@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 
@@ -8,7 +8,47 @@ const Credits = () => {
   
   // Search & Filters State
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('active'); // 'active' (unpaid/partial), 'fully_paid', 'All'
+  const [selectedStatus, setSelectedStatus] = useState('active'); // 'active' (unpaid/partial), 'fully_paid', 'All', 'grouped_customers'
+
+  // Expanded customer IDs state for Grouped Customers view
+  const [expandedCustomers, setExpandedCustomers] = useState({});
+
+  const toggleCustomerExpand = (customerId) => {
+    setExpandedCustomers(prev => ({
+      ...prev,
+      [customerId]: !prev[customerId]
+    }));
+  };
+
+  // Group credits by customer
+  const groupCreditsByCustomer = (creditList) => {
+    const grouped = {};
+    creditList.forEach(c => {
+      const custId = c.customer_id;
+      if (!grouped[custId]) {
+        grouped[custId] = {
+          customer_id: c.customer_id,
+          customer_name: c.customer_name,
+          customer_phone: c.customer_phone,
+          vehicles: new Set(),
+          total_amount: 0,
+          total_remaining: 0,
+          statements: []
+        };
+      }
+      if (c.vehicle_plate) {
+        grouped[custId].vehicles.add(`${c.vehicle_plate} (${c.vehicle_type})`);
+      }
+      grouped[custId].total_amount += parseFloat(c.amount);
+      grouped[custId].total_remaining += parseFloat(c.remaining_amount);
+      grouped[custId].statements.push(c);
+    });
+    return Object.values(grouped);
+  };
+
+  const groupedCustomers = selectedStatus === 'grouped_customers' 
+    ? groupCreditsByCustomer(filteredCredits).sort((a, b) => b.total_remaining - a.total_remaining)
+    : [];
 
   // Modal State for Recovery
   const [isRecoverModalOpen, setIsRecoverModalOpen] = useState(false);
@@ -167,7 +207,8 @@ const Credits = () => {
           {[
             { id: 'active', label: 'Active Balances' },
             { id: 'fully_paid', label: 'Cleared Credits' },
-            { id: 'All', label: 'All Statements' }
+            { id: 'All', label: 'All Statements' },
+            { id: 'grouped_customers', label: 'Credit Customers' }
           ].map(s => (
             <button
               key={s.id}
@@ -195,27 +236,179 @@ const Credits = () => {
       {/* Credits Ledger Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date Granted</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer Name</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Plate / Model</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Order ID</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Credit</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Remaining Credit</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
+          {selectedStatus === 'grouped_customers' ? (
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <td colSpan="8" className="px-6 py-12 text-center text-gray-500">Loading credit ledger...</td>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-10"></th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer Name</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Vehicles</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Statements Count</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Granted</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Outstanding</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
                 </tr>
-              ) : filteredCredits.length > 0 ? (
-                filteredCredits.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50/50 transition">
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-12 text-center text-gray-500">Loading credit ledger...</td>
+                  </tr>
+                ) : groupedCustomers.length > 0 ? (
+                  groupedCustomers.map((gc) => {
+                    const isExpanded = !!expandedCustomers[gc.customer_id];
+                    return (
+                      <Fragment key={gc.customer_id}>
+                        <tr className="hover:bg-gray-50/50 transition">
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleCustomerExpand(gc.customer_id)}
+                              className="text-gray-500 hover:text-gray-900 transition-transform font-bold text-lg"
+                            >
+                              {isExpanded ? '▼' : '▶'}
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
+                            <div>{gc.customer_name}</div>
+                            {gc.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5">{gc.customer_phone}</div>}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {Array.from(gc.vehicles).join(', ') || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center font-bold">
+                            {gc.statements.length}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
+                            AED {gc.total_amount.toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-gray-900 text-right">
+                            AED {gc.total_remaining.toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
+                              gc.total_remaining === 0 
+                                ? 'bg-green-50 text-green-700' 
+                                : gc.total_remaining < gc.total_amount 
+                                ? 'bg-yellow-50 text-yellow-700' 
+                                : 'bg-red-50 text-red-700'
+                            }`}>
+                              {gc.total_remaining === 0 ? 'Cleared' : gc.total_remaining < gc.total_amount ? 'Partially Paid' : 'Unpaid'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button
+                              type="button"
+                              onClick={() => toggleCustomerExpand(gc.customer_id)}
+                              className="text-primary-600 hover:text-primary-950 font-bold"
+                            >
+                              {isExpanded ? 'Hide Statements' : 'View Statements'} ({gc.statements.length})
+                            </button>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-gray-50" key={`exp-${gc.customer_id}`}>
+                            <td colSpan="8" className="px-12 py-4">
+                              <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                                <table className="w-full text-left border-collapse text-xs">
+                                  <thead className="bg-gray-100 border-b">
+                                    <tr>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase">Date Granted</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase">Order ID</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase">Vehicle Plate</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase text-right">Original Credit</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase text-right">Remaining Outstanding</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase">Status</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase text-right">Actions</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y">
+                                    {gc.statements.map((s) => (
+                                      <tr key={s.id} className="hover:bg-gray-50/50">
+                                        <td className="px-4 py-2.5 text-gray-600">
+                                          {new Date(s.created_at).toLocaleDateString('en-GB')}
+                                        </td>
+                                        <td className="px-4 py-2.5 font-mono text-gray-600">
+                                          #{s.order_id}
+                                        </td>
+                                        <td className="px-4 py-2.5 font-mono text-gray-600">
+                                          {s.vehicle_plate} ({s.vehicle_type})
+                                        </td>
+                                        <td className="px-4 py-2.5 text-gray-600 text-right">
+                                          AED {parseFloat(s.amount).toFixed(2)}
+                                        </td>
+                                        <td className="px-4 py-2.5 font-bold text-gray-955 text-right">
+                                          AED {parseFloat(s.remaining_amount).toFixed(2)}
+                                        </td>
+                                        <td className="px-4 py-2.5">
+                                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                            s.status === 'fully_paid' ? 'bg-green-50 text-green-700' :
+                                            s.status === 'partially_paid' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'
+                                          }`}>
+                                            {s.status.replace('_', ' ')}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-2.5 text-right space-x-2">
+                                          {s.status !== 'fully_paid' && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenRecoverModal(s)}
+                                              className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold shadow-sm transition"
+                                            >
+                                              💵 Recover Cash
+                                            </button>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => handleViewHistory(s)}
+                                            className="text-primary-600 hover:text-primary-950 font-bold"
+                                          >
+                                            History Logs
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-12 text-center text-gray-400">
+                      No credit statements match the query filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date Granted</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer Name</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Plate / Model</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Order ID</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Credit</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Remaining Credit</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-12 text-center text-gray-500">Loading credit ledger...</td>
+                  </tr>
+                ) : filteredCredits.length > 0 ? (
+                  filteredCredits.map((c) => (
+                    <tr key={c.id} className="hover:bg-gray-50/50 transition">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {new Date(c.created_at).toLocaleDateString('en-GB')}
                     </td>
@@ -270,6 +463,7 @@ const Credits = () => {
               )}
             </tbody>
           </table>
+          )}
         </div>
       </div>
 
