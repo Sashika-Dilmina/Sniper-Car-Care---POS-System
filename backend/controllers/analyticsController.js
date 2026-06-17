@@ -123,6 +123,59 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
     pendingPayments = [{ pending_amount: 0, pending_count: 0 }];
   }
 
+  // Pending orders by vehicle type (statuses: 'pending', 'processing')
+  let pendingSaloonCount = 0;
+  let pending4x4Count = 0;
+  try {
+    const [pendingVehiclesResult] = await pool.query(
+      `SELECT 
+        COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') as vehicleType,
+        COUNT(*) as count
+       FROM orders o
+       LEFT JOIN customers c ON o.customer_id = c.id
+       LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+       LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+       WHERE o.status IN ('pending', 'processing')
+       GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')`
+    );
+    pendingSaloonCount = pendingVehiclesResult.find(item => item.vehicleType === 'Saloon')?.count || 0;
+    pending4x4Count = pendingVehiclesResult.find(item => item.vehicleType === '4x4')?.count || 0;
+  } catch (error) {
+    console.error('Pending vehicles count query error:', error);
+  }
+
+  // Recent orders (latest 5)
+  let recentOrdersList = [];
+  try {
+    const [recentResult] = await pool.query(`
+      SELECT o.*, 
+             COALESCE(c.name, vc.name) as customer_name, 
+             COALESCE(c.phone, vc.phone) as customer_phone,
+             COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
+             COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+      LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+      ORDER BY o.created_at DESC
+      LIMIT 5
+    `);
+    
+    // Get order items for each recent order
+    for (let ord of recentResult) {
+      const [items] = await pool.query(`
+        SELECT oi.*, p.name as product_name, p.category
+        FROM order_items oi
+        LEFT JOIN products p ON oi.product_id = p.id
+        WHERE oi.order_id = ?
+      `, [ord.id]);
+      ord.items = items;
+    }
+    recentOrdersList = recentResult;
+  } catch (error) {
+    console.error('Recent orders query error:', error);
+  }
+
   // New customers (most recent 10 overall)
   let newCustomers = [];
   try {
@@ -247,14 +300,17 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
       completed_services: parseInt(services[0]?.completed_services || 0),
       total_customers: parseInt(customers[0]?.total_customers || 0),
       pending_amount: parseFloat(pendingPayments[0]?.pending_amount || 0),
-      pending_count: parseInt(pendingPayments[0]?.pending_count || 0)
+      pending_count: parseInt(pendingPayments[0]?.pending_count || 0),
+      pending_saloon_count: parseInt(pendingSaloonCount || 0),
+      pending_4x4_count: parseInt(pending4x4Count || 0)
     },
     top_customers: topCustomers || [],
     top_services: topServices || [],
     sales_by_day: salesByDay || [],
     category_revenue: categoryRevenue || [],
     new_customers: newCustomers || [],
-    recent_feedback: recentFeedback || []
+    recent_feedback: recentFeedback || [],
+    recent_orders: recentOrdersList || []
   });
 });
 

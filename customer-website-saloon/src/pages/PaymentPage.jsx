@@ -222,7 +222,8 @@ const PaymentPage = () => {
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [paid, setPaid] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState('apple_pay'); // 'apple_pay', 'samsung_pay', 'card', 'cash'
+    const [paymentMethod, setPaymentMethod] = useState('tap'); // 'tap', 'card', 'cash'
+    const [tapSubOption, setTapSubOption] = useState('apple_pay'); // 'apple_pay', 'samsung_pay'
     const [walletOpen, setWalletOpen] = useState(false);
     const [cashConfirming, setCashConfirming] = useState(false);
     const navigate = useNavigate();
@@ -343,42 +344,56 @@ const PaymentPage = () => {
 
                     {/* Payment Method Selector */}
                     <div className="space-y-3">
-                        <p className="text-xs text-gray-400 uppercase tracking-widest font-bold">Select Payment Option</p>
-                        <div className="grid grid-cols-2 gap-3">
+                        <p className="text-xs text-gray-400 uppercase tracking-widest font-bold text-left">Select Payment Option</p>
+                        <div className="grid grid-cols-3 gap-3">
                             <button
-                                onClick={() => setPaymentMethod('apple_pay')}
-                                className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition ${paymentMethod === 'apple_pay' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-800 bg-gray-950/40 hover:bg-gray-800'}`}
+                                onClick={() => setPaymentMethod('cash')}
+                                className={`flex flex-col items-center justify-center gap-1.5 p-3.5 rounded-xl border-2 transition ${paymentMethod === 'cash' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-800 bg-gray-950/40 hover:bg-gray-800'}`}
                             >
-                                <span className="text-lg">🍎</span>
-                                <span className="font-bold text-sm">Apple Pay</span>
+                                <span className="text-2xl">💵</span>
+                                <span className="font-bold text-xs">Cash</span>
                             </button>
                             <button
-                                onClick={() => setPaymentMethod('samsung_pay')}
-                                className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition ${paymentMethod === 'samsung_pay' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-800 bg-gray-950/40 hover:bg-gray-800'}`}
+                                onClick={() => setPaymentMethod('tap')}
+                                className={`flex flex-col items-center justify-center gap-1.5 p-3.5 rounded-xl border-2 transition ${paymentMethod === 'tap' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-800 bg-gray-950/40 hover:bg-gray-800'}`}
                             >
-                                <span className="text-lg">📱</span>
-                                <span className="font-bold text-sm">Samsung Pay</span>
+                                <span className="text-2xl">📱</span>
+                                <span className="font-bold text-xs">Tap</span>
                             </button>
                             <button
                                 onClick={() => setPaymentMethod('card')}
-                                className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition ${paymentMethod === 'card' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-800 bg-gray-950/40 hover:bg-gray-800'}`}
+                                className={`flex flex-col items-center justify-center gap-1.5 p-3.5 rounded-xl border-2 transition ${paymentMethod === 'card' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-800 bg-gray-950/40 hover:bg-gray-800'}`}
                             >
-                                <span className="text-lg">💳</span>
-                                <span className="font-bold text-sm">Credit Card</span>
-                            </button>
-                            <button
-                                onClick={() => setPaymentMethod('cash')}
-                                className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition ${paymentMethod === 'cash' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-800 bg-gray-950/40 hover:bg-gray-800'}`}
-                            >
-                                <span className="text-lg">💵</span>
-                                <span className="font-bold text-sm">Pay Cash</span>
+                                <span className="text-2xl">💳</span>
+                                <span className="font-bold text-xs">Card</span>
                             </button>
                         </div>
+
+                        {/* Tap Sub-options */}
+                        {paymentMethod === 'tap' && (
+                            <div className="space-y-2 p-3 bg-gray-950/20 border border-gray-800 rounded-xl mt-2">
+                                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold text-left">Select Wallet Type</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        onClick={() => setTapSubOption('apple_pay')}
+                                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border transition text-sm ${tapSubOption === 'apple_pay' ? 'border-yellow-500 bg-yellow-500/5 text-yellow-500 font-bold' : 'border-gray-800 text-gray-400 hover:text-white'}`}
+                                    >
+                                        <span>🍎</span> Apple Pay
+                                    </button>
+                                    <button
+                                        onClick={() => setTapSubOption('samsung_pay')}
+                                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border transition text-sm ${tapSubOption === 'samsung_pay' ? 'border-yellow-500 bg-yellow-500/5 text-yellow-500 font-bold' : 'border-gray-800 text-gray-400 hover:text-white'}`}
+                                    >
+                                        <span>📱</span> Samsung Pay
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Contextual Checkout Render */}
                     <div className="pt-4 border-t border-gray-800">
-                        {paymentMethod === 'apple_pay' && (
+                        {paymentMethod === 'tap' && tapSubOption === 'apple_pay' && (
                             <div className="space-y-4">
                                 <p className="text-xs text-gray-400 leading-relaxed text-center">
                                     Express pay with Apple Pay. Simulated FaceID authorization will be opened.
@@ -392,7 +407,7 @@ const PaymentPage = () => {
                             </div>
                         )}
 
-                        {paymentMethod === 'samsung_pay' && (
+                        {paymentMethod === 'tap' && tapSubOption === 'samsung_pay' && (
                             <div className="space-y-4">
                                 <p className="text-xs text-gray-400 leading-relaxed text-center">
                                     Express pay with Samsung Pay. Simulated passcode authorization will be opened.
@@ -434,7 +449,7 @@ const PaymentPage = () => {
             <SimulatedWalletModal
                 isOpen={walletOpen}
                 onClose={() => setWalletOpen(false)}
-                method={paymentMethod}
+                method={paymentMethod === 'tap' ? tapSubOption : paymentMethod}
                 amount={order.total}
                 orderId={order.id}
                 onSuccess={() => {

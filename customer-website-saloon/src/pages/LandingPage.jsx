@@ -1034,6 +1034,31 @@ const LandingPage = () => {
 
 
 
+  const originalServiceNames = [
+    'full body service',
+    'double soap',
+    'ceramic wash',
+    'body wash',
+    'just water'
+  ];
+  const originalPackages = packages.filter(pkg => 
+    originalServiceNames.includes(pkg.name.toLowerCase())
+  );
+
+  const topRowServices = originalPackages.filter(pkg => {
+    const name = pkg.name.toLowerCase();
+    return name === 'body wash' || name === 'just water';
+  }).sort((a, b) => {
+    if (a.name.toLowerCase() === 'body wash') return -1;
+    if (b.name.toLowerCase() === 'body wash') return 1;
+    return 0;
+  });
+
+  const bottomRowServices = originalPackages.filter(pkg => {
+    const name = pkg.name.toLowerCase();
+    return name !== 'body wash' && name !== 'just water';
+  });
+
   return (
     <div className="bg-white text-gray-900 overflow-hidden pb-24">
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm">
@@ -1135,31 +1160,62 @@ const LandingPage = () => {
             <p className="mt-2 text-sm sm:text-base text-gray-600 font-medium">Select the service that suits your needs.</p>
           </div>
         </Reveal>
-        <div className="grid grid-cols-5 gap-1.5 sm:gap-4 w-full px-1">
-          {packages.map((pkg, idx) => (
-            <Reveal key={pkg.name} delay={idx * 50} className="flex w-full min-w-0">
-              <div className={`template-card flex flex-col w-full h-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white ${pkg.featured ? 'ring-1 ring-red-600' : ''}`}>
-                <div className="p-1 sm:p-2 text-center shrink-0 bg-white h-[36px] sm:h-[48px] flex items-center justify-center">
-                  <h3 className="text-[7px] sm:text-xs font-black uppercase tracking-tighter text-gray-900 leading-[1.1] break-words line-clamp-3">{pkg.name}</h3>
-                </div>
-                <div className="relative h-14 sm:h-24 bg-gray-900 overflow-visible shrink-0 border-y border-gray-100">
-                  <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center opacity-90" />
-                  <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex h-6 w-6 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-600 text-white text-[7px] sm:text-sm font-bold shadow-md ring-2 ring-white z-10">
-                    {String(pkg.price).replace(' AED', '')}
+        <div className="flex flex-col gap-4 sm:gap-6">
+          {/* Top Row: Body Wash and Just Water */}
+          <div className="grid grid-cols-2 gap-1.5 sm:gap-4 max-w-xl mx-auto w-full px-1">
+            {topRowServices.map((pkg, idx) => (
+              <Reveal key={pkg.name} delay={idx * 50} className="flex w-full min-w-0">
+                <div className={`template-card flex flex-col w-full h-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white ${pkg.featured ? 'ring-1 ring-red-600' : ''}`}>
+                  <div className="p-1 sm:p-2 text-center shrink-0 bg-white h-[36px] sm:h-[48px] flex items-center justify-center">
+                    <h3 className="text-[7px] sm:text-xs font-black uppercase tracking-tighter text-gray-900 leading-[1.1] break-words line-clamp-3">{pkg.name}</h3>
+                  </div>
+                  <div className="relative h-14 sm:h-24 bg-gray-900 overflow-visible shrink-0 border-y border-gray-100">
+                    <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center opacity-90" />
+                    <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex h-6 w-6 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-600 text-white text-[7px] sm:text-sm font-bold shadow-md ring-2 ring-white z-10">
+                      {String(pkg.price).replace(' AED', '')}
+                    </div>
+                  </div>
+                  <div className="px-1 pt-4 pb-2 sm:pt-6 sm:pb-3 flex flex-col flex-1 items-center text-center bg-white justify-between">
+                    <p className="text-[6px] sm:text-[10px] text-gray-500 leading-[1.2] mb-1.5 sm:mb-2 line-clamp-3 w-full break-words">{pkg.description}</p>
+                    <button
+                      onClick={() => handleServiceClick(pkg)}
+                      className="w-[90%] rounded bg-black py-1 sm:py-1.5 text-[6px] sm:text-[9px] font-bold uppercase tracking-widest text-white hover:bg-red-600 transition"
+                    >
+                      SELECT
+                    </button>
                   </div>
                 </div>
-                <div className="px-1 pt-4 pb-2 sm:pt-6 sm:pb-3 flex flex-col flex-1 items-center text-center bg-white justify-between">
-                  <p className="text-[6px] sm:text-[10px] text-gray-500 leading-[1.2] mb-1.5 sm:mb-2 line-clamp-3 w-full break-words">{pkg.description}</p>
-                  <button
-                    onClick={() => handleServiceClick(pkg)}
-                    className="w-[90%] rounded bg-black py-1 sm:py-1.5 text-[6px] sm:text-[9px] font-bold uppercase tracking-widest text-white hover:bg-red-600 transition"
-                  >
-                    SELECT
-                  </button>
+              </Reveal>
+            ))}
+          </div>
+
+          {/* Bottom Row: Remaining Services */}
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-4 max-w-3xl mx-auto w-full px-1">
+            {bottomRowServices.map((pkg, idx) => (
+              <Reveal key={pkg.name} delay={(idx + 2) * 50} className="flex w-full min-w-0">
+                <div className={`template-card flex flex-col w-full h-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white ${pkg.featured ? 'ring-1 ring-red-600' : ''}`}>
+                  <div className="p-1 sm:p-2 text-center shrink-0 bg-white h-[36px] sm:h-[48px] flex items-center justify-center">
+                    <h3 className="text-[7px] sm:text-xs font-black uppercase tracking-tighter text-gray-900 leading-[1.1] break-words line-clamp-3">{pkg.name}</h3>
+                  </div>
+                  <div className="relative h-14 sm:h-24 bg-gray-900 overflow-visible shrink-0 border-y border-gray-100">
+                    <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center opacity-90" />
+                    <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex h-6 w-6 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-600 text-white text-[7px] sm:text-sm font-bold shadow-md ring-2 ring-white z-10">
+                      {String(pkg.price).replace(' AED', '')}
+                    </div>
+                  </div>
+                  <div className="px-1 pt-4 pb-2 sm:pt-6 sm:pb-3 flex flex-col flex-1 items-center text-center bg-white justify-between">
+                    <p className="text-[6px] sm:text-[10px] text-gray-500 leading-[1.2] mb-1.5 sm:mb-2 line-clamp-3 w-full break-words">{pkg.description}</p>
+                    <button
+                      onClick={() => handleServiceClick(pkg)}
+                      className="w-[90%] rounded bg-black py-1 sm:py-1.5 text-[6px] sm:text-[9px] font-bold uppercase tracking-widest text-white hover:bg-red-600 transition"
+                    >
+                      SELECT
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </Reveal>
-          ))}
+              </Reveal>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -1202,91 +1258,6 @@ const LandingPage = () => {
             </div>
           </div>
         </Reveal>
-      </section>
-
-      <section id="how-it-works" className="mx-auto max-w-6xl px-4 pb-10">
-        <Reveal>
-          <div className="text-center mb-8">
-            <p className="text-xs font-bold uppercase tracking-[0.35em] text-gray-400">— How It Works —</p>
-          </div>
-        </Reveal>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 relative">
-          <div className="hidden md:block absolute top-8 left-[12%] right-[12%] border-t border-dashed border-gray-300" aria-hidden="true" />
-          {howItWorks.map((item, idx) => (
-            <Reveal key={item.step} delay={idx * 80} className={`relative ${item.step === 1 && quickBookOpen ? 'z-50' : 'z-20'}`}>
-              <div 
-                className={`flex flex-col items-center text-center ${item.step === 1 || item.step === 3 ? 'cursor-pointer hover:scale-[1.02] transition-transform' : ''}`}
-                onClick={() => {
-                  if (item.step === 1) setQuickBookOpen(!quickBookOpen);
-                  if (item.step === 3) openVIPModal();
-                }}
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white text-sm font-bold z-10 shadow-md">{item.step}</div>
-                <div className="mt-3 text-2xl">{item.icon}</div>
-                <h3 className="mt-2 text-xs sm:text-sm font-black uppercase text-gray-900">{item.title}</h3>
-                <p className="mt-1 text-[10px] sm:text-xs text-gray-500 leading-relaxed">{item.description}</p>
-                
-                {item.step === 1 && quickBookOpen && (
-                  <div className="hidden sm:flex absolute top-full left-1/2 -translate-x-1/2 mt-4 w-[250px] max-w-[250px] p-4 bg-white rounded-xl border border-gray-200 shadow-2xl flex-col gap-3 z-50 before:content-[''] before:absolute before:-top-2 before:left-1/2 before:-translate-x-1/2 before:border-8 before:border-transparent before:border-b-white" onClick={(e) => e.stopPropagation()}>
-                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
-                      <option value="">Select Service</option>
-                      {packages.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-                    </select>
-                    <input type="date" className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.date} onChange={e => setQuickBookForm({...quickBookForm, date: e.target.value})} min={new Date().toISOString().split('T')[0]} />
-                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.time} onChange={e => setQuickBookForm({...quickBookForm, time: e.target.value})}>
-                      <option value="">Select Time</option>
-                      {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <button 
-                      className="w-full mt-1 bg-red-600 text-white text-xs font-bold py-3 rounded-lg hover:bg-red-700 shadow-md transition-colors"
-                      onClick={() => {
-                        if (!quickBookForm.service) return toast.error('Select a service');
-                        const svc = packages.find(p => p.name === quickBookForm.service);
-                        setSelectedService(svc);
-                        
-                        let initialNotes = '';
-                        if (quickBookForm.date || quickBookForm.time) {
-                          initialNotes = `Preferred Appointment: ${quickBookForm.date || 'Any Date'} at ${quickBookForm.time || 'Any Time'}\n`;
-                        }
-                        setBookingForm(prev => ({ ...prev, notes: initialNotes }));
-                        setShowBookingModal(true);
-                        setQuickBookOpen(false);
-                      }}
-                    >
-                      Book Now
-                    </button>
-                  </div>
-                )}
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-4 pb-10">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {trustFeatures.map((item, idx) => (
-            <Reveal key={item.title} delay={idx * 60} className={idx === 2 ? 'col-span-2 sm:col-span-1 mx-auto sm:mx-0 max-w-[50%]' : ''}>
-              <div 
-                className={`flex flex-col items-center text-center p-3 ${item.title === 'CUSTOMER SUPPORT' ? 'cursor-pointer hover:bg-gray-50 rounded-xl transition' : ''}`}
-                onClick={() => {
-                  if (item.title === 'CUSTOMER SUPPORT') setShowSupportOptions(!showSupportOptions);
-                }}
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-red-600 text-lg">{item.icon}</div>
-                <p className="mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-900">{item.title}</p>
-                <p className="text-[9px] sm:text-[10px] text-gray-500">{item.subtitle}</p>
-                
-                {item.title === 'CUSTOMER SUPPORT' && showSupportOptions && (
-                  <div className="mt-3 flex gap-2 w-full justify-center" onClick={(e) => e.stopPropagation()}>
-                    <a href="tel:+971555371811" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">Call</a>
-                    <a href="https://wa.me/971555371811" target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">WhatsApp</a>
-                  </div>
-                )}
-              </div>
-            </Reveal>
-          ))}
-        </div>
       </section>
 
       <section id="products" className="mx-auto max-w-6xl px-4 pb-10 bg-gray-50 py-10 -mx-0">
@@ -1344,6 +1315,92 @@ const LandingPage = () => {
                 <p className="text-sm text-gray-600 leading-relaxed">&ldquo;{testimonial.quote}&rdquo;</p>
                 <div className="mt-4 text-sm font-bold text-gray-900">{testimonial.name}</div>
                 <div className="text-[10px] uppercase tracking-widest text-gray-400">{testimonial.location}</div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      <section id="how-it-works" className="mx-auto max-w-6xl px-4 pb-10">
+        <Reveal>
+          <div className="text-center mb-8">
+            <p className="text-xs font-bold uppercase tracking-[0.35em] text-gray-400">— How It Works —</p>
+          </div>
+        </Reveal>
+
+        {/* Customer Support row (Trust Features) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-10">
+          {trustFeatures.map((item, idx) => (
+            <Reveal key={item.title} delay={idx * 60} className={idx === 2 ? 'col-span-2 sm:col-span-1 mx-auto sm:mx-0 max-w-[50%]' : ''}>
+              <div 
+                className={`flex flex-col items-center text-center p-3 ${item.title === 'CUSTOMER SUPPORT' ? 'cursor-pointer hover:bg-gray-50 rounded-xl transition' : ''}`}
+                onClick={() => {
+                  if (item.title === 'CUSTOMER SUPPORT') setShowSupportOptions(!showSupportOptions);
+                }}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-red-600 text-lg">{item.icon}</div>
+                <p className="mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-900">{item.title}</p>
+                <p className="text-[9px] sm:text-[10px] text-gray-500">{item.subtitle}</p>
+                
+                {item.title === 'CUSTOMER SUPPORT' && showSupportOptions && (
+                  <div className="mt-3 flex gap-2 w-full justify-center" onClick={(e) => e.stopPropagation()}>
+                    <a href="tel:+971555371811" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">Call</a>
+                    <a href="https://wa.me/971555371811" target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">WhatsApp</a>
+                  </div>
+                )}
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        {/* 1-4 Steps row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 relative">
+          <div className="hidden md:block absolute top-8 left-[12%] right-[12%] border-t border-dashed border-gray-300" aria-hidden="true" />
+          {howItWorks.map((item, idx) => (
+            <Reveal key={item.step} delay={idx * 80} className={`relative ${item.step === 1 && quickBookOpen ? 'z-50' : 'z-20'}`}>
+              <div 
+                className={`flex flex-col items-center text-center ${item.step === 1 || item.step === 3 ? 'cursor-pointer hover:scale-[1.02] transition-transform' : ''}`}
+                onClick={() => {
+                  if (item.step === 1) setQuickBookOpen(!quickBookOpen);
+                  if (item.step === 3) openVIPModal();
+                }}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white text-sm font-bold z-10 shadow-md">{item.step}</div>
+                <div className="mt-3 text-2xl">{item.icon}</div>
+                <h3 className="mt-2 text-xs sm:text-sm font-black uppercase text-gray-900">{item.title}</h3>
+                <p className="mt-1 text-[10px] sm:text-xs text-gray-500 leading-relaxed">{item.description}</p>
+                
+                {item.step === 1 && quickBookOpen && (
+                  <div className="hidden sm:flex absolute top-full left-1/2 -translate-x-1/2 mt-4 w-[250px] max-w-[250px] p-4 bg-white rounded-xl border border-gray-200 shadow-2xl flex-col gap-3 z-50 before:content-[''] before:absolute before:-top-2 before:left-1/2 before:-translate-x-1/2 before:border-8 before:border-transparent before:border-b-white" onClick={(e) => e.stopPropagation()}>
+                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
+                      <option value="">Select Service</option>
+                      {packages.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                    </select>
+                    <input type="date" className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.date} onChange={e => setQuickBookForm({...quickBookForm, date: e.target.value})} min={new Date().toISOString().split('T')[0]} />
+                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.time} onChange={e => setQuickBookForm({...quickBookForm, time: e.target.value})}>
+                      <option value="">Select Time</option>
+                      {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <button 
+                      className="w-full mt-1 bg-red-600 text-white text-xs font-bold py-3 rounded-lg hover:bg-red-700 shadow-md transition-colors"
+                      onClick={() => {
+                        if (!quickBookForm.service) return toast.error('Select a service');
+                        const svc = packages.find(p => p.name === quickBookForm.service);
+                        setSelectedService(svc);
+                        
+                        let initialNotes = '';
+                        if (quickBookForm.date || quickBookForm.time) {
+                          initialNotes = `Preferred Appointment: ${quickBookForm.date || 'Any Date'} at ${quickBookForm.time || 'Any Time'}\n`;
+                        }
+                        setBookingForm(prev => ({ ...prev, notes: initialNotes }));
+                        setShowBookingModal(true);
+                        setQuickBookOpen(false);
+                      }}
+                    >
+                      Book Now
+                    </button>
+                  </div>
+                )}
               </div>
             </Reveal>
           ))}

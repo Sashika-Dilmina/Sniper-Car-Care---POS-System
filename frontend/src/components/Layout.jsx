@@ -212,14 +212,14 @@ const Layout = () => {
       { path: '/reports', label: 'Reports', icon: 'reports' },
     ];
   } else {
-    // Staff role: keeps their old layout structure
+    // Staff role: keeps their old layout structure with Orders second
     navItems = [
       { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+      { path: '/orders', label: 'Orders', icon: 'orders' },
       { path: '/sales', label: 'Sells', icon: 'sells' },
       { path: '/customers', label: 'Customers', icon: 'customers' },
       { path: '/credits', label: 'Credits', icon: 'credits' },
       { path: '/products', label: 'Products', icon: 'products' },
-      { path: '/orders', label: 'Orders', icon: 'orders' },
       { path: '/services', label: 'Services', icon: 'services' },
       { path: '/vip', label: 'VIP', icon: 'vip' },
       { path: '/anpr', label: 'ANPR', icon: 'anpr' },

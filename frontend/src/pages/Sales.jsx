@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -66,9 +66,13 @@ const Sales = () => {
   // POS - Cart State
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('cash'); // cash, card, credit (unpaid)
-  const [cardSubOption, setCardSubOption] = useState('card'); // visa, apple_pay, samsung_pay, card
+  const [paymentMethod, setPaymentMethod] = useState('cash'); // cash, tap, card, credit (unpaid)
+  const [tapSubOption, setTapSubOption] = useState('apple_pay');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+
+  // Register check state
+  const [activeRegister, setActiveRegister] = useState(null);
+  const [loadingRegister, setLoadingRegister] = useState(true);
 
   // Ledger - State
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -86,7 +90,23 @@ const Sales = () => {
   useEffect(() => {
     fetchProducts();
     fetchCustomers();
+    checkRegisterStatus();
   }, []);
+
+  const checkRegisterStatus = async () => {
+    try {
+      const response = await axios.get('/api/registers/active');
+      if (response.data.success && response.data.active) {
+        setActiveRegister(response.data.register);
+      } else {
+        setActiveRegister(null);
+      }
+    } catch (err) {
+      console.error('Error checking register status:', err);
+    } finally {
+      setLoadingRegister(false);
+    }
+  };
 
   // Fetch ledger sales when active sub-tab is ledger or date changes
   useEffect(() => {
@@ -271,11 +291,17 @@ const Sales = () => {
           amount: total,
           method: 'cash'
         });
+      } else if (paymentMethod === 'tap') {
+        await axios.post('/api/payments/manual', {
+          order_id: createdOrder.id,
+          amount: total,
+          method: tapSubOption
+        });
       } else if (paymentMethod === 'card') {
         await axios.post('/api/payments/manual', {
           order_id: createdOrder.id,
           amount: total,
-          method: cardSubOption
+          method: 'card'
         });
       } else if (paymentMethod === 'credit') {
         await axios.post('/api/credits', {
@@ -815,9 +841,10 @@ const Sales = () => {
                   {/* Payment Method */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       {[
                         { key: 'cash', label: '💵 Cash' },
+                        { key: 'tap', label: '📱 Tap' },
                         { key: 'card', label: '💳 Card' },
                         { key: 'credit', label: '🏦 Credit' }
                       ].map(pm => (
@@ -826,9 +853,6 @@ const Sales = () => {
                           type="button"
                           onClick={() => {
                             setPaymentMethod(pm.key);
-                            if (pm.key === 'card') {
-                              setCardSubOption('card');
-                            }
                           }}
                           className={`py-2 text-xs font-bold rounded-xl border transition-all ${
                             paymentMethod === pm.key
@@ -842,23 +866,21 @@ const Sales = () => {
                     </div>
                   </div>
 
-                  {/* Card Sub-payment methods */}
-                  {paymentMethod === 'card' && (
+                  {/* Tap Sub-payment methods */}
+                  {paymentMethod === 'tap' && (
                     <div className="space-y-1.5 p-3 bg-gray-50 border border-gray-150 rounded-xl">
-                      <label className="block text-[11px] font-black uppercase text-gray-500">Card Processor</label>
+                      <label className="block text-[11px] font-black uppercase text-gray-500">Tap Type</label>
                       <div className="grid grid-cols-2 gap-1.5">
                         {[
-                          { key: 'visa', label: '💳 Visa' },
                           { key: 'apple_pay', label: ' Apple Pay' },
-                          { key: 'samsung_pay', label: '📱 Samsung Pay' },
-                          { key: 'card', label: 'Standard Card' }
+                          { key: 'samsung_pay', label: '📱 Samsung Pay' }
                         ].map(sub => (
                           <button
                             key={sub.key}
                             type="button"
-                            onClick={() => setCardSubOption(sub.key)}
+                            onClick={() => setTapSubOption(sub.key)}
                             className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition-all ${
-                              cardSubOption === sub.key
+                              tapSubOption === sub.key
                                 ? 'bg-gray-800 text-white border-gray-800 shadow-sm'
                                 : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
                             }`}
@@ -889,12 +911,29 @@ const Sales = () => {
                 </div>
               </div>
 
+              {/* Register closed warning */}
+              {!activeRegister && !loadingRegister && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm font-semibold space-y-2 mt-4">
+                  <p className="flex items-center gap-1.5 font-bold text-left">
+                    <span>⚠️</span> Cash Register is Closed
+                  </p>
+                  <p className="text-xs text-red-600 font-normal text-left">
+                    You cannot perform checkout operations while the register is closed. Please open the register from the Dashboard first.
+                  </p>
+                  <div className="text-left">
+                    <Link to="/" className="inline-block mt-1 text-xs bg-red-600 hover:bg-red-700 text-white font-bold py-1.5 px-3 rounded-lg transition">
+                      Go to Dashboard
+                    </Link>
+                  </div>
+                </div>
+              )}
+
               {/* Complete Sale Button */}
               <button
                 onClick={handleCheckout}
-                disabled={isCheckingOut || cart.length === 0}
+                disabled={isCheckingOut || cart.length === 0 || (!activeRegister && !loadingRegister)}
                 className={`w-full py-4 rounded-xl font-bold text-white transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-primary-200 ${
-                  isCheckingOut || cart.length === 0
+                  isCheckingOut || cart.length === 0 || (!activeRegister && !loadingRegister)
                     ? 'bg-gray-300 cursor-not-allowed shadow-none'
                     : 'bg-primary-600 hover:bg-primary-700'
                 }`}

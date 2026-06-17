@@ -174,10 +174,23 @@ const createOrder = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
+    // Check if any of the products in items is a service
+    let hasService = false;
+    for (let item of items) {
+      const [prodRows] = await connection.query('SELECT category FROM products WHERE id = ?', [item.product_id]);
+      if (prodRows.length > 0 && prodRows[0].category === 'Services') {
+        hasService = true;
+        break;
+      }
+    }
+
+    const orderStatus = hasService ? 'processing' : 'pending';
+    const serviceStartedAt = hasService ? new Date() : null;
+
     // Create order
     const [orderResult] = await connection.query(
-      'INSERT INTO orders (customer_id, total, discount, status, payment_status) VALUES (?, ?, ?, ?, ?)',
-      [customer_id || null, total, discount || 0, 'pending', 'pending']
+      'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [customer_id || null, total, discount || 0, orderStatus, 'pending', serviceStartedAt]
     );
 
     const orderId = orderResult.insertId;
@@ -208,8 +221,8 @@ const createOrder = asyncHandler(async (req, res) => {
       const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
       if (prodRows.length > 0 && prodRows[0].category === 'Services') {
         await connection.query(
-          'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [customer_id || null, prodRows[0].name, vehicleType, item.price, 'Added via POS Order', 'pending', orderId]
+          'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, started_at, order_id) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)',
+          [customer_id || null, prodRows[0].name, vehicleType, item.price, 'Added via POS Order', 'in_progress', orderId]
         );
       }
     }

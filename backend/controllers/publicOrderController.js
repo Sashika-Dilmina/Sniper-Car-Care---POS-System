@@ -287,10 +287,15 @@ const confirmOrder = asyncHandler(async (req, res) => {
     const isCash = payment_method === 'cash';
     const paymentStatus = isCash ? 'pending' : 'paid';
 
-    // Update order status (keep as pending so staff manually starts it)
+    // Update order status to 'processing' (In Progress) and set service_started_at
     await connection.query(
-      'UPDATE orders SET status = ?, payment_status = ? WHERE id = ?',
-      ['pending', paymentStatus, order_id]
+      'UPDATE orders SET status = "processing", payment_status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) WHERE id = ?',
+      [paymentStatus, order_id]
+    );
+    // Also update associated services to 'in_progress'
+    await connection.query(
+      'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
+      [order_id]
     );
 
     // Sync loyalty stamps for paid website bookings confirmed with Cash
@@ -393,10 +398,15 @@ const confirmPayment = asyncHandler(async (req, res) => {
           [order_id, amount, method || 'card', 'completed', payment_intent_id]
         );
 
-        // Update order payment status (keep status as pending so staff manually starts it)
+        // Update order payment status and set status to 'processing' (In Progress)
         await connection.query(
-          'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
-          ['paid', 'pending', order_id]
+          'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) WHERE id = ?',
+          ['paid', 'processing', order_id]
+        );
+        // Also update associated services to 'in_progress'
+        await connection.query(
+          'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
+          [order_id]
         );
 
         // Fetch order details for loyalty and VIP sync

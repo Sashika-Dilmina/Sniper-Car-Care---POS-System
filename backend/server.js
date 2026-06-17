@@ -25,6 +25,7 @@ const supplierRoutes = require('./routes/supplierRoutes');
 const purchaseRoutes = require('./routes/purchaseRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const creditRoutes = require('./routes/creditRoutes');
+const registerRoutes = require('./routes/registerRoutes');
 const { startFtpServer } = require('./services/ftpServer');
 const { startFileWatcher } = require('./services/anprWatcher');
 
@@ -86,6 +87,7 @@ app.use('/api/suppliers', supplierRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/credits', creditRoutes);
+app.use('/api/registers', registerRoutes);
 app.use('/api/vehicle-registration', vehicleRegistrationRoutes);
 
 // Error handling middleware
