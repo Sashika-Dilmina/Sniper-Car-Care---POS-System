@@ -144,6 +144,7 @@ const OrderDetail = () => {
   const remainingAmount = parseFloat(order.total) - (order.payments?.reduce((sum, p) => sum + (p.status === 'completed' ? parseFloat(p.amount) : 0), 0) || 0);
   const isCashOrder = !order.payments || order.payments.length === 0 || order.payments.every(p => p.method === 'cash');
   const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
+  const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
 
   return (
     <div className="space-y-6">
@@ -172,15 +173,16 @@ const OrderDetail = () => {
               <p className="text-sm text-gray-600">Status</p>
               <div className="mt-2 flex items-center flex-wrap gap-3">
                 <span className={`px-3 py-1.5 text-xs font-black rounded-full uppercase tracking-wider ${
+                  isProductOnly ? 'bg-green-100 text-green-800' :
                   order.status === 'completed' ? 'bg-green-100 text-green-800' :
                   order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
                   order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
                   'bg-gray-100 text-gray-800'
                 }`}>
-                  {order.status === 'processing' ? 'In Progress' : order.status}
+                  {isProductOnly ? 'Order Placed' : (order.status === 'processing' ? 'In Progress' : order.status)}
                 </span>
 
-                {order.status === 'processing' && (
+                {order.status === 'processing' && !isProductOnly && (
                   <button
                     onClick={() => handleStatusUpdate('completed')}
                     className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98]"

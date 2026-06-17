@@ -20,21 +20,29 @@ const getOrders = asyncHandler(async (req, res) => {
            -- Start: o.service_started_at
            -- End: o.service_completed_at
            -- Fallback: If service timestamps are null, use the difference between first payment completion and order completion
-           CASE 
-             WHEN o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL THEN
-               TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at)
-             WHEN o.status = 'completed' AND EXISTS (
-               SELECT 1 FROM payments p 
-               WHERE p.order_id = o.id AND p.status = 'completed'
-             ) THEN 
-               TIMESTAMPDIFF(MINUTE, 
-                 (SELECT MIN(p.created_at) 
-                  FROM payments p 
-                  WHERE p.order_id = o.id AND p.status = 'completed'), 
-                 o.updated_at
-               )
-             ELSE NULL
-           END as service_time_minutes
+            CASE 
+              -- Bypasses service time calculation for product-only orders
+              WHEN NOT EXISTS (
+                SELECT 1 FROM order_items oi 
+                JOIN products p ON oi.product_id = p.id 
+                WHERE oi.order_id = o.id AND p.category = 'Services'
+              ) AND EXISTS (
+                SELECT 1 FROM order_items oi2 WHERE oi2.order_id = o.id
+              ) THEN NULL
+              WHEN o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL THEN
+                TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at)
+              WHEN o.status = 'completed' AND EXISTS (
+                SELECT 1 FROM payments p 
+                WHERE p.order_id = o.id AND p.status = 'completed'
+              ) THEN 
+                TIMESTAMPDIFF(MINUTE, 
+                  (SELECT MIN(p.created_at) 
+                   FROM payments p 
+                   WHERE p.order_id = o.id AND p.status = 'completed'), 
+                  o.updated_at
+                )
+              ELSE NULL
+            END as service_time_minutes
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id

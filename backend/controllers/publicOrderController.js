@@ -287,18 +287,30 @@ const confirmOrder = asyncHandler(async (req, res) => {
     const isCash = payment_method === 'cash';
     const paymentStatus = isCash ? 'pending' : 'paid';
 
-    // Update order status to 'processing' (In Progress) and set service_started_at
-    await connection.query(
-      'UPDATE orders SET status = "processing", payment_status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) WHERE id = ?',
-      [paymentStatus, order_id]
-    );
-    // Also update associated services to 'in_progress'
-    await connection.query(
-      'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
+    // Check if order contains only products
+    const [items] = await connection.query(
+      'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
       [order_id]
     );
+    const hasService = items.length === 0 || items.some(item => item.category === 'Services');
+    const targetStatus = hasService ? 'processing' : 'completed';
+    const serviceCompletedAt = hasService ? null : new Date();
 
-    // Sync loyalty stamps for paid website bookings confirmed with Cash
+    // Update order status and set service_started_at / service_completed_at
+    await connection.query(
+      'UPDATE orders SET status = ?, payment_status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+      [targetStatus, paymentStatus, serviceCompletedAt, order_id]
+    );
+
+    // Also update associated services to 'in_progress' if the order has service items
+    if (hasService) {
+      await connection.query(
+        'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
+        [order_id]
+      );
+    }
+
+    // Sync loyalty stamps for paid website bookings confirmed with Cash (only for service orders)
     const [orderRows] = await connection.query('SELECT customer_id, source, total FROM orders WHERE id = ?', [order_id]);
     if (orderRows.length > 0) {
       const order = orderRows[0];
@@ -308,7 +320,7 @@ const confirmOrder = asyncHandler(async (req, res) => {
          order.source === 'customer_website_4x4' ||
          (order.source || '').includes('customer_website'));
          
-      if (isWebsiteServiceBooking && parseFloat(order.total) > 0) {
+      if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
         await ensureLoyaltyRow(connection, order.customer_id);
         await incrementWashStamp(connection, order.customer_id);
       }
@@ -398,16 +410,28 @@ const confirmPayment = asyncHandler(async (req, res) => {
           [order_id, amount, method || 'card', 'completed', payment_intent_id]
         );
 
-        // Update order payment status and set status to 'processing' (In Progress)
-        await connection.query(
-          'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) WHERE id = ?',
-          ['paid', 'processing', order_id]
-        );
-        // Also update associated services to 'in_progress'
-        await connection.query(
-          'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
+        // Check if order contains only products
+        const [items] = await connection.query(
+          'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
           [order_id]
         );
+        const hasService = items.length === 0 || items.some(item => item.category === 'Services');
+        const targetStatus = hasService ? 'processing' : 'completed';
+        const serviceCompletedAt = hasService ? null : new Date();
+
+        // Update order payment status and set status
+        await connection.query(
+          'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+          ['paid', targetStatus, serviceCompletedAt, order_id]
+        );
+
+        // Also update associated services to 'in_progress' if the order has service items
+        if (hasService) {
+          await connection.query(
+            'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
+            [order_id]
+          );
+        }
 
         // Fetch order details for loyalty and VIP sync
         const [orderRows] = await connection.query('SELECT customer_id, source, total, vip_booking_id FROM orders WHERE id = ?', [order_id]);
@@ -419,7 +443,7 @@ const confirmPayment = asyncHandler(async (req, res) => {
              order.source === 'customer_website_4x4' ||
              (order.source || '').includes('customer_website'));
              
-          if (isWebsiteServiceBooking && parseFloat(order.total) > 0) {
+          if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
             await ensureLoyaltyRow(connection, order.customer_id);
             await incrementWashStamp(connection, order.customer_id);
           }

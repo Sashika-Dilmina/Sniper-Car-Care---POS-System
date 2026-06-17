@@ -203,14 +203,15 @@ const Orders = () => {
                 const serviceTimeColor = getServiceTimeColor(serviceTime);
                 const isCompleted = order.status === 'completed';
                 const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
+                const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
 
                 return (
                   <tr
                     key={order.id}
                     className={`hover:bg-gray-50 transition-colors ${
                       isVipOrder ? 'bg-purple-50/60 hover:bg-purple-100/60 border-l-4 border-purple-500' :
-                      isCompleted && serviceTimeColor === 'green' ? 'bg-green-50/60' :
-                      isCompleted && serviceTimeColor === 'red' ? 'bg-red-50/60' :
+                      isCompleted && !isProductOnly && serviceTimeColor === 'green' ? 'bg-green-50/60' :
+                      isCompleted && !isProductOnly && serviceTimeColor === 'red' ? 'bg-red-50/60' :
                       ''
                     }`}
                   >
@@ -248,7 +249,9 @@ const Orders = () => {
                       AED {parseFloat(order.total).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {order.status === 'completed' ? (
+                      {isProductOnly ? (
+                        <span className="text-gray-400 text-xs">N/A (Product Only)</span>
+                      ) : order.status === 'completed' ? (
                         <span className={`px-3 py-1 text-xs font-semibold rounded-full ${serviceTimeColor === 'green'
                             ? 'bg-green-500 text-white'
                             : 'bg-red-500 text-white'
@@ -262,12 +265,14 @@ const Orders = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs rounded-full ${order.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                            order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                              'bg-gray-100 text-gray-800'
-                        }`}>
-                        {order.status}
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        isProductOnly ? 'bg-green-100 text-green-800' :
+                        order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                        order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {isProductOnly ? 'Order Placed' : order.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
