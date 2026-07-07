@@ -1042,30 +1042,20 @@ const LandingPage = () => {
 
 
 
-  const originalServiceNames = [
-    'full body service',
-    'double soap',
-    'ceramic wash',
-    'body wash',
-    'just water'
-  ];
-  const originalPackages = packages.filter(pkg => 
-    originalServiceNames.includes(pkg.name.toLowerCase())
-  );
-
-  const topRowServices = originalPackages.filter(pkg => {
-    const name = pkg.name.toLowerCase();
-    return name === 'body wash' || name === 'just water';
-  }).sort((a, b) => {
-    if (a.name.toLowerCase() === 'body wash') return -1;
-    if (b.name.toLowerCase() === 'body wash') return 1;
-    return 0;
+  const sortedPackages = [...packages].sort((a, b) => {
+    const getOrder = (name) => {
+      const n = name.toLowerCase();
+      if (n.includes('full body') || n.includes('full service')) return 1;
+      if (n.includes('double soap')) return 2;
+      if (n.includes('ceramic')) return 3;
+      if (n.includes('body wash')) return 4;
+      if (n.includes('just water') || n.includes('water wash') || n.includes('quick wash')) return 5;
+      return 100;
+    };
+    return getOrder(a.name) - getOrder(b.name);
   });
 
-  const bottomRowServices = originalPackages.filter(pkg => {
-    const name = pkg.name.toLowerCase();
-    return name !== 'body wash' && name !== 'just water';
-  });
+  const displayPackages = sortedPackages.filter(pkg => !pkg.name.toLowerCase().includes('vip'));
 
   return (
     <div className="bg-white text-gray-900 overflow-hidden pb-24">
@@ -1169,62 +1159,30 @@ const LandingPage = () => {
           </div>
         </Reveal>
         
-        <div className="flex flex-col gap-4 sm:gap-6">
-          {/* Top Row: Body Wash and Just Water */}
-          <div className="grid grid-cols-2 gap-1.5 sm:gap-4 max-w-xl mx-auto w-full px-1">
-            {topRowServices.map((pkg, idx) => (
-              <Reveal key={pkg.name} delay={idx * 50} className="flex w-full min-w-0">
-                <div className={`template-card flex flex-col w-full h-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white ${pkg.featured ? 'ring-1 ring-red-600' : ''}`}>
-                  <div className="p-1 sm:p-2 text-center shrink-0 bg-white h-[36px] sm:h-[48px] flex items-center justify-center">
-                    <h3 className="text-[7px] sm:text-xs font-black uppercase tracking-tighter text-gray-900 leading-[1.1] break-words line-clamp-3">{pkg.name}</h3>
-                  </div>
-                  <div className="relative h-14 sm:h-24 bg-gray-900 overflow-visible shrink-0 border-y border-gray-100">
-                    <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center opacity-90" />
-                    <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex h-6 w-6 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-600 text-white text-[7px] sm:text-sm font-bold shadow-md ring-2 ring-white z-10">
-                      {String(pkg.price).replace(' AED', '')}
-                    </div>
-                  </div>
-                  <div className="px-1 pt-4 pb-2 sm:pt-6 sm:pb-3 flex flex-col flex-1 items-center text-center bg-white justify-between">
-                    <p className="text-[6px] sm:text-[10px] text-gray-500 leading-[1.2] mb-1.5 sm:mb-2 line-clamp-3 w-full break-words">{pkg.description}</p>
-                    <button
-                      onClick={() => handleServiceClick(pkg)}
-                      className="w-[90%] rounded bg-black py-1 sm:py-1.5 text-[6px] sm:text-[9px] font-bold uppercase tracking-widest text-white hover:bg-red-600 transition"
-                    >
-                      SELECT
-                    </button>
-                  </div>
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-2xl mx-auto w-full px-1">
+          {displayPackages.map((pkg, idx) => {
+            const isFullBody = pkg.name.toLowerCase().includes('full body') || pkg.name.toLowerCase().includes('full service');
+            return (
+              <Reveal 
+                key={pkg.id || pkg.name} 
+                delay={idx * 50} 
+                className={`flex w-full min-w-0 ${isFullBody ? 'col-span-2' : 'col-span-1'}`}
+              >
+                <div 
+                  role="button"
+                  onClick={() => handleServiceClick(pkg)}
+                  className="group relative flex flex-col w-full h-24 sm:h-44 rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
+                >
+                  <img 
+                    src={getServiceImage(pkg)} 
+                    alt={pkg.name} 
+                    className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out" 
+                  />
+                  <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
               </Reveal>
-            ))}
-          </div>
-
-          {/* Bottom Row: Remaining Services */}
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-4 max-w-3xl mx-auto w-full px-1">
-            {bottomRowServices.map((pkg, idx) => (
-              <Reveal key={pkg.name} delay={(idx + 2) * 50} className="flex w-full min-w-0">
-                <div className={`template-card flex flex-col w-full h-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white ${pkg.featured ? 'ring-1 ring-red-600' : ''}`}>
-                  <div className="p-1 sm:p-2 text-center shrink-0 bg-white h-[36px] sm:h-[48px] flex items-center justify-center">
-                    <h3 className="text-[7px] sm:text-xs font-black uppercase tracking-tighter text-gray-900 leading-[1.1] break-words line-clamp-3">{pkg.name}</h3>
-                  </div>
-                  <div className="relative h-14 sm:h-24 bg-gray-900 overflow-visible shrink-0 border-y border-gray-100">
-                    <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center opacity-90" />
-                    <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex h-6 w-6 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-600 text-white text-[7px] sm:text-sm font-bold shadow-md ring-2 ring-white z-10">
-                      {String(pkg.price).replace(' AED', '')}
-                    </div>
-                  </div>
-                  <div className="px-1 pt-4 pb-2 sm:pt-6 sm:pb-3 flex flex-col flex-1 items-center text-center bg-white justify-between">
-                    <p className="text-[6px] sm:text-[10px] text-gray-500 leading-[1.2] mb-1.5 sm:mb-2 line-clamp-3 w-full break-words">{pkg.description}</p>
-                    <button
-                      onClick={() => handleServiceClick(pkg)}
-                      className="w-[90%] rounded bg-black py-1 sm:py-1.5 text-[6px] sm:text-[9px] font-bold uppercase tracking-widest text-white hover:bg-red-600 transition"
-                    >
-                      SELECT
-                    </button>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </section>
 
@@ -1233,38 +1191,35 @@ const LandingPage = () => {
           <div
             role="button"
             tabIndex={0}
-            onClick={openVIPModal}
-            onKeyDown={(e) => e.key === 'Enter' && openVIPModal()}
-            className="relative overflow-hidden rounded-2xl bg-black cursor-pointer group hover:ring-2 hover:ring-red-600 transition-shadow"
+            onClick={() => {
+              const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
+              if (vipPkg) {
+                handleServiceClick(vipPkg);
+              } else {
+                openVIPModal();
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
+                if (vipPkg) handleServiceClick(vipPkg);
+                else openVIPModal();
+              }
+            }}
+            className="group relative flex flex-col w-full h-32 sm:h-64 rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
           >
-            <div className="flex flex-row items-stretch">
-              <div className="p-4 sm:p-6 relative z-10 flex flex-col justify-center w-[60%] sm:w-1/2 shrink-0">
-                <div className="flex items-center gap-2 sm:gap-4">
-                  <CrownIcon className="w-10 h-10 sm:w-16 sm:h-16 shrink-0 text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]" />
-                  <span className="text-2xl sm:text-4xl font-black uppercase text-red-600 vip-neon-text leading-none">
-                    VIP
-                  </span>
-                </div>
-                <p className="mt-1 sm:mt-2 text-[10px] sm:text-sm text-gray-300 font-medium tracking-wide">
-                  Premium Car Care Service
-                </p>
-                <div className="mt-2 sm:mt-3 flex flex-wrap gap-x-3 gap-y-1">
-                  {vipHighlights.map((label) => (
-                    <span key={label} className="flex items-center gap-1 text-[8px] sm:text-xs text-gray-300">
-                      <span className="text-red-600">●</span> {label}
-                    </span>
-                  ))}
-                </div>
-                <span className="mt-3 sm:mt-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 sm:px-4 sm:py-2 text-[9px] sm:text-sm font-bold uppercase tracking-wide text-white group-hover:bg-red-700 transition w-max">
-                  Discover VIP
-                  <span>▸</span>
-                </span>
-              </div>
-              <div className="relative flex-1">
-                <img src={images.vip} alt="" className="absolute inset-0 h-full w-full object-cover object-center opacity-85" />
-                <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent pointer-events-none" />
-              </div>
-            </div>
+            {(() => {
+              const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
+              const vipImg = vipPkg ? getServiceImage(vipPkg) : images.vip;
+              return (
+                <img 
+                  src={vipImg} 
+                  alt="VIP Service" 
+                  className="h-full w-full object-cover object-center group-hover:scale-102 transition-transform duration-500 ease-out" 
+                />
+              );
+            })()}
+            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           </div>
         </Reveal>
       </section>
