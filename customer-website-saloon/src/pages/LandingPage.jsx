@@ -1162,12 +1162,12 @@ const LandingPage = () => {
                 <div 
                   role="button"
                   onClick={() => handleServiceClick(pkg)}
-                  className="group relative flex flex-col w-full h-24 sm:h-44 rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
+                  className={`group relative flex flex-col w-full rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300 ${isFullBody ? 'aspect-[2.7/1]' : 'aspect-[681/510]'}`}
                 >
                   <img 
                     src={getServiceImage(pkg)} 
                     alt={pkg.name} 
-                    className="h-full w-full object-contain object-center group-hover:scale-105 transition-transform duration-500 ease-out" 
+                    className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out" 
                   />
                   <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
@@ -1206,7 +1206,7 @@ const LandingPage = () => {
                 <img 
                   src={vipImg} 
                   alt="VIP Service" 
-                  className="h-full w-full object-contain object-center group-hover:scale-102 transition-transform duration-500 ease-out" 
+                  className="h-full w-full object-cover object-center group-hover:scale-102 transition-transform duration-500 ease-out" 
                 />
               );
             })()}

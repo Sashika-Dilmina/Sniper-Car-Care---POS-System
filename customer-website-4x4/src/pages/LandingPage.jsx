@@ -1207,7 +1207,7 @@ const LandingPage = () => {
                 <img 
                   src={vipImg} 
                   alt="VIP Service" 
-                  className="h-full w-full object-contain object-center group-hover:scale-102 transition-transform duration-500 ease-out" 
+                  className="h-full w-full object-cover object-center group-hover:scale-102 transition-transform duration-500 ease-out" 
                 />
               );
             })()}

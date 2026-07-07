@@ -383,19 +383,6 @@ const Services = () => {
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
-                  rows="3"
-                  placeholder="Describe what is included in this service..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                   Service Image
                 </label>
                 <div className="mt-1 flex items-center gap-4">
