@@ -8,7 +8,8 @@ const {
   getPaymentTypeReport,
   getCustomerWiseReport,
   getSupplierPaymentReport,
-  getPurchasesReport
+  getPurchasesReport,
+  getProfitLossReport
 } = require('../controllers/analyticsController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -25,6 +26,7 @@ router.get('/reports/payment-types', authorize('admin'), getPaymentTypeReport);
 router.get('/reports/customer-wise', authorize('admin'), getCustomerWiseReport);
 router.get('/reports/supplier-payments', authorize('admin'), getSupplierPaymentReport);
 router.get('/reports/purchases', authorize('admin'), getPurchasesReport);
+router.get('/reports/profit-loss', authorize('admin'), getProfitLossReport);
 
 module.exports = router;
 

@@ -67,12 +67,15 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   try {
     const [vehicleTypeResult] = await pool.query(
       `SELECT 
-        c.vehicle_type,
+        COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
         COUNT(*) as order_count
        FROM orders o
        LEFT JOIN customers c ON o.customer_id = c.id
-       WHERE ${dateFilter} AND c.vehicle_type IS NOT NULL
-       GROUP BY c.vehicle_type`
+       LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+       LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+       WHERE ${dateFilter.replace(/created_at/g, 'o.created_at')}
+       GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type)
+       HAVING vehicle_type IS NOT NULL`
     );
     ordersByVehicleType = vehicleTypeResult;
   } catch (error) {
@@ -120,14 +123,69 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
     pendingPayments = [{ pending_amount: 0, pending_count: 0 }];
   }
 
-  // New customers (based on period)
+  // Pending orders by vehicle type (statuses: 'pending', 'processing')
+  let pendingSaloonCount = 0;
+  let pending4x4Count = 0;
+  try {
+    const [pendingVehiclesResult] = await pool.query(
+      `SELECT 
+        COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') as vehicleType,
+        COUNT(*) as count
+       FROM orders o
+       LEFT JOIN customers c ON o.customer_id = c.id
+       LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+       LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+       WHERE o.status IN ('pending', 'processing')
+       GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')`
+    );
+    pendingSaloonCount = pendingVehiclesResult.find(item => item.vehicleType === 'Saloon')?.count || 0;
+    pending4x4Count = pendingVehiclesResult.find(item => item.vehicleType === '4x4')?.count || 0;
+  } catch (error) {
+    console.error('Pending vehicles count query error:', error);
+  }
+
+  // Recent orders (latest 5)
+  let recentOrdersList = [];
+  try {
+    const [recentResult] = await pool.query(`
+      SELECT o.*, 
+             COALESCE(c.name, vc.name) as customer_name, 
+             COALESCE(c.phone, vc.phone) as customer_phone,
+             COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
+             COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
+             cc.status as credit_status,
+             cc.remaining_amount as credit_remaining
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+      LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+      LEFT JOIN customer_credits cc ON o.id = cc.order_id
+      ORDER BY o.created_at DESC
+      LIMIT 5
+    `);
+    
+    // Get order items for each recent order
+    for (let ord of recentResult) {
+      const [items] = await pool.query(`
+        SELECT oi.*, p.name as product_name, p.category
+        FROM order_items oi
+        LEFT JOIN products p ON oi.product_id = p.id
+        WHERE oi.order_id = ?
+      `, [ord.id]);
+      ord.items = items;
+    }
+    recentOrdersList = recentResult;
+  } catch (error) {
+    console.error('Recent orders query error:', error);
+  }
+
+  // New customers (most recent 10 overall)
   let newCustomers = [];
   try {
     const [newCustomersResult] = await pool.query(`
-      SELECT c.id, c.name, c.phone, c.vehicle_plate, c.vehicle_model, 
+      SELECT c.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, 
              DATE_FORMAT(c.created_at, '%Y-%m-%d') as joined_date
       FROM customers c
-      WHERE ${dateFilter}
       ORDER BY c.created_at DESC
       LIMIT 10
     `);
@@ -204,7 +262,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE ${dateFilter} AND o.payment_status = 'paid'
+      WHERE ${dateFilter.replace(/created_at/g, 'o.created_at')} AND o.payment_status = 'paid'
       GROUP BY p.category
       ORDER BY revenue DESC
     `);
@@ -245,14 +303,17 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
       completed_services: parseInt(services[0]?.completed_services || 0),
       total_customers: parseInt(customers[0]?.total_customers || 0),
       pending_amount: parseFloat(pendingPayments[0]?.pending_amount || 0),
-      pending_count: parseInt(pendingPayments[0]?.pending_count || 0)
+      pending_count: parseInt(pendingPayments[0]?.pending_count || 0),
+      pending_saloon_count: parseInt(pendingSaloonCount || 0),
+      pending_4x4_count: parseInt(pending4x4Count || 0)
     },
     top_customers: topCustomers || [],
     top_services: topServices || [],
     sales_by_day: salesByDay || [],
     category_revenue: categoryRevenue || [],
     new_customers: newCustomers || [],
-    recent_feedback: recentFeedback || []
+    recent_feedback: recentFeedback || [],
+    recent_orders: recentOrdersList || []
   });
 });
 
@@ -870,6 +931,75 @@ const getPurchasesReport = asyncHandler(async (req, res) => {
   res.json(reportData);
 });
 
+// @desc    Get Profit & Loss statement report
+// @route   GET /api/analytics/reports/profit-loss
+// @access  Private (Admin)
+const getProfitLossReport = asyncHandler(async (req, res) => {
+  const { start_date, end_date } = req.query;
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({ success: false, message: 'Start date and end date are required' });
+  }
+
+  // 1. Get total sales
+  const [salesResult] = await pool.query(
+    "SELECT COALESCE(SUM(total), 0) as total_sales, COUNT(*) as sales_count FROM orders WHERE payment_status = 'paid' AND DATE(created_at) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
+  // 2. Get total purchases
+  const [purchasesResult] = await pool.query(
+    "SELECT COALESCE(SUM(total_price), 0) as total_purchases, COUNT(*) as purchases_count FROM purchases WHERE DATE(purchase_date) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
+  // 3. Get total expenses
+  const [expensesResult] = await pool.query(
+    "SELECT COALESCE(SUM(amount), 0) as total_expenses, COUNT(*) as expenses_count FROM expenses WHERE DATE(expense_date) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
+  // 4. Get purchases by category
+  const [purchasesByCategory] = await pool.query(
+    "SELECT category, COALESCE(SUM(total_price), 0) as total, COUNT(*) as count FROM purchases WHERE DATE(purchase_date) BETWEEN ? AND ? GROUP BY category",
+    [start_date, end_date]
+  );
+
+  // 5. Get expenses by category
+  const [expensesByCategory] = await pool.query(
+    "SELECT category, COALESCE(SUM(amount), 0) as total, COUNT(*) as count FROM expenses WHERE DATE(expense_date) BETWEEN ? AND ? GROUP BY category",
+    [start_date, end_date]
+  );
+
+  // 6. Get credits outstanding summary
+  const [creditsResult] = await pool.query(
+    "SELECT COALESCE(SUM(remaining_amount), 0) as total_outstanding, COUNT(*) as count FROM customer_credits WHERE status != 'fully_paid'"
+  );
+
+  const totalSales = parseFloat(salesResult[0].total_sales || 0);
+  const totalPurchases = parseFloat(purchasesResult[0].total_purchases || 0);
+  const totalExpenses = parseFloat(expensesResult[0].total_expenses || 0);
+  const netProfit = totalSales - totalPurchases - totalExpenses;
+
+  res.json({
+    success: true,
+    period: { start_date, end_date },
+    summary: {
+      total_sales: totalSales,
+      sales_count: salesResult[0].sales_count,
+      total_purchases: totalPurchases,
+      purchases_count: purchasesResult[0].purchases_count,
+      total_expenses: totalExpenses,
+      expenses_count: expensesResult[0].expenses_count,
+      net_profit: netProfit,
+      outstanding_credit: parseFloat(creditsResult[0].total_outstanding || 0),
+      outstanding_credit_count: creditsResult[0].count
+    },
+    purchases_by_category: purchasesByCategory || [],
+    expenses_by_category: expensesByCategory || []
+  });
+});
+
 module.exports = {
   getDashboardAnalytics,
   getSalesReport,
@@ -878,6 +1008,7 @@ module.exports = {
   getPaymentTypeReport,
   getCustomerWiseReport,
   getSupplierPaymentReport,
-  getPurchasesReport
+  getPurchasesReport,
+  getProfitLossReport
 };
 

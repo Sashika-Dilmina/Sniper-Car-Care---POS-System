@@ -1,31 +1,50 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../config/axios';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const Services = () => {
+  const { user } = useAuth();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState({ vehicle_type: '' });
+  const [activeTab, setActiveTab] = useState('Saloon'); // 'Saloon' or '4x4'
   const [showModal, setShowModal] = useState(false);
+  const [editingService, setEditingService] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
-    service_name: '',
-    vehicle_type: 'Saloon',
+    name: '',
+    description: '',
     price: '',
-    description: ''
+    purchase_price: '',
+    vehicle_type: 'Saloon',
+    image_url: ''
   });
+
+  const resolveImageUrl = (url) => {
+    if (!url) return '';
+    
+    // Normalize legacy localhost URLs to relative paths
+    let cleanUrl = url;
+    if (url.startsWith('http://localhost:5000')) {
+      cleanUrl = url.replace('http://localhost:5000', '');
+    } else if (url.startsWith('https://localhost:5000')) {
+      cleanUrl = url.replace('https://localhost:5000', '');
+    }
+
+    if (cleanUrl.startsWith('http')) return cleanUrl;
+    const apiBaseUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/$/, '') : (import.meta.env.PROD ? '' : 'http://localhost:5000');
+    return `${apiBaseUrl}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
+  };
 
   useEffect(() => {
     fetchServices();
-  }, [filter]);
+  }, []);
 
   const fetchServices = async () => {
     try {
-      const params = new URLSearchParams();
-      if (filter.vehicle_type) params.append('vehicle_type', filter.vehicle_type);
-
-      const response = await axios.get(`/api/services?${params.toString()}`);
-      setServices(response.data.services);
+      setLoading(true);
+      const response = await axios.get('/api/products?category=Services');
+      setServices(response.data.products || []);
     } catch (error) {
       toast.error('Failed to load services');
     } finally {
@@ -33,181 +52,407 @@ const Services = () => {
     }
   };
 
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        setUploading(true);
+        const response = await axios.post('/api/products/upload-image', { image: reader.result });
+        setFormData((prev) => ({ ...prev, image_url: response.data.imageUrl }));
+        toast.success('Image uploaded successfully');
+      } catch (error) {
+        console.error('Image upload failed:', error);
+        toast.error(error.response?.data?.message || 'Failed to upload image');
+      } finally {
+        setUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (formData.price < 0) {
+      toast.error('Selling price cannot be negative');
+      return;
+    }
+
+    if (formData.purchase_price < 0) {
+      toast.error('Cost price cannot be negative');
+      return;
+    }
+
+    const serviceData = {
+      name: formData.name,
+      description: formData.description,
+      category: 'Services',
+      price: parseFloat(formData.price),
+      purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0,
+      stock: 0,
+      image_url: formData.image_url,
+      vehicle_type: formData.vehicle_type
+    };
+
     try {
-      await axios.post('/api/services', formData);
-      toast.success('Service created successfully');
+      if (editingService) {
+        await axios.put(`/api/products/${editingService.id}`, serviceData);
+        toast.success('Service updated successfully');
+      } else {
+        await axios.post('/api/products', serviceData);
+        toast.success('Service created successfully');
+      }
       setShowModal(false);
-      setFormData({
-        service_name: '',
-        vehicle_type: 'Saloon',
-        price: '',
-        description: ''
-      });
+      resetForm();
       fetchServices();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create service');
+      toast.error(error.response?.data?.message || 'Failed to save service');
     }
   };
 
-  const handleStatusUpdate = async (id, status) => {
+  const handleEdit = (service) => {
+    setEditingService(service);
+    setFormData({
+      name: service.name,
+      description: service.description || '',
+      price: service.price,
+      purchase_price: service.purchase_price || '',
+      vehicle_type: service.vehicle_type || 'Saloon',
+      image_url: service.image_url || ''
+    });
+    setShowModal(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this service package? This will remove it from the customer websites.')) return;
+
     try {
-      await axios.put(`/api/services/${id}/status`, { status });
-      toast.success('Service status updated');
+      await axios.delete(`/api/products/${id}`);
+      toast.success('Service deleted successfully');
       fetchServices();
     } catch (error) {
-      toast.error('Failed to update status');
+      toast.error('Failed to delete service');
     }
   };
 
-  if (loading) {
-    return <div className="flex justify-center items-center h-64">Loading...</div>;
-  }
+  const resetForm = () => {
+    setEditingService(null);
+    setFormData({
+      name: '',
+      description: '',
+      price: '',
+      purchase_price: '',
+      vehicle_type: activeTab,
+      image_url: ''
+    });
+  };
+
+  const filteredServices = services.filter(
+    (service) => service.vehicle_type === activeTab
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-800">Services</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">Service Offerings</h1>
+          <p className="text-gray-500 text-sm mt-1">Configure and manage services offered on Saloon and 4x4 websites.</p>
+        </div>
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold shadow-sm flex items-center gap-1.5"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Service
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200">
         <button
-          onClick={() => setShowModal(true)}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+          onClick={() => {
+            setActiveTab('Saloon');
+            setFormData(prev => ({ ...prev, vehicle_type: 'Saloon' }));
+          }}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all duration-200 ${
+            activeTab === 'Saloon'
+              ? 'border-primary-600 text-primary-600 bg-primary-50/50 rounded-t-lg'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
         >
-          + Add Service
+          🚗 Saloon Services
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('4x4');
+            setFormData(prev => ({ ...prev, vehicle_type: '4x4' }));
+          }}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all duration-200 ${
+            activeTab === '4x4'
+              ? 'border-primary-600 text-primary-600 bg-primary-50/50 rounded-t-lg'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          🚙 4x4 Services
         </button>
       </div>
 
-      <div className="bg-white p-4 rounded-lg shadow flex space-x-4">
-        <select
-          value={filter.vehicle_type}
-          onChange={(e) => setFilter({ ...filter, vehicle_type: e.target.value })}
-          className="px-4 py-2 border rounded-lg"
-        >
-          <option value="">All Vehicle Types</option>
-          <option value="Saloon">Saloon</option>
-          <option value="4x4">4x4</option>
-        </select>
-      </div>
-
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {services.map((service) => (
-              <tr key={service.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">#{service.id}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{service.service_name}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                    {service.vehicle_type}
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
+        </div>
+      ) : filteredServices.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredServices.map((service) => (
+            <div
+              key={service.id}
+              className="bg-white rounded-xl border border-gray-150 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex flex-col group"
+            >
+              <div className="relative h-44 bg-gray-100 overflow-hidden shrink-0 border-b">
+                {service.image_url ? (
+                  <img
+                    src={resolveImageUrl(service.image_url)}
+                    alt={service.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-1 bg-gradient-to-br from-gray-50 to-gray-100">
+                    <svg className="w-10 h-10 stroke-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-xs">No image uploaded</span>
+                  </div>
+                )}
+                <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
+                  <span className="bg-primary-600 text-white font-black px-3 py-1 rounded-full text-xs shadow-md">
+                    Sell: AED {parseFloat(service.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  AED {parseFloat(service.price).toLocaleString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <select
-                    value={service.status}
-                    onChange={(e) => handleStatusUpdate(service.id, e.target.value)}
-                    className={`px-2 py-1 text-xs rounded-full border ${service.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        service.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-gray-100 text-gray-800'
-                      }`}
-                  >
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <Link
-                    to={`/services/${service.id}`}
-                    className="text-primary-600 hover:underline"
-                  >
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  <span className="bg-gray-800 text-white font-semibold px-2 py-0.5 rounded-full text-[10px] shadow-md">
+                    Cost: AED {parseFloat(service.purchase_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="p-5 flex flex-col flex-grow justify-between">
+                <div>
+                  <h3 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-primary-600 transition-colors">
+                    {service.name}
+                  </h3>
+                  <p className="text-gray-500 text-sm mt-2 line-clamp-3 leading-relaxed">
+                    {service.description || <span className="italic">No description provided.</span>}
+                  </p>
+                </div>
+
+                {user?.role === 'admin' && (
+                  <div className="flex justify-end gap-3 pt-5 mt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => handleEdit(service)}
+                      className="px-3.5 py-1.5 text-sm font-semibold border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(service.id)}
+                      className="px-3.5 py-1.5 text-sm font-semibold border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white border rounded-xl p-12 text-center shadow-sm">
+          <svg className="mx-auto h-12 w-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+          </svg>
+          <p className="text-gray-600 font-medium">No service offerings configured for {activeTab}.</p>
+          {user?.role === 'admin' && (
+            <button
+              onClick={() => {
+                resetForm();
+                setShowModal(true);
+              }}
+              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold"
+            >
+              + Create First Service
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Add Service</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 transition-all duration-300 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden transform transition-all duration-300">
+            <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">
+                {editingService ? '✏️ Edit Service Package' : '✨ Add Service Package'}
+              </h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                   Service Name
                 </label>
                 <input
                   type="text"
                   required
-                  value={formData.service_name}
-                  onChange={(e) => setFormData({ ...formData, service_name: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg"
-                  placeholder="e.g., Full Service Package"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
+                  placeholder="e.g., Full Body wash with shampoo"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vehicle Type
-                </label>
-                <select
-                  value={formData.vehicle_type}
-                  onChange={(e) => setFormData({ ...formData, vehicle_type: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg"
-                >
-                  <option value="Saloon">Saloon</option>
-                  <option value="4x4">4x4</option>
-                </select>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Vehicle Type
+                  </label>
+                  <select
+                    value={formData.vehicle_type}
+                    onChange={(e) => setFormData({ ...formData, vehicle_type: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
+                  >
+                    <option value="Saloon">Saloon</option>
+                    <option value="4x4">4x4</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Cost / Purchase Price (AED)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.purchase_price}
+                    onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
+                    placeholder="15.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Selling Price (AED)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
+                    placeholder="25.00"
+                  />
+                </div>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Price
-                </label>
-                <input
-                  type="number"
-                  required
-                  step="0.01"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                   Description
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
                   rows="3"
+                  placeholder="Describe what is included in this service..."
                 />
               </div>
-              <div className="flex space-x-4">
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                  Service Image
+                </label>
+                <div className="mt-1 flex items-center gap-4">
+                  {formData.image_url ? (
+                    <div className="relative w-20 h-20 rounded-lg overflow-hidden border">
+                      <img
+                        src={resolveImageUrl(formData.image_url)}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, image_url: '' })}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 shadow"
+                        title="Remove image"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-500 cursor-pointer flex flex-col items-center justify-center text-gray-400 transition hover:text-primary-600 bg-gray-50">
+                      <svg className="w-6 h-6 stroke-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span className="text-[10px] font-semibold mt-1">Upload</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                  <div className="flex-grow text-xs text-gray-500">
+                    {uploading ? (
+                      <span className="text-primary-600 font-bold animate-pulse">Uploading image...</span>
+                    ) : (
+                      <span>Select an image from your device. Recommended: landscape photo (4:3 ratio).</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex space-x-4 pt-4 border-t">
                 <button
                   type="submit"
-                  className="flex-1 bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition"
+                  disabled={uploading}
+                  className="flex-grow bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition font-bold disabled:opacity-50"
                 >
-                  Create
+                  {editingService ? 'Save Changes' : 'Create Service'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition"
+                  className="flex-grow bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition font-bold"
                 >
                   Cancel
                 </button>
@@ -221,4 +466,3 @@ const Services = () => {
 };
 
 export default Services;
-

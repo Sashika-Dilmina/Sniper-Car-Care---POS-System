@@ -142,6 +142,9 @@ const OrderDetail = () => {
   }
 
   const remainingAmount = parseFloat(order.total) - (order.payments?.reduce((sum, p) => sum + (p.status === 'completed' ? parseFloat(p.amount) : 0), 0) || 0);
+  const isCashOrder = !order.payments || order.payments.length === 0 || order.payments.every(p => p.method === 'cash');
+  const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
+  const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
 
   return (
     <div className="space-y-6">
@@ -168,15 +171,39 @@ const OrderDetail = () => {
             )}
             <div>
               <p className="text-sm text-gray-600">Status</p>
-              <select
-                value={order.status}
-                onChange={(e) => handleStatusUpdate(e.target.value)}
-                className="mt-1 px-4 py-2 border rounded-lg"
-              >
-                <option value="processing">Processing</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+              <div className="mt-2 flex items-center flex-wrap gap-3">
+                <span className={`px-3 py-1.5 text-xs font-black rounded-full uppercase tracking-wider ${
+                  isProductOnly ? 'bg-green-100 text-green-800' :
+                  order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                  order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                  order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {isProductOnly ? 'Order Placed' : (order.status === 'processing' ? 'In Progress' : order.status)}
+                </span>
+
+                {order.status === 'processing' && !isProductOnly && (
+                  <button
+                    onClick={() => handleStatusUpdate('completed')}
+                    className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98]"
+                  >
+                    ✓ Done / Completed
+                  </button>
+                )}
+
+                {(order.status === 'pending' || order.status === 'processing') && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to cancel this order?')) {
+                        handleStatusUpdate('cancelled');
+                      }
+                    }}
+                    className="px-3 py-2 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
+                  >
+                    Cancel Order
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <p className="text-sm text-gray-600">Total Amount</p>
@@ -192,12 +219,28 @@ const OrderDetail = () => {
             )}
             <div>
               <p className="text-sm text-gray-600">Payment Status</p>
-              <span className={`px-3 py-1 text-sm rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
-                order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                {order.payment_status}
-              </span>
+              {order.credit_status ? (
+                order.credit_status === 'unpaid' ? (
+                  <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold">
+                    Credit / Unpaid
+                  </span>
+                ) : order.credit_status === 'partially_paid' ? (
+                  <span className="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800 font-semibold">
+                    Credit / Partial
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800 font-semibold">
+                    Paid
+                  </span>
+                )
+              ) : (
+                <span className={`px-3 py-1 text-sm rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                  order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                  {order.payment_status}
+                </span>
+              )}
             </div>
             {order.source && (
               <div>
@@ -243,7 +286,7 @@ const OrderDetail = () => {
         </div>
       </div>
 
-      {order.payment_status !== 'paid' && remainingAmount > 0 && (
+      {order.payment_status !== 'paid' && remainingAmount > 0 && isCashOrder && (
         <div className="bg-white p-6 rounded-lg shadow border-2 border-primary-500">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span className="text-2xl">💳</span> Customer Payment Required

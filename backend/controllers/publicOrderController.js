@@ -3,6 +3,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
+const { ensureLoyaltyRow, incrementWashStamp, getWashStamps } = require('../utils/loyaltyStamps');
 
 // @desc    Create order from customer website
 // @route   POST /api/public/orders
@@ -38,9 +39,9 @@ const createOrder = asyncHandler(async (req, res) => {
 
     // If still no customer ID but we have name and phone, create new customer
     // Note: vehicle_plate is required in schema, so we only create customer if vehicle_plate is provided
-    // Determine vehicle type from order notes (if it mentions 4x4) or default to Saloon
-    let vehicleType = 'Saloon';
-    if (notes && (notes.toLowerCase().includes('4x4') || notes.toLowerCase().includes('(4x4)'))) {
+    // Determine vehicle type from body, notes (if it mentions 4x4) or default to Saloon
+    let vehicleType = req.body.vehicle_type || 'Saloon';
+    if (!req.body.vehicle_type && notes && (notes.toLowerCase().includes('4x4') || notes.toLowerCase().includes('(4x4)'))) {
       vehicleType = '4x4';
     }
 
@@ -62,6 +63,13 @@ const createOrder = asyncHandler(async (req, res) => {
           [customer_name, customer_phone, vehicle_plate, vehicleType]
         );
         finalCustomerId = newCustomer.insertId;
+        try {
+          await ensureLoyaltyRow(connection, finalCustomerId);
+        } catch (loyaltyInitErr) {
+          if (loyaltyInitErr.code !== 'ER_BAD_FIELD_ERROR') {
+            throw loyaltyInitErr;
+          }
+        }
       } catch (error) {
         // If customer already exists (duplicate vehicle_plate), try to fetch it
         if (error.code === 'ER_DUP_ENTRY') {
@@ -74,6 +82,33 @@ const createOrder = asyncHandler(async (req, res) => {
           }
         } else {
           throw error;
+        }
+      }
+    }
+
+    // Update customer info if they already exist but name or phone changed during checkout
+    if (finalCustomerId && (customer_name || customer_phone)) {
+      const [existing] = await connection.query(
+        'SELECT name, phone FROM customers WHERE id = ?',
+        [finalCustomerId]
+      );
+      if (existing.length > 0) {
+        const updateFields = [];
+        const updateParams = [];
+        if (customer_name && existing[0].name !== customer_name) {
+          updateFields.push('name = ?');
+          updateParams.push(customer_name);
+        }
+        if (customer_phone && existing[0].phone !== customer_phone) {
+          updateFields.push('phone = ?');
+          updateParams.push(customer_phone);
+        }
+        if (updateFields.length > 0) {
+          updateParams.push(finalCustomerId);
+          await connection.query(
+            `UPDATE customers SET ${updateFields.join(', ')} WHERE id = ?`,
+            updateParams
+          );
         }
       }
     }
@@ -114,6 +149,64 @@ const createOrder = asyncHandler(async (req, res) => {
           'UPDATE products SET stock = stock - ? WHERE id = ?',
           [item.quantity, item.product_id]
         );
+
+        // Check if item is a service, and create service task
+        const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
+        if (prodRows.length > 0 && prodRows[0].category === 'Services') {
+          await connection.query(
+            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [finalCustomerId || null, prodRows[0].name, vehicleType, item.price, 'Added via Order Items', status || 'pending', orderId]
+          );
+        }
+      }
+    }
+
+    let loyalty = null;
+
+    const isWebsiteServiceBooking =
+      finalCustomerId &&
+      (!items || items.length === 0) &&
+      (source === 'customer_website_saloon' ||
+        source === 'customer_website_4x4' ||
+        (source || '').includes('customer_website'));
+
+    if (isWebsiteServiceBooking) {
+      try {
+        await ensureLoyaltyRow(connection, finalCustomerId);
+        const currentStamps = await getWashStamps(connection, finalCustomerId);
+
+        let serviceName = 'Car Care Service';
+        if (notes && notes.includes('One-Tap Booking via Website - ')) {
+          serviceName = notes.replace('One-Tap Booking via Website - ', '');
+        } else if (notes) {
+          serviceName = notes;
+        }
+
+        if (currentStamps >= 5) {
+          // 6th wash -> Free Wash!
+          loyalty = await incrementWashStamp(connection, finalCustomerId);
+          const finalPrice = 0.00;
+
+          await connection.query(
+            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending', orderId]
+          );
+
+          await connection.query(
+            'UPDATE orders SET total = 0.00, discount = ?, payment_status = ? WHERE id = ?',
+            [total, 'paid', orderId]
+          );
+        } else {
+          // Paid booking, do not increment stamps yet!
+          await connection.query(
+            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending', orderId]
+          );
+        }
+      } catch (loyaltyErr) {
+        if (loyaltyErr.code !== 'ER_BAD_FIELD_ERROR') {
+          throw loyaltyErr;
+        }
       }
     }
 
@@ -124,7 +217,14 @@ const createOrder = asyncHandler(async (req, res) => {
 
     res.status(201).json({
       message: 'Order created successfully',
-      order: newOrder[0]
+      order: newOrder[0],
+      loyalty: loyalty
+        ? {
+            wash_stamps: loyalty.wash_stamps,
+            free_wash_ready: loyalty.wash_stamps >= 5,
+            free_wash_earned: loyalty.free_wash_earned,
+          }
+        : null,
     });
   } catch (error) {
     await connection.rollback();
@@ -141,11 +241,14 @@ const getOrder = asyncHandler(async (req, res) => {
 
   const [orders] = await pool.query(`
     SELECT o.*, 
-           c.name as customer_name,
-           c.phone as customer_phone,
-           c.vehicle_plate
+           COALESCE(c.name, vc.name) as customer_name,
+           COALESCE(c.phone, vc.phone) as customer_phone,
+           COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
+           COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     WHERE o.id = ?
   `, [id]);
 
@@ -173,12 +276,85 @@ const getOrder = asyncHandler(async (req, res) => {
 const confirmOrder = asyncHandler(async (req, res) => {
   const { order_id, payment_method } = req.body;
 
-  await pool.query(
-    'UPDATE orders SET status = ?, payment_status = ? WHERE id = ?',
-    ['processing', payment_method === 'cash' ? 'pending' : 'paid', order_id]
-  );
+  if (!order_id) {
+    return res.status(400).json({ message: 'Order ID is required' });
+  }
 
-  res.json({ message: 'Order confirmed successfully' });
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
+
+  try {
+    const isCash = payment_method === 'cash';
+    const paymentStatus = isCash ? 'pending' : 'paid';
+
+    // Check if order contains only products
+    const [items] = await connection.query(
+      'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
+      [order_id]
+    );
+    const hasService = items.length === 0 || items.some(item => item.category === 'Services');
+    const targetStatus = hasService ? 'processing' : 'completed';
+    const serviceCompletedAt = hasService ? null : new Date();
+
+    // Update order status and set service_started_at / service_completed_at
+    await connection.query(
+      'UPDATE orders SET status = ?, payment_status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+      [targetStatus, paymentStatus, serviceCompletedAt, order_id]
+    );
+
+    // Also update associated services to 'in_progress' if the order has service items
+    if (hasService) {
+      await connection.query(
+        'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
+        [order_id]
+      );
+    }
+
+    // Sync loyalty stamps for paid website bookings confirmed with Cash (only for service orders)
+    const [orderRows] = await connection.query('SELECT customer_id, source, total FROM orders WHERE id = ?', [order_id]);
+    if (orderRows.length > 0) {
+      const order = orderRows[0];
+      const isWebsiteServiceBooking = 
+        order.customer_id &&
+        (order.source === 'customer_website_saloon' ||
+         order.source === 'customer_website_4x4' ||
+         (order.source || '').includes('customer_website'));
+         
+      if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
+        await ensureLoyaltyRow(connection, order.customer_id);
+        await incrementWashStamp(connection, order.customer_id);
+      }
+    }
+
+    // Fetch order total to create/update payments row
+    const [orders] = await connection.query('SELECT total FROM orders WHERE id = ?', [order_id]);
+    if (orders.length > 0) {
+      const total = orders[0].total;
+
+      // Check if there is already a payment record for this order
+      const [existing] = await connection.query('SELECT id FROM payments WHERE order_id = ?', [order_id]);
+      if (existing.length === 0) {
+        await connection.query(
+          'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
+          [order_id, total, payment_method || 'cash', isCash ? 'pending' : 'completed']
+        );
+      } else {
+        await connection.query(
+          'UPDATE payments SET method = ?, status = ?, amount = ? WHERE order_id = ?',
+          [payment_method || 'cash', isCash ? 'pending' : 'completed', total, order_id]
+        );
+      }
+    }
+
+    await connection.commit();
+    connection.release();
+
+    res.json({ message: 'Order confirmed successfully' });
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+    throw error;
+  }
 });
 
 // @desc    Create payment intent
@@ -234,11 +410,52 @@ const confirmPayment = asyncHandler(async (req, res) => {
           [order_id, amount, method || 'card', 'completed', payment_intent_id]
         );
 
-        // Update order payment status
-        await connection.query(
-          'UPDATE orders SET payment_status = ?, status = ? WHERE id = ?',
-          ['paid', 'processing', order_id]
+        // Check if order contains only products
+        const [items] = await connection.query(
+          'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
+          [order_id]
         );
+        const hasService = items.length === 0 || items.some(item => item.category === 'Services');
+        const targetStatus = hasService ? 'processing' : 'completed';
+        const serviceCompletedAt = hasService ? null : new Date();
+
+        // Update order payment status and set status
+        await connection.query(
+          'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+          ['paid', targetStatus, serviceCompletedAt, order_id]
+        );
+
+        // Also update associated services to 'in_progress' if the order has service items
+        if (hasService) {
+          await connection.query(
+            'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
+            [order_id]
+          );
+        }
+
+        // Fetch order details for loyalty and VIP sync
+        const [orderRows] = await connection.query('SELECT customer_id, source, total, vip_booking_id FROM orders WHERE id = ?', [order_id]);
+        if (orderRows.length > 0) {
+          const order = orderRows[0];
+          const isWebsiteServiceBooking = 
+            order.customer_id &&
+            (order.source === 'customer_website_saloon' ||
+             order.source === 'customer_website_4x4' ||
+             (order.source || '').includes('customer_website'));
+             
+          if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
+            await ensureLoyaltyRow(connection, order.customer_id);
+            await incrementWashStamp(connection, order.customer_id);
+          }
+
+          // If it is a VIP booking order, update VIP booking status to 'confirmed'
+          if (order.vip_booking_id) {
+            await connection.query(
+              'UPDATE vip_bookings SET status = "confirmed" WHERE id = ?',
+              [order.vip_booking_id]
+            );
+          }
+        }
 
         // Send Feedback SMS
         const [orderData] = await connection.query(`

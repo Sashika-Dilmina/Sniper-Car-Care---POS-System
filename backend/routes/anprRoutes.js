@@ -5,6 +5,7 @@ const {
   getLatestDetections,
   registerFromANPR,
   sendWelcomeFromDashboard,
+  manualCheckIn,
 } = require('../controllers/anprController');
 const { protect } = require('../middleware/auth');
 
@@ -16,6 +17,7 @@ router.use(protect);
 router.get('/latest', getLatestDetections);
 router.post('/register', registerFromANPR);
 router.post('/send-welcome', sendWelcomeFromDashboard);
+router.post('/manual-checkin', manualCheckIn);
 
 module.exports = router;
 

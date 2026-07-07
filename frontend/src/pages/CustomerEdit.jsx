@@ -2,33 +2,80 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
+import VehiclePlatePreview from '../components/VehiclePlatePreview';
+import SearchableSelect from '../components/SearchableSelect';
 
 const CustomerEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [plateCodes, setPlateCodes] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    vehicle_plate: '',
-    vehicle_type: 'Saloon',
-    province: ''
+    emirate: '',
+    plate_code: '',
+    plate_number: '',
+    vehicle_type: 'Saloon'
   });
 
   useEffect(() => {
     fetchCustomer();
   }, [id]);
 
+  // Fetch plate codes dynamically based on selected Emirate
+  useEffect(() => {
+    const fetchPlateCodes = async () => {
+      try {
+        const response = await axios.get(`/api/vehicle-registration/plate-codes/${formData.emirate}`);
+        const codes = response.data.codes || [];
+        setPlateCodes(codes);
+        
+        // Reset code if invalid or change to empty
+        if (formData.emirate && !codes.includes(formData.plate_code)) {
+          setFormData(prev => ({
+            ...prev,
+            plate_code: ''
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to load plate codes:', error);
+      }
+    };
+    
+    if (formData.emirate) {
+      fetchPlateCodes();
+    } else {
+      setPlateCodes([]);
+    }
+  }, [formData.emirate]);
+
   const fetchCustomer = async () => {
     try {
       const response = await axios.get(`/api/customers/${id}`);
       const customer = response.data.customer;
+      
+      const plateStr = customer.vehicle_plate || '';
+      const parts = plateStr.trim().split(/\s+/);
+      let plateCode = '';
+      let emirate = '';
+      let plateNumber = '';
+      
+      if (parts.length >= 3) {
+        plateCode = parts[0];
+        plateNumber = parts[parts.length - 1];
+        emirate = parts.slice(1, parts.length - 1).join(' ');
+      } else if (plateStr) {
+        plateNumber = plateStr;
+      }
+
       setFormData({
         name: customer.name || '',
         phone: customer.phone || '',
-        vehicle_plate: customer.vehicle_plate || '',
-        vehicle_type: customer.vehicle_type || 'Saloon',
-        province: customer.province || ''
+        emirate: emirate,
+        plate_code: plateCode,
+        plate_number: plateNumber,
+        vehicle_type: customer.vehicle_type || 'Saloon'
       });
     } catch (error) {
       toast.error('Failed to load customer details');
@@ -49,13 +96,23 @@ const CustomerEdit = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.phone || !formData.vehicle_plate || !formData.vehicle_type) {
+    if (!formData.name || !formData.phone || !formData.plate_number || !formData.vehicle_type) {
       toast.error('Please fill in all required fields');
       return;
     }
 
+    // Phone validation: numbers only, 9-15 digits
+    const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length < 9 || cleanPhone.length > 15) {
+      toast.error('Phone number must contain between 9 and 15 digits');
+      return;
+    }
+
     try {
-      await axios.put(`/api/customers/${id}`, formData);
+      await axios.put(`/api/customers/${id}`, {
+        ...formData,
+        phone: cleanPhone
+      });
       toast.success('Customer updated successfully');
       navigate('/customers');
     } catch (error) {
@@ -88,7 +145,7 @@ const CustomerEdit = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Name */}
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="name" className="block text-sm font-bold text-gray-700 mb-2">
                 Customer Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -97,14 +154,14 @@ const CustomerEdit = () => {
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
                 required
               />
             </div>
 
             {/* Phone */}
             <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="phone" className="block text-sm font-bold text-gray-700 mb-2">
                 Phone Number <span className="text-red-500">*</span>
               </label>
               <input
@@ -113,38 +170,23 @@ const CustomerEdit = () => {
                 name="phone"
                 value={formData.phone}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
                 required
               />
+              <p className="text-xs text-gray-400 mt-1">Numbers only, minimum 9 digits</p>
             </div>
 
-            {/* Vehicle Plate */}
+            {/* Vehicle Model */}
             <div>
-              <label htmlFor="vehicle_plate" className="block text-sm font-medium text-gray-700 mb-2">
-                Vehicle Plate <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                id="vehicle_plate"
-                name="vehicle_plate"
-                value={formData.vehicle_plate}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono uppercase"
-                required
-              />
-            </div>
-
-            {/* Vehicle Type */}
-            <div>
-              <label htmlFor="vehicle_type" className="block text-sm font-medium text-gray-700 mb-2">
-                Vehicle Type <span className="text-red-500">*</span>
+              <label htmlFor="vehicle_type" className="block text-sm font-bold text-gray-700 mb-2">
+                Vehicle Model <span className="text-red-500">*</span>
               </label>
               <select
                 id="vehicle_type"
                 name="vehicle_type"
                 value={formData.vehicle_type}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
                 required
               >
                 <option value="Saloon">Saloon</option>
@@ -152,18 +194,71 @@ const CustomerEdit = () => {
               </select>
             </div>
 
-            {/* Province */}
-            <div>
-              <label htmlFor="province" className="block text-sm font-medium text-gray-700 mb-2">
-                Province
-              </label>
-              <input
-                type="text"
-                id="province"
-                name="province"
-                value={formData.province}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            {/* Vehicle Registration Section */}
+            <div className="md:col-span-2 border-t pt-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">Vehicle Registration</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Emirate */}
+                <div>
+                  <label htmlFor="emirate" className="block text-sm font-bold text-gray-700 mb-2">
+                    Emirate <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="emirate"
+                    name="emirate"
+                    value={formData.emirate}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    required
+                  >
+                    <option value="">Select Emirate</option>
+                    <option value="Dubai">Dubai</option>
+                    <option value="Abu Dhabi">Abu Dhabi</option>
+                    <option value="Sharjah">Sharjah</option>
+                    <option value="Ajman">Ajman</option>
+                    <option value="Umm Al Quwain">Umm Al Quwain</option>
+                    <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                    <option value="Fujairah">Fujairah</option>
+                  </select>
+                </div>
+
+                {/* Plate Code */}
+                <div>
+                  <label htmlFor="plate_code" className="block text-sm font-bold text-gray-700 mb-2">
+                    Plate Code <span className="text-red-500">*</span>
+                  </label>
+                  <SearchableSelect
+                    options={plateCodes}
+                    value={formData.plate_code}
+                    onChange={(val) => setFormData(prev => ({ ...prev, plate_code: val }))}
+                    disabled={plateCodes.length === 0}
+                  />
+                </div>
+
+                {/* Plate Number */}
+                <div>
+                  <label htmlFor="plate_number" className="block text-sm font-bold text-gray-700 mb-2">
+                    Plate Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="plate_number"
+                    name="plate_number"
+                    value={formData.plate_number}
+                    onChange={(e) => setFormData(prev => ({ ...prev, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() }))}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono"
+                    required
+                    placeholder="12345"
+                  />
+                </div>
+              </div>
+
+              {/* Plate Live Preview */}
+              <VehiclePlatePreview 
+                emirate={formData.emirate}
+                plateCode={formData.plate_code}
+                plateNumber={formData.plate_number}
               />
             </div>
           </div>

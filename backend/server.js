@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 
 // Load env vars
 dotenv.config();
@@ -18,6 +19,13 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const mockRoutes = require('./routes/mockRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const vipBookingRoutes = require('./routes/vipBookingRoutes');
+const vehicleRegistrationRoutes = require('./routes/vehicleRegistrationRoutes');
+const supplierRoutes = require('./routes/supplierRoutes');
+const purchaseRoutes = require('./routes/purchaseRoutes');
+const expenseRoutes = require('./routes/expenseRoutes');
+const creditRoutes = require('./routes/creditRoutes');
+const registerRoutes = require('./routes/registerRoutes');
 const { startFtpServer } = require('./services/ftpServer');
 const { startFileWatcher } = require('./services/anprWatcher');
 
@@ -28,7 +36,8 @@ const app = express();
 // Middleware
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
-  process.env.CUSTOMER_WEBSITE_URL || 'http://localhost:4000'
+  process.env.CUSTOMER_WEBSITE_URL || 'http://localhost:4000',
+  'http://localhost:4001'
 ];
 
 app.use(cors({
@@ -43,8 +52,11 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -57,6 +69,7 @@ app.get('/api/health', (req, res) => {
 
 // Public API Routes (no authentication)
 app.use('/api/public', publicRoutes);
+app.use('/api/vip', vipBookingRoutes);
 
 // Protected API Routes (require authentication)
 app.use('/api/auth', authRoutes);
@@ -70,6 +83,12 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/mock', mockRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/purchases', purchaseRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/credits', creditRoutes);
+app.use('/api/registers', registerRoutes);
+app.use('/api/vehicle-registration', vehicleRegistrationRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

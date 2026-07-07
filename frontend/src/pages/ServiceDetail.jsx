@@ -22,6 +22,25 @@ const ServiceDetail = () => {
       setLoading(false);
     }
   };
+  const calculateDuration = () => {
+    if (!service?.started_at || !service?.completed_at) return null;
+    const start = new Date(service.started_at);
+    const end = new Date(service.completed_at);
+    const diffMs = end - start;
+    const diffMins = Math.round(diffMs / 60000);
+    return diffMins;
+  };
+
+  const formatDuration = (mins) => {
+    if (mins === null || mins === undefined) return 'N/A';
+    if (mins < 0) return '0 min';
+    if (mins < 60) {
+      return `${mins} min`;
+    }
+    const hours = Math.floor(mins / 60);
+    const minutes = mins % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  };
 
   const handleStatusUpdate = async (status) => {
     try {
@@ -60,7 +79,7 @@ const ServiceDetail = () => {
             </div>
             <div>
               <p className="text-sm text-gray-600">Customer</p>
-              <p className="text-lg">{service.customer_name || 'N/A'}</p>
+              <p className="text-lg">{service.customer_name || 'Walk-in Customer'}</p>
             </div>
             {service.vehicle_plate && (
               <div>
@@ -87,15 +106,40 @@ const ServiceDetail = () => {
               <select
                 value={service.status}
                 onChange={(e) => handleStatusUpdate(e.target.value)}
-                className={`mt-1 px-4 py-2 border rounded-lg ${service.status === 'completed' ? 'bg-green-100 text-green-800' :
-                    service.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'
+                className={`mt-1 px-4 py-2 border rounded-lg font-bold outline-none ${service.status === 'completed' ? 'bg-green-100 text-green-800 border-green-200' :
+                    service.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                      'bg-gray-100 text-gray-800 border-gray-200'
                   }`}
               >
+                <option value="pending">Pending</option>
                 <option value="in_progress">In Progress</option>
                 <option value="completed">Completed</option>
               </select>
             </div>
+            {service.started_at && (
+              <div>
+                <p className="text-sm text-gray-600">Started At</p>
+                <p className="text-lg font-semibold">
+                  {new Date(service.started_at).toLocaleString()}
+                </p>
+              </div>
+            )}
+            {service.completed_at && (
+              <div>
+                <p className="text-sm text-gray-600">Completed At</p>
+                <p className="text-lg font-semibold">
+                  {new Date(service.completed_at).toLocaleString()}
+                </p>
+              </div>
+            )}
+            {service.started_at && service.completed_at && (
+              <div>
+                <p className="text-sm text-gray-600">Duration</p>
+                <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-green-500 text-white mt-1">
+                  {formatDuration(calculateDuration())}
+                </span>
+              </div>
+            )}
             <div>
               <p className="text-sm text-gray-600">Created At</p>
               <p className="text-lg">

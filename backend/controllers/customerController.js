@@ -12,6 +12,7 @@ const getCustomers = asyncHandler(async (req, res) => {
            COUNT(DISTINCT o.id) as total_orders,
            COALESCE(SUM(o.total), 0) as total_spent,
            COALESCE(l.points, 0) as loyalty_points,
+           COALESCE(l.wash_stamps, 0) as wash_stamps,
            (SELECT p2.method 
             FROM payments p2 
             INNER JOIN orders o2 ON p2.order_id = o2.id
@@ -81,14 +82,68 @@ const getCustomer = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'Customer not found' });
   }
 
-  // Get customer orders
+  // Get customer orders with credit status
   const [orders] = await pool.query(
-    'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
+    `SELECT o.*, 
+            cc.status as credit_status,
+            cc.remaining_amount as credit_remaining
+     FROM orders o
+     LEFT JOIN customer_credits cc ON o.id = cc.order_id
+     WHERE o.customer_id = ? 
+     ORDER BY o.created_at DESC`,
     [id]
   );
 
   res.json({ customer: customers[0], orders });
 });
+
+// Helper to parse Plate string into Emirate, Code and Plate Number
+function parsePlateComponents(plateStr) {
+  if (!plateStr) return { plateCode: '', emirate: '', plateNumber: '' };
+  
+  const cleanStr = plateStr.trim().replace(/\s+/g, ' ');
+  const emiratesList = [
+    'dubai',
+    'abu dhabi',
+    'sharjah',
+    'ajman',
+    'umm al quwain',
+    'ras al khaimah',
+    'fujairah'
+  ];
+  
+  let detectedEmirate = '';
+  let remainingStr = cleanStr;
+  
+  for (const emirate of emiratesList) {
+    const regex = new RegExp(`\\b${emirate}\\b`, 'i');
+    if (regex.test(cleanStr)) {
+      detectedEmirate = emirate.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      remainingStr = cleanStr.replace(regex, '').trim().replace(/\s+/g, ' ');
+      break;
+    }
+  }
+  
+  const parts = remainingStr.split(' ').filter(Boolean);
+  let plateCode = '';
+  let plateNumber = '';
+  
+  if (parts.length >= 2) {
+    plateCode = parts[0];
+    plateNumber = parts[parts.length - 1];
+  } else if (parts.length === 1) {
+    const part = parts[0];
+    const match = part.match(/^([A-Za-z]+)?([0-9]+)$/);
+    if (match) {
+      plateCode = match[1] || '';
+      plateNumber = match[2];
+    } else {
+      plateNumber = part;
+    }
+  }
+  
+  return { plateCode, emirate: detectedEmirate, plateNumber };
+}
 
 // @desc    Create customer
 // @route   POST /api/customers
@@ -96,24 +151,42 @@ const getCustomer = asyncHandler(async (req, res) => {
 const createCustomer = asyncHandler(async (req, res) => {
   const { name, phone, vehicle_plate, vehicle_type, province } = req.body;
 
-  if (!name || !phone || !vehicle_plate || !vehicle_type) {
+  let finalPlate = vehicle_plate;
+  if (req.body.plate_code && req.body.emirate && req.body.plate_number) {
+    finalPlate = `${req.body.plate_code} ${req.body.emirate} ${req.body.plate_number}`;
+  }
+
+  if (!name || !phone || !finalPlate || !vehicle_type) {
     return res.status(400).json({ message: 'Please provide all required fields' });
   }
 
   // Check if customer with same plate exists
   const [existing] = await pool.query(
     'SELECT id FROM customers WHERE vehicle_plate = ?',
-    [vehicle_plate]
+    [finalPlate]
   );
 
   if (existing.length > 0) {
     return res.status(400).json({ message: 'Customer with this vehicle plate already exists' });
   }
 
+  const finalProvince = province || req.body.emirate || null;
+
   const [result] = await pool.query(
     'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
-    [name, phone, vehicle_plate, vehicle_type, province || null]
+    [name, phone, finalPlate, vehicle_type, finalProvince]
   );
+
+  // Parse components and insert into vehicles table
+  const { plateCode, emirate: parsedEmirate, plateNumber } = parsePlateComponents(finalPlate);
+  try {
+    await pool.query(
+      'INSERT INTO vehicles (CustomerId, Emirate, PlateCode, PlateNumber, VehicleRegistrationNumber) VALUES (?, ?, ?, ?, ?)',
+      [result.insertId, parsedEmirate, plateCode, plateNumber, finalPlate]
+    );
+  } catch (vehErr) {
+    console.error('[Database] Failed to insert into vehicles table:', vehErr.message);
+  }
 
   // Initialize loyalty points
   await pool.query('INSERT INTO loyalty (customer_id, points) VALUES (?, ?)', [result.insertId, 0]);
@@ -135,10 +208,34 @@ const updateCustomer = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'Customer not found' });
   }
 
+  let finalPlate = vehicle_plate;
+  if (req.body.plate_code && req.body.emirate && req.body.plate_number) {
+    finalPlate = `${req.body.plate_code} ${req.body.emirate} ${req.body.plate_number}`;
+  }
+  const finalProvince = province || req.body.emirate || null;
+
   await pool.query(
     'UPDATE customers SET name = ?, phone = ?, vehicle_plate = ?, vehicle_type = ?, province = ? WHERE id = ?',
-    [name, phone, vehicle_plate, vehicle_type, province || null, id]
+    [name, phone, finalPlate, vehicle_type, finalProvince, id]
   );
+
+  // Sync vehicles table
+  const { plateCode, emirate: parsedEmirate, plateNumber } = parsePlateComponents(finalPlate);
+  try {
+    const [existingVehicles] = await pool.query(
+      'SELECT VehicleId FROM vehicles WHERE CustomerId = ? AND VehicleRegistrationNumber = ?',
+      [id, finalPlate]
+    );
+    
+    if (existingVehicles.length === 0) {
+      await pool.query(
+        'INSERT INTO vehicles (CustomerId, Emirate, PlateCode, PlateNumber, VehicleRegistrationNumber) VALUES (?, ?, ?, ?, ?)',
+        [id, parsedEmirate, plateCode, plateNumber, finalPlate]
+      );
+    }
+  } catch (vehErr) {
+    console.error('[Database] Failed to sync vehicles table on update:', vehErr.message);
+  }
 
   const [updated] = await pool.query('SELECT * FROM customers WHERE id = ?', [id]);
 

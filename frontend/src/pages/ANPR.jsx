@@ -99,8 +99,12 @@ const ANPR = () => {
                         {new Date(det.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <div className="mt-1 flex items-center gap-2">
-                      {det.customer_id ? (
+                    <div className="mt-1 flex flex-wrap gap-1 items-center">
+                      {det.is_manual ? (
+                        <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                          ✍️ Manual Check-in
+                        </span>
+                      ) : det.customer_id ? (
                         <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
                           ✅ Existing: {det.customer_name}
                         </span>
@@ -159,6 +163,13 @@ const ANPR = () => {
                     </div>
                   )}
                 </div>
+
+                {selectedDetection.notes && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <p className="text-xs text-gray-400 font-bold uppercase mb-1">Check-in Note / Comment</p>
+                    <p className="text-gray-700 italic">"{selectedDetection.notes}"</p>
+                  </div>
+                )}
 
                 {!selectedDetection.customer_id && (
                   <div className="mt-8 p-6 bg-amber-50 rounded-xl border-2 border-amber-200">

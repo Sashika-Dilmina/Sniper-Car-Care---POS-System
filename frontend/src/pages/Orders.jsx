@@ -7,6 +7,7 @@ const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: '', payment_status: '', date: '', service_time: '' });
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'saloon', '4x4'
 
   useEffect(() => {
     fetchOrders();
@@ -49,6 +50,18 @@ const Orders = () => {
     return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   };
 
+  const filteredOrders = orders.filter((order) => {
+    const hasProducts = order.items && order.items.some(item => item.category === 'Accessories' || item.category === 'Spare Parts');
+    if (activeTab === 'products') return hasProducts;
+    if (activeTab === 'all') return true;
+    
+    const vt = (order.vehicle_type || '').toLowerCase();
+    const src = (order.source || '').toLowerCase();
+    const isOrder4x4 = vt === '4x4' || src.includes('4x4') || (order.notes && order.notes.toLowerCase().includes('4x4'));
+    if (activeTab === '4x4') return isOrder4x4;
+    return !isOrder4x4;
+  });
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
   }
@@ -57,6 +70,58 @@ const Orders = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-800">Orders</h1>
+      </div>
+
+      {/* Tabs for Saloon, 4x4, and Products */}
+      <div className="flex border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+            activeTab === 'all'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          All Orders ({orders.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('saloon')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+            activeTab === 'saloon'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Saloon Orders ({orders.filter(o => {
+            const vt = (o.vehicle_type || '').toLowerCase();
+            const src = (o.source || '').toLowerCase();
+            return !(vt === '4x4' || src.includes('4x4') || (o.notes && o.notes.toLowerCase().includes('4x4')));
+          }).length})
+        </button>
+        <button
+          onClick={() => setActiveTab('4x4')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+            activeTab === '4x4'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          4x4 Orders ({orders.filter(o => {
+            const vt = (o.vehicle_type || '').toLowerCase();
+            const src = (o.source || '').toLowerCase();
+            return vt === '4x4' || src.includes('4x4') || (o.notes && o.notes.toLowerCase().includes('4x4'));
+          }).length})
+        </button>
+        <button
+          onClick={() => setActiveTab('products')}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+            activeTab === 'products'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Product Orders ({orders.filter(o => o.items && o.items.some(i => i.category === 'Accessories' || i.category === 'Spare Parts')).length})
+        </button>
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow flex flex-wrap gap-4">
@@ -115,13 +180,14 @@ const Orders = () => {
         )}
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full">
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <table className="w-full min-w-[1200px]">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle Plate</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items / Products</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service Time</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -131,24 +197,33 @@ const Orders = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {orders.length > 0 ? (
-              orders.map((order) => {
+            {filteredOrders.length > 0 ? (
+              filteredOrders.map((order) => {
                 const serviceTime = calculateServiceTime(order);
                 const serviceTimeColor = getServiceTimeColor(serviceTime);
                 const isCompleted = order.status === 'completed';
+                const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
+                const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
 
                 return (
                   <tr
                     key={order.id}
-                    className={`hover:bg-gray-50 ${isCompleted && serviceTimeColor === 'green' ? 'bg-green-50' :
-                        isCompleted && serviceTimeColor === 'red' ? 'bg-red-50' :
-                          ''
-                      }`}
+                    className={`hover:bg-gray-50 transition-colors ${
+                      isVipOrder ? 'bg-purple-50/60 hover:bg-purple-100/60 border-l-4 border-purple-500' :
+                      isCompleted && !isProductOnly && serviceTimeColor === 'green' ? 'bg-green-50/60' :
+                      isCompleted && !isProductOnly && serviceTimeColor === 'red' ? 'bg-red-50/60' :
+                      ''
+                    }`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         #{order.id}
-                        {order.source === 'customer_website' && (
+                        {isVipOrder && (
+                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded-full border border-purple-200" title="VIP Order">
+                            VIP ⭐
+                          </span>
+                        )}
+                        {order.source === 'customer_website' && !isVipOrder && (
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full" title="Customer Website Order">
                             🌐
                           </span>
@@ -158,10 +233,25 @@ const Orders = () => {
                     <td className="px-6 py-4 whitespace-nowrap">{order.customer_name || 'Walk-in'}</td>
                     <td className="px-6 py-4 whitespace-nowrap font-mono">{order.vehicle_plate || 'N/A'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
+                      {order.items && order.items.length > 0 ? (
+                        <div className="flex flex-col gap-1 max-w-xs truncate">
+                          {order.items.map((item, idx) => (
+                            <span key={idx} className="text-xs text-gray-700 block bg-gray-100 px-2 py-0.5 rounded w-max">
+                              {item.product_name} x{item.quantity}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Service Booking</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       AED {parseFloat(order.total).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {order.status === 'completed' ? (
+                      {isProductOnly ? (
+                        <span className="text-gray-400 text-xs">N/A (Product Only)</span>
+                      ) : order.status === 'completed' ? (
                         <span className={`px-3 py-1 text-xs font-semibold rounded-full ${serviceTimeColor === 'green'
                             ? 'bg-green-500 text-white'
                             : 'bg-red-500 text-white'
@@ -175,21 +265,39 @@ const Orders = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs rounded-full ${order.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                            order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                              'bg-gray-100 text-gray-800'
-                        }`}>
-                        {order.status}
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        isProductOnly ? 'bg-green-100 text-green-800' :
+                        order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                        order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {isProductOnly ? 'Order Placed' : order.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
-                          order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                        }`}>
-                        {order.payment_status}
-                      </span>
+                      {order.credit_status ? (
+                        order.credit_status === 'unpaid' ? (
+                          <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-semibold">
+                            Credit / Unpaid
+                          </span>
+                        ) : order.credit_status === 'partially_paid' ? (
+                          <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 font-semibold">
+                            Credit / Partial
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 font-semibold">
+                            Paid
+                          </span>
+                        )
+                      ) : (
+                        <span className={`px-2 py-1 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                            order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                          }`}>
+                          {order.payment_status}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {new Date(order.created_at).toLocaleDateString()}
@@ -211,12 +319,15 @@ const Orders = () => {
                   <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <p className="mt-2 text-gray-600">No orders found matching your filters</p>
+                  <p className="mt-2 text-gray-600 font-medium">No orders found for this selection</p>
                   <button
-                    onClick={() => setFilter({ status: '', payment_status: '', date: '', service_time: '' })}
-                    className="mt-4 text-primary-600 hover:underline text-sm"
+                    onClick={() => {
+                      setFilter({ status: '', payment_status: '', date: '', service_time: '' });
+                      setActiveTab('all');
+                    }}
+                    className="mt-4 text-primary-600 hover:underline text-sm font-bold"
                   >
-                    Clear all filters
+                    Reset all filters & tabs
                   </button>
                 </td>
               </tr>

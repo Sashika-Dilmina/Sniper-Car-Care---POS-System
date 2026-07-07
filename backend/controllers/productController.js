@@ -1,17 +1,24 @@
 const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
+const fs = require('fs');
+const path = require('path');
 
 // @desc    Get all products
 // @route   GET /api/products
 // @access  Private
 const getProducts = asyncHandler(async (req, res) => {
-  const { category, search } = req.query;
+  const { category, search, vehicle_type } = req.query;
   let query = 'SELECT * FROM products WHERE 1=1';
   const params = [];
 
   if (category) {
     query += ' AND category = ?';
     params.push(category);
+  }
+
+  if (vehicle_type) {
+    query += ' AND (vehicle_type = ? OR vehicle_type = "Both")';
+    params.push(vehicle_type);
   }
 
   if (search) {
@@ -46,15 +53,15 @@ const getProduct = asyncHandler(async (req, res) => {
 // @route   POST /api/products
 // @access  Private
 const createProduct = asyncHandler(async (req, res) => {
-  const { name, description, category, price, stock, image_url, supplier_id } = req.body;
+  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price } = req.body;
 
   if (!name || !category || !price || stock === undefined) {
     return res.status(400).json({ message: 'Please provide all required fields' });
   }
 
   const [result] = await pool.query(
-    'INSERT INTO products (name, description, category, price, stock, image_url, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [name, description || null, category, price, stock, image_url || null, supplier_id || null]
+    'INSERT INTO products (name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [name, description || null, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00]
   );
 
   const [newProduct] = await pool.query('SELECT * FROM products WHERE id = ?', [result.insertId]);
@@ -67,7 +74,7 @@ const createProduct = asyncHandler(async (req, res) => {
 // @access  Private
 const updateProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, description, category, price, stock, image_url, supplier_id } = req.body;
+  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price } = req.body;
 
   const [products] = await pool.query('SELECT id FROM products WHERE id = ?', [id]);
   if (products.length === 0) {
@@ -75,8 +82,8 @@ const updateProduct = asyncHandler(async (req, res) => {
   }
 
   await pool.query(
-    'UPDATE products SET name = ?, description = ?, category = ?, price = ?, stock = ?, image_url = ?, supplier_id = ? WHERE id = ?',
-    [name, description, category, price, stock, image_url || null, supplier_id || null, id]
+    'UPDATE products SET name = ?, description = ?, category = ?, price = ?, stock = ?, image_url = ?, supplier_id = ?, vehicle_type = ?, purchase_price = ? WHERE id = ?',
+    [name, description, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00, id]
   );
 
   const [updated] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
@@ -118,12 +125,57 @@ const updateStock = asyncHandler(async (req, res) => {
   res.json({ message: 'Stock updated successfully', product: updated[0] });
 });
 
+// @desc    Upload product/service image (base64)
+// @route   POST /api/products/upload-image
+// @access  Private
+const uploadImage = asyncHandler(async (req, res) => {
+  const { image } = req.body;
+
+  if (!image) {
+    return res.status(400).json({ message: 'No image data provided' });
+  }
+
+  // Expect base64 image data like "data:image/jpeg;base64,..."
+  const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) {
+    return res.status(400).json({ message: 'Invalid base64 image format' });
+  }
+
+  const imageType = matches[1];
+  const base64Data = matches[2];
+  const buffer = Buffer.from(base64Data, 'base64');
+
+  // Determine file extension
+  let extension = 'jpg';
+  if (imageType.includes('png')) extension = 'png';
+  else if (imageType.includes('webp')) extension = 'webp';
+  else if (imageType.includes('gif')) extension = 'gif';
+
+  // Ensure uploads directory exists
+  const uploadsDir = path.join(__dirname, '../uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  const filename = `service_${Date.now()}_${Math.round(Math.random() * 1E9)}.${extension}`;
+  const filePath = path.join(uploadsDir, filename);
+
+  fs.writeFileSync(filePath, buffer);
+
+  const imageUrl = `/uploads/${filename}`;
+  res.status(200).json({
+    message: 'Image uploaded successfully',
+    imageUrl
+  });
+});
+
 module.exports = {
   getProducts,
   getProduct,
   createProduct,
   updateProduct,
   deleteProduct,
-  updateStock
+  updateStock,
+  uploadImage
 };
 

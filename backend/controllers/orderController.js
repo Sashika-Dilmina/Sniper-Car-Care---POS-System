@@ -10,27 +10,44 @@ const getOrders = asyncHandler(async (req, res) => {
   const { status, payment_status, customer_id, date, service_time } = req.query;
   let query = `
     SELECT o.*, 
-           c.name as customer_name, 
-           c.phone as customer_phone,
-           c.vehicle_plate,
-           -- Service time: Duration from first payment completion to order completion
-           -- Start: When customer pays (first completed payment timestamp)
-           -- End: When service finishes (order status updated to 'completed', when staff sends completion message)
-           CASE 
-             WHEN o.status = 'completed' AND EXISTS (
-               SELECT 1 FROM payments p 
-               WHERE p.order_id = o.id AND p.status = 'completed'
-             ) THEN 
-               TIMESTAMPDIFF(MINUTE, 
-                 (SELECT MIN(p.created_at) 
-                  FROM payments p 
-                  WHERE p.order_id = o.id AND p.status = 'completed'), 
-                 o.updated_at
-               )
-             ELSE NULL
-           END as service_time_minutes
+           COALESCE(c.name, vc.name) as customer_name, 
+           COALESCE(c.phone, vc.phone) as customer_phone,
+           COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
+           COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
+           cc.status as credit_status,
+           cc.remaining_amount as credit_remaining,
+           -- Service time: Duration from service start to service completion
+           -- Start: o.service_started_at
+           -- End: o.service_completed_at
+           -- Fallback: If service timestamps are null, use the difference between first payment completion and order completion
+            CASE 
+              -- Bypasses service time calculation for product-only orders
+              WHEN NOT EXISTS (
+                SELECT 1 FROM order_items oi 
+                JOIN products p ON oi.product_id = p.id 
+                WHERE oi.order_id = o.id AND p.category = 'Services'
+              ) AND EXISTS (
+                SELECT 1 FROM order_items oi2 WHERE oi2.order_id = o.id
+              ) THEN NULL
+              WHEN o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL THEN
+                TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at)
+              WHEN o.status = 'completed' AND EXISTS (
+                SELECT 1 FROM payments p 
+                WHERE p.order_id = o.id AND p.status = 'completed'
+              ) THEN 
+                TIMESTAMPDIFF(MINUTE, 
+                  (SELECT MIN(p.created_at) 
+                   FROM payments p 
+                   WHERE p.order_id = o.id AND p.status = 'completed'), 
+                  o.updated_at
+                )
+              ELSE NULL
+            END as service_time_minutes
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+    LEFT JOIN customer_credits cc ON o.id = cc.order_id
     WHERE 1=1
   `;
   const params = [];
@@ -50,39 +67,44 @@ const getOrders = asyncHandler(async (req, res) => {
     params.push(customer_id);
   }
 
-  if (date) {
+  if (req.user && req.user.role === 'staff') {
+    query += ' AND DATE(o.created_at) = CURDATE()';
+  } else if (date) {
     query += ' AND DATE(o.created_at) = ?';
     params.push(date);
   }
 
   // Filter by service time at SQL level
-  // Service time = time from first payment completion to order completion
   if (service_time === 'fast') {
-    // Orders that completed in less than 30 minutes (from payment to completion)
     query += ` AND o.status = 'completed' 
-               AND EXISTS (
-                 SELECT 1 FROM payments p 
-                 WHERE p.order_id = o.id AND p.status = 'completed'
-               )
-               AND TIMESTAMPDIFF(MINUTE, 
-                 (SELECT MIN(p.created_at) 
-                  FROM payments p 
-                  WHERE p.order_id = o.id AND p.status = 'completed'), 
-                 o.updated_at
-               ) < 30`;
+               AND (
+                 (o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL AND TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at) < 30)
+                 OR
+                 (o.service_started_at IS NULL AND EXISTS (
+                   SELECT 1 FROM payments p 
+                   WHERE p.order_id = o.id AND p.status = 'completed'
+                 ) AND TIMESTAMPDIFF(MINUTE, 
+                   (SELECT MIN(p.created_at) 
+                    FROM payments p 
+                    WHERE p.order_id = o.id AND p.status = 'completed'), 
+                   o.updated_at
+                 ) < 30)
+               )`;
   } else if (service_time === 'slow') {
-    // Orders that took 30 minutes or more (from payment to completion)
     query += ` AND o.status = 'completed' 
-               AND EXISTS (
-                 SELECT 1 FROM payments p 
-                 WHERE p.order_id = o.id AND p.status = 'completed'
-               )
-               AND TIMESTAMPDIFF(MINUTE, 
-                 (SELECT MIN(p.created_at) 
-                  FROM payments p 
-                  WHERE p.order_id = o.id AND p.status = 'completed'), 
-                 o.updated_at
-               ) >= 30`;
+               AND (
+                 (o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL AND TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at) >= 30)
+                 OR
+                 (o.service_started_at IS NULL AND EXISTS (
+                   SELECT 1 FROM payments p 
+                   WHERE p.order_id = o.id AND p.status = 'completed'
+                 ) AND TIMESTAMPDIFF(MINUTE, 
+                   (SELECT MIN(p.created_at) 
+                    FROM payments p 
+                    WHERE p.order_id = o.id AND p.status = 'completed'), 
+                   o.updated_at
+                 ) >= 30)
+               )`;
   }
 
   query += ' ORDER BY o.created_at DESC';
@@ -111,12 +133,17 @@ const getOrder = asyncHandler(async (req, res) => {
 
   const [orders] = await pool.query(`
     SELECT o.*, 
-           c.name as customer_name, 
-           c.phone as customer_phone,
-           c.vehicle_plate,
-           c.vehicle_type
+           COALESCE(c.name, vc.name) as customer_name, 
+           COALESCE(c.phone, vc.phone) as customer_phone,
+           COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
+           COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
+           cc.status as credit_status,
+           cc.remaining_amount as credit_remaining
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+    LEFT JOIN customer_credits cc ON o.id = cc.order_id
     WHERE o.id = ?
   `, [id]);
 
@@ -161,13 +188,36 @@ const createOrder = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
+    // Check if any of the products in items is a service
+    let hasService = false;
+    for (let item of items) {
+      const [prodRows] = await connection.query('SELECT category FROM products WHERE id = ?', [item.product_id]);
+      if (prodRows.length > 0 && prodRows[0].category === 'Services') {
+        hasService = true;
+        break;
+      }
+    }
+
+    const orderStatus = hasService ? 'processing' : 'completed';
+    const serviceStartedAt = hasService ? new Date() : null;
+    const serviceCompletedAt = hasService ? null : new Date();
+
     // Create order
     const [orderResult] = await connection.query(
-      'INSERT INTO orders (customer_id, total, discount, status, payment_status) VALUES (?, ?, ?, ?, ?)',
-      [customer_id || null, total, discount || 0, 'pending', 'pending']
+      'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at, service_completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [customer_id || null, total, discount || 0, orderStatus, 'pending', serviceStartedAt, serviceCompletedAt]
     );
 
     const orderId = orderResult.insertId;
+
+    // Fetch customer vehicle type if customer_id exists
+    let vehicleType = 'Saloon';
+    if (customer_id) {
+      const [custRows] = await connection.query('SELECT vehicle_type FROM customers WHERE id = ?', [customer_id]);
+      if (custRows.length > 0) {
+        vehicleType = custRows[0].vehicle_type;
+      }
+    }
 
     // Create order items and update stock
     for (let item of items) {
@@ -181,6 +231,15 @@ const createOrder = asyncHandler(async (req, res) => {
         'UPDATE products SET stock = stock - ? WHERE id = ?',
         [item.quantity, item.product_id]
       );
+
+      // Check if item is a service, and create service task
+      const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
+      if (prodRows.length > 0 && prodRows[0].category === 'Services') {
+        await connection.query(
+          'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, started_at, order_id) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)',
+          [customer_id || null, prodRows[0].name, vehicleType, item.price, 'Added via POS Order', 'in_progress', orderId]
+        );
+      }
     }
 
     await connection.commit();
@@ -207,49 +266,177 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Status is required' });
   }
 
-  await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, id]);
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
 
-  const [updated] = await pool.query(`
-    SELECT o.*, c.name as customer_name, c.phone as customer_phone,
-           c.vehicle_plate, c.vehicle_type, c.id as customer_id_ref
-    FROM orders o
-    LEFT JOIN customers c ON o.customer_id = c.id
-    WHERE o.id = ?
-  `, [id]);
+  try {
+    // 1. Update order status in database with corresponding timestamps
+    let statusUpdateQuery = 'UPDATE orders SET status = ? WHERE id = ?';
+    let statusUpdateParams = [status, id];
 
-  // Send SMS notifications when order is marked as completed
-  if (status === 'completed' && updated.length > 0) {
-    const order = updated[0];
-    const rawPhone = order.customer_phone;
-    const formattedPhone = formatPhoneNumber(rawPhone);
-
-    if (formattedPhone) {
-      // Build payment URL for the customer to pay online
-      const paymentUrl = buildPaymentUrl({
-        vehicleType: order.vehicle_type || 'Saloon',
-        plate: order.vehicle_plate,
-        orderId: order.id,
-      });
-
-      // Completion & Payment Request SMS
-      try {
-        await sendReson8Message({
-          to: formattedPhone,
-          message: `Your service is completed. You may collect your vehicle. Please complete your payment here: ${paymentUrl}`,
-          campaignName: 'ORDER_COMPLETED_PAYMENT',
-        });
-        console.log(`[SMS] Completion & Payment SMS sent to ${formattedPhone} for order ${id}`);
-      } catch (err) {
-        console.error('[SMS] Completion SMS failed:', err.message);
-      }
-
-      // FEEDBACK SMS IS NOW SENT AFTER PAYMENT SUCCESS, NOT HERE
-    } else {
-      console.warn(`[SMS] Skipping completion SMS for order ${id} – no valid phone number.`);
+    if (status === 'processing') {
+      statusUpdateQuery = 'UPDATE orders SET status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) WHERE id = ?';
+    } else if (status === 'completed') {
+      statusUpdateQuery = 'UPDATE orders SET status = ?, service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) WHERE id = ?';
     }
-  }
 
-  res.json({ message: 'Order status updated successfully', order: updated[0] });
+    await connection.query(statusUpdateQuery, statusUpdateParams);
+
+    // 2. Fetch order details to see if payment needs to be completed
+    const [orders] = await connection.query(`
+      SELECT o.*, c.name as customer_name, c.phone as customer_phone,
+             c.vehicle_plate, c.vehicle_type, c.id as customer_id_ref
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      WHERE o.id = ?
+    `, [id]);
+
+    if (orders.length === 0) {
+      await connection.rollback();
+      connection.release();
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const order = orders[0];
+
+    // Sync status to VIP bookings if linked
+    if (order.vip_booking_id) {
+      let vipStatus = 'pending';
+      if (status === 'processing') vipStatus = 'in_progress';
+      else if (status === 'completed') vipStatus = 'completed';
+      else if (status === 'cancelled') vipStatus = 'cancelled';
+
+      await connection.query(
+        'UPDATE vip_bookings SET status = ? WHERE id = ?',
+        [vipStatus, order.vip_booking_id]
+      );
+    }
+
+    // Sync status and timestamps to associated services
+    let serviceStatus = 'pending';
+    let serviceStartedUpdate = '';
+    let serviceCompletedUpdate = '';
+    
+    if (status === 'processing') {
+      serviceStatus = 'in_progress';
+      serviceStartedUpdate = ', started_at = COALESCE(started_at, CURRENT_TIMESTAMP)';
+    } else if (status === 'completed') {
+      serviceStatus = 'completed';
+      serviceStartedUpdate = ', started_at = COALESCE(started_at, created_at, CURRENT_TIMESTAMP)';
+      serviceCompletedUpdate = ', completed_at = CURRENT_TIMESTAMP';
+    } else if (status === 'cancelled') {
+      serviceStatus = 'cancelled';
+    } else if (status === 'pending') {
+      serviceStatus = 'pending';
+      serviceStartedUpdate = ', started_at = NULL';
+      serviceCompletedUpdate = ', completed_at = NULL';
+    }
+
+    await connection.query(
+      `UPDATE services SET status = ?${serviceStartedUpdate}${serviceCompletedUpdate} WHERE order_id = ?`,
+      [serviceStatus, id]
+    );
+
+    // If order status is set to 'completed', automatically handle payment status and record cash payments if unpaid
+    if (status === 'completed') {
+      // Check if this order is linked to a customer credit
+      const [creditRecords] = await connection.query(
+        'SELECT id FROM customer_credits WHERE order_id = ?',
+        [id]
+      );
+      const hasCredit = creditRecords.length > 0;
+
+      if (!hasCredit && order.payment_status !== 'paid') {
+        const [payments] = await connection.query(
+          'SELECT SUM(amount) as total_paid FROM payments WHERE order_id = ? AND status = "completed"',
+          [id]
+        );
+        const totalPaid = parseFloat(payments[0].total_paid || 0);
+        const remaining = parseFloat(order.total) - totalPaid;
+
+        if (remaining > 0) {
+          // Check if there is a pending cash or card payment record we can complete
+          const [pendingPayments] = await connection.query(
+            'SELECT id, method FROM payments WHERE order_id = ? AND status = "pending"',
+            [id]
+          );
+
+          if (pendingPayments.length > 0) {
+            // Update existing pending payment record
+            await connection.query(
+              'UPDATE payments SET status = "completed", amount = ? WHERE id = ?',
+              [order.total, pendingPayments[0].id]
+            );
+          } else {
+            // Insert a new completed cash payment record
+            await connection.query(
+              'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
+              [id, remaining, 'cash', 'completed']
+            );
+          }
+
+          // Update order payment status to paid
+          await connection.query(
+            'UPDATE orders SET payment_status = "paid" WHERE id = ?',
+            [id]
+          );
+          order.payment_status = 'paid';
+        }
+      }
+    }
+
+    await connection.commit();
+    connection.release();
+
+    // Send SMS notifications (Thank You & Feedback URL) when order is marked as completed
+    if (status === 'completed') {
+      const rawPhone = order.customer_phone;
+      const formattedPhone = formatPhoneNumber(rawPhone);
+
+      if (formattedPhone) {
+        // Build the feedback URL for customer reviews
+        const feedbackUrl = buildFeedbackUrl({
+          vehicleType: order.vehicle_type || 'Saloon',
+          customerId: order.customer_id_ref || order.customer_id,
+          plate: order.vehicle_plate,
+          orderId: order.id
+        });
+
+        const thankYouMessage = `Thank you for choosing Sniper Car Care. We hope you loved our service! Please leave your feedback here: ${feedbackUrl}`;
+
+        try {
+          await sendReson8Message({
+            to: formattedPhone,
+            message: thankYouMessage,
+            campaignName: 'ORDER_COMPLETED_THANK_YOU_FEEDBACK',
+          });
+          console.log(`[SMS] Thank You & Feedback SMS sent to ${formattedPhone} for order ${id}`);
+        } catch (err) {
+          console.error('[SMS] Thank You & Feedback SMS failed:', err.message);
+        }
+      } else {
+        console.warn(`[SMS] Skipping feedback SMS for order ${id} – no valid phone number.`);
+      }
+    }
+
+    // Refetch the fully updated order for response
+    const [finalOrderRows] = await pool.query(`
+      SELECT o.*, c.name as customer_name, c.phone as customer_phone,
+             c.vehicle_plate, c.vehicle_type,
+             cc.status as credit_status,
+             cc.remaining_amount as credit_remaining
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN customer_credits cc ON o.id = cc.order_id
+      WHERE o.id = ?
+    `, [id]);
+
+    res.json({ message: 'Order status updated successfully', order: finalOrderRows[0] });
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+    throw error;
+  }
 });
 
 // @desc    Delete order

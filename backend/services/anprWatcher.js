@@ -4,7 +4,7 @@ const fs = require('fs');
 const { extractPlate } = require('./ocrService');
 const pool = require('../config/database');
 const { sendReson8Message } = require('./reson8Service');
-const { buildCustomerWebsiteUrl, formatPhoneNumber } = require('../utils/customerLinkUtils');
+const { buildCustomerWebsiteUrl, formatPhoneNumber, parsePlateComponents } = require('../utils/customerLinkUtils');
 
 /**
  * Main detection logic (reused from logic in anprController)
@@ -12,14 +12,31 @@ const { buildCustomerWebsiteUrl, formatPhoneNumber } = require('../utils/custome
 async function handleDetection(plateNumber, imageUrl = null) {
   if (!plateNumber) return;
 
-  console.log(`[ANPR Processor] Processing plate: ${plateNumber}`);
-
   try {
-    // 1. Match with existing customer
-    const [customers] = await pool.query(
-      'SELECT * FROM customers WHERE vehicle_plate = ?',
-      [plateNumber]
-    );
+    // Check if plate has been scanned in the last 24 hours
+    const [recentScans] = await pool.query(`
+      SELECT id FROM anpr_logs 
+      WHERE (plate_number = ? OR REPLACE(plate_number, ' ', '') = REPLACE(?, ' ', '')) 
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) 
+      LIMIT 1
+    `, [plateNumber, plateNumber]);
+
+    if (recentScans.length > 0) {
+      console.log(`[ANPR Watcher] Plate ${plateNumber} already scanned within last 24 hours. Ignoring scan.`);
+      return;
+    }
+
+    console.log(`[ANPR Processor] Processing plate: ${plateNumber}`);
+    // 1. Match with existing customer (including secondary vehicles, space-insensitively)
+    const [customers] = await pool.query(`
+      SELECT DISTINCT c.* FROM customers c
+      LEFT JOIN vehicles v ON c.id = v.CustomerId
+      WHERE c.vehicle_plate = ? 
+         OR REPLACE(c.vehicle_plate, ' ', '') = REPLACE(?, ' ', '')
+         OR v.VehicleRegistrationNumber = ?
+         OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = REPLACE(?, ' ', '')
+      LIMIT 1
+    `, [plateNumber, plateNumber, plateNumber, plateNumber]);
 
     let customerId = null;
     let customer = null;
@@ -27,6 +44,25 @@ async function handleDetection(plateNumber, imageUrl = null) {
     if (customers.length > 0) {
       customer = customers[0];
       customerId = customer.id;
+    } else {
+      // Robust fallback match: parse the detected plate and match by PlateCode and PlateNumber
+      const { plateCode, emirate: parsedEmirate, plateNumber: parsedPlateNum } = parsePlateComponents(plateNumber);
+      if (parsedPlateNum) {
+        const [fallbackCustomers] = await pool.query(`
+          SELECT DISTINCT c.* FROM customers c
+          JOIN vehicles v ON c.id = v.CustomerId
+          WHERE v.PlateNumber = ? AND (v.PlateCode = ? OR (? = '' AND (v.PlateCode = '' OR v.PlateCode IS NULL)))
+          LIMIT 1
+        `, [parsedPlateNum, plateCode, plateCode]);
+        
+        if (fallbackCustomers.length > 0) {
+          customer = fallbackCustomers[0];
+          customerId = customer.id;
+        }
+      }
+    }
+
+    if (customer) {
       console.log(`[ANPR Processor] Match FOUND: ${customer.name}`);
 
       // Update last seen
@@ -102,6 +138,11 @@ function startFileWatcher() {
     
     // Skip processed files or non-image files
     if (fileName.includes('_processed') || !/\.(jpg|jpeg|png)$/i.test(fileName)) {
+      return;
+    }
+
+    // Skip service package configuration images
+    if (fileName.startsWith('service_') || fileName.includes('-saloon') || fileName.includes('-4x4')) {
       return;
     }
 
