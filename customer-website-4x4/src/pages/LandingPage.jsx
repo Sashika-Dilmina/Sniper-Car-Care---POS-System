@@ -6,6 +6,14 @@ import { images, getServiceImage } from '../config/siteImages';
 import BottomNav from '../components/BottomNav';
 import VehiclePlatePreview from '../components/VehiclePlatePreview';
 import SearchableSelect from '../components/SearchableSelect';
+import stamp1 from '../assets/loyalty/stamp-1.png';
+import stamp2 from '../assets/loyalty/stamp-2.png';
+import stamp3 from '../assets/loyalty/stamp-3.png';
+import stamp4 from '../assets/loyalty/stamp-4.png';
+import stamp5 from '../assets/loyalty/stamp-5.png';
+import freeStamp from '../assets/loyalty/free-stamp.png';
+
+const stamps = [stamp1, stamp2, stamp3, stamp4, stamp5];
 
 const Reveal = ({ children, delay = 0, className = '' }) => {
   const elementRef = useRef(null);
@@ -74,29 +82,29 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
           return (
             <div key={n} className="flex flex-col items-center">
               <div
-                className={`flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center rounded-full border border-gray-200 shadow-sm transition-all duration-300 ${
+                className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full overflow-hidden transition-all duration-300 ${
                   isFilled
-                    ? 'border-red-600 bg-red-600 text-white'
-                    : 'bg-white text-gray-400'
+                    ? 'shadow-md ring-2 ring-red-500 scale-110'
+                    : 'border border-gray-300'
                 }`}
               >
-                <svg viewBox="0 0 640 512" fill="currentColor" className="w-3.5 h-3.5 sm:w-5 sm:h-5">
-                  <path d="M624 288h-16v-64c0-17.67-14.33-32-32-32h-48L419.22 56.02A64.025 64.025 0 0 0 369.24 32H256c-17.67 0-32 14.33-32 32v128H64c-17.67 0-32 14.33-32 32v64H16c-8.84 0-16 7.16-16 16v32c0 8.84 7.16 16 16 16h49.61c-.76 5.27-1.61 10.52-1.61 16 0 61.86 50.14 112 112 112s112-50.14 112-112c0-5.48-.85-10.73-1.61-16h171.22c-.76 5.27-1.61 10.52-1.61 16 0 61.86 50.14 112 112 112s112-50.14 112-112c0-5.48-.85-10.73-1.61-16H624c8.84 0 16-7.16 16-16v-32c0-8.84-7.16-16-16-16zM176 432c-26.51 0-48-21.49-48-48s21.49-48 48-48 48 21.49 48 48-21.49 48-48 48zm320 0c-26.51 0-48-21.49-48-48s21.49-48 48-48 48 21.49 48 48-21.49 48-48 48z"/>
-                </svg>
+                <img src={stamps[n - 1]} alt={`Stamp ${n}`} className="w-full h-full object-contain" />
               </div>
+              <span className="text-[10px] sm:text-xs font-bold text-gray-500 mt-1.5">{n}</span>
             </div>
           );
         })}
         <div className="flex flex-col items-center">
           <div
-            className={`flex h-7 w-7 sm:h-10 sm:w-10 items-center justify-center rounded-full text-[10px] sm:text-sm transition-all duration-300 ${
+            className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full transition-all duration-300 ${
               freeReady
-                ? 'bg-red-600 text-white shadow-md ring-2 ring-red-200 scale-110 animate-pulse'
-                : 'bg-gray-100 text-gray-400 border border-gray-200'
+                ? 'shadow-md ring-2 ring-red-500 scale-110 animate-pulse'
+                : 'border border-gray-300'
             }`}
           >
-            🎁
+            <img src={freeStamp} alt="Free Wash" className="w-full h-full object-contain p-0.5 rounded-full" />
           </div>
+          <span className="text-[10px] sm:text-xs font-bold text-red-600 mt-1.5 uppercase tracking-wide">Free</span>
         </div>
       </div>
     </div>
@@ -1269,36 +1277,90 @@ const LandingPage = () => {
             <p className="mt-2 text-sm text-gray-500">Professional-grade car care products available for purchase.</p>
           </div>
         </Reveal>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {(dbProducts.length > 0 ? dbProducts : products).map((product, index) => (
-            <Reveal key={product.name} delay={index * 100}>
-              <div className="template-card overflow-hidden flex flex-col h-full">
-                <div className="relative h-40 bg-gray-100">
-                  {renderProductArt(product)}
-                </div>
-                <div className="p-5 flex flex-col flex-1">
-                  <div className="flex justify-between text-[10px] uppercase tracking-widest text-red-600 font-bold">
-                    <span>Sniper</span>
-                    <span>{typeof product.price === 'number' ? `${product.price} AED` : product.price}</span>
+
+        {(() => {
+          const allProducts = dbProducts.length > 0 ? dbProducts : products;
+          const freshnerProducts = allProducts.filter(p =>
+            p.category === 'Car Freshner' || p.category === 'car freshner' || p.category === 'Car Freshener'
+          );
+          const acceProducts = allProducts.filter(p =>
+            p.category === 'Acce' || p.category === 'Accessories' || p.category === 'accessories' || p.category === 'acce'
+          );
+
+          const CategoryBox = ({ title, icon, products: catProducts, colorClass }) => {
+            const [open, setOpen] = useState(false);
+            return (
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <button
+                  onClick={() => setOpen(!open)}
+                  className="w-full flex items-center gap-4 p-5 sm:p-6 hover:bg-gray-50 transition-colors group"
+                >
+                  <div className={`flex items-center justify-center w-12 h-12 rounded-xl ${colorClass} text-white text-2xl shadow-md flex-shrink-0`}>
+                    {icon}
                   </div>
-                  <h3 className="mt-3 text-lg font-bold text-gray-900">{product.name}</h3>
-                  <p className="mt-1 text-xs text-gray-600">{product.description}</p>
-                  <ul className="mt-3 space-y-1 text-xs text-gray-500">
-                    {getProductBenefits(product).map((benefit) => (
-                      <li key={benefit} className="flex gap-2"><span className="text-red-600">•</span>{benefit}</li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => handleProductPurchaseClick(product)}
-                    className="w-full mt-5 inline-flex items-center justify-center rounded-lg border-2 border-gray-900 py-3 text-xs sm:text-sm font-bold uppercase text-gray-900 hover:bg-gray-900 hover:text-white transition active:scale-[0.98]"
-                  >
-                    Purchase
-                  </button>
-                </div>
+                  <div className="flex-1 text-left">
+                    <h3 className="text-base sm:text-lg font-black text-gray-900 uppercase tracking-wide">{title}</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">{catProducts.length} product{catProducts.length !== 1 ? 's' : ''} available</p>
+                  </div>
+                  <span className={`text-gray-400 text-xl transition-transform duration-300 ${open ? 'rotate-180' : ''}`}>▾</span>
+                </button>
+
+                {open && (
+                  <div className="border-t border-gray-100 px-5 pb-6 pt-4">
+                    {catProducts.length > 0 ? (
+                      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                        {catProducts.map((product) => (
+                          <div key={product.name} className="template-card overflow-hidden flex flex-col h-full">
+                            <div className="relative h-36 bg-gray-100">
+                              {renderProductArt(product)}
+                            </div>
+                            <div className="p-4 flex flex-col flex-1">
+                              <div className="flex justify-between text-[10px] uppercase tracking-widest text-red-600 font-bold">
+                                <span>Sniper</span>
+                                <span>{typeof product.price === 'number' ? `${product.price} AED` : product.price}</span>
+                              </div>
+                              <h4 className="mt-2 text-sm font-bold text-gray-900">{product.name}</h4>
+                              <p className="mt-1 text-xs text-gray-500">{product.description}</p>
+                              <button
+                                onClick={() => handleProductPurchaseClick(product)}
+                                className="w-full mt-4 inline-flex items-center justify-center rounded-lg border-2 border-gray-900 py-2.5 text-xs font-bold uppercase text-gray-900 hover:bg-gray-900 hover:text-white transition active:scale-[0.98]"
+                              >
+                                Purchase
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-400 text-center py-4">No products available in this category yet.</p>
+                    )}
+                  </div>
+                )}
               </div>
-            </Reveal>
-          ))}
-        </div>
+            );
+          };
+
+          return (
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Reveal>
+                <CategoryBox
+                  title="Car Freshner"
+                  icon="🌸"
+                  products={freshnerProducts}
+                  colorClass="bg-red-600"
+                />
+              </Reveal>
+              <Reveal delay={100}>
+                <CategoryBox
+                  title="Acce"
+                  icon="🛠️"
+                  products={acceProducts}
+                  colorClass="bg-red-600"
+                />
+              </Reveal>
+            </div>
+          );
+        })()}
       </section>
 
       <section id="reviews" className="mx-auto max-w-6xl px-4 pb-10">
