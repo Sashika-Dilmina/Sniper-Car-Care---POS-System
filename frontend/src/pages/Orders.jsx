@@ -51,7 +51,7 @@ const Orders = () => {
   };
 
   const filteredOrders = orders.filter((order) => {
-    const hasProducts = order.items && order.items.some(item => item.category === 'Accessories' || item.category === 'Spare Parts');
+    const hasProducts = order.items && order.items.some(item => item.category === 'Accessories' || item.category === 'Spare Parts' || item.category === 'Car Freshner' || item.category === 'Acce');
     if (activeTab === 'products') return hasProducts;
     if (activeTab === 'all') return true;
     
@@ -120,7 +120,7 @@ const Orders = () => {
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          Product Orders ({orders.filter(o => o.items && o.items.some(i => i.category === 'Accessories' || i.category === 'Spare Parts')).length})
+          Product Orders ({orders.filter(o => o.items && o.items.some(i => i.category === 'Accessories' || i.category === 'Spare Parts' || i.category === 'Car Freshner' || i.category === 'Acce')).length})
         </button>
       </div>
 
