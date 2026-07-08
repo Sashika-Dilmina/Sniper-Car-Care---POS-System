@@ -55,6 +55,12 @@ const Reports = () => {
   const [plReport, setPlReport] = useState(null);
   const [plLoading, setPlLoading] = useState(false);
 
+  // Stock Report State
+  const [stockStartDate, setStockStartDate] = useState('');
+  const [stockEndDate, setStockEndDate] = useState('');
+  const [stockReport, setStockReport] = useState(null);
+  const [stockLoading, setStockLoading] = useState(false);
+
   // Cash Register Sessions State
   const [registers, setRegisters] = useState([]);
   const [loadingRegisters, setLoadingRegisters] = useState(false);
@@ -95,6 +101,8 @@ const Reports = () => {
     if (activeTab === 'registers') {
       fetchRegistersList();
       setSelectedRegisterReport(null);
+    } else if (activeTab === 'stock') {
+      fetchStockReport();
     }
   }, [activeTab]);
 
@@ -227,6 +235,23 @@ const Reports = () => {
     }
   };
 
+  // Stock Report
+  const fetchStockReport = async () => {
+    setStockLoading(true);
+    try {
+      let url = '/api/analytics/reports/stock';
+      if (stockStartDate && stockEndDate) {
+        url += `?start_date=${stockStartDate}&end_date=${stockEndDate}`;
+      }
+      const response = await axios.get(url);
+      setStockReport(response.data.stock || []);
+    } catch (err) {
+      toast.error('Failed to generate stock report');
+    } finally {
+      setStockLoading(false);
+    }
+  };
+
   // Excel Download Functions
   const downloadDailyExcel = async () => {
     try {
@@ -337,7 +362,8 @@ const Reports = () => {
 
   const tabs = [
     { id: 'daily', label: 'Daily Business Summary' },
-    { id: 'business_summary', label: 'Business Summary Report' },
+    { id: 'business_summary', label: 'Business Summary Report (P&L)' },
+    { id: 'stock', label: 'Stock Report' },
     { id: 'payment', label: 'Payment Type Report' },
     { id: 'customer', label: 'Customer Wise Report' },
     { id: 'supplier', label: 'Supplier Payment' },
@@ -948,83 +974,136 @@ const Reports = () => {
 
           {plReport && plReport.summary && (
             <div className="space-y-6">
-              {/* Financial Metrics Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Sales Revenue</span>
-                  <h3 className="text-3xl font-black text-blue-600 mt-2">
-                    AED {plReport.summary.total_sales.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </h3>
-                  <span className="text-xs text-gray-400 mt-4">{plReport.summary.sales_count} sales transactions</span>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Purchases</span>
-                  <h3 className="text-3xl font-black text-orange-600 mt-2">
-                    AED {plReport.summary.total_purchases.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </h3>
-                  <span className="text-xs text-gray-400 mt-4">{plReport.summary.purchases_count} purchase orders</span>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Expenses</span>
-                  <h3 className="text-3xl font-black text-red-500 mt-2">
-                    AED {plReport.summary.total_expenses.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </h3>
-                  <span className="text-xs text-gray-400 mt-4">{plReport.summary.expenses_count} expense entries</span>
-                </div>
-                <div className={`p-6 rounded-2xl shadow-sm border flex flex-col justify-between ${
-                  plReport.summary.net_profit >= 0 
-                    ? 'bg-green-50/50 border-green-200 text-green-900' 
-                    : 'bg-red-50/50 border-red-200 text-red-900'
-                }`}>
-                  <span className="text-sm font-bold uppercase tracking-wider text-gray-500">Net Profit / Loss</span>
-                  <h3 className={`text-3xl font-black mt-2 ${
-                    plReport.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    AED {plReport.summary.net_profit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </h3>
-                  <span className="text-xs font-semibold mt-4">
-                    {plReport.summary.net_profit >= 0 ? '🟢 Profit generated' : '🔴 Net loss in period'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Secondary Details (Credits Summary) */}
-              <div className="bg-gray-50 p-4 rounded-xl border flex justify-between items-center text-sm">
-                <div>
-                  <h4 className="font-bold text-gray-800">Outstanding Customer Credit Ledger</h4>
-                  <p className="text-xs text-gray-500 mt-0.5">Total credit currently active (not yet paid by customers)</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-black text-red-600">
-                    AED {plReport.summary.outstanding_credit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              {/* Restructured Business Summary Printable Template Sheet */}
+              <div className="max-w-3xl mx-auto bg-white p-8 border rounded-2xl shadow-sm space-y-6 text-black print-full-width">
+                {/* Header */}
+                <div className="text-center space-y-1 border-b pb-6">
+                  <h2 className="text-2xl font-black uppercase tracking-wide">Business Summary Report</h2>
+                  <p className="text-sm font-bold text-gray-600">Business Location: Main Branch</p>
+                  <p className="text-xs text-gray-500 font-mono">
+                    Date Range: {plStartDate ? plStartDate.split('-').reverse().join('-') : ''} TO {plEndDate ? plEndDate.split('-').reverse().join('-') : ''}
                   </p>
-                  <p className="text-xs font-bold text-gray-400">{plReport.summary.outstanding_credit_count} active credits</p>
+                </div>
+
+                {/* Report Body */}
+                <div className="space-y-6 text-sm">
+                  
+                  {/* Sales Details Section */}
+                  <div className="space-y-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Sales Details :</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Total Sales</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.total_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Sales Return</span>
+                        <span className="font-mono text-gray-900">0.000</span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t border-b py-1 my-1">
+                        <span className="text-gray-900">Net Sales</span>
+                        <span className="font-mono text-indigo-700 font-extrabold">{parseFloat(plReport.summary.net_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">Cash Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.cash_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">Card Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.card_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">Credit Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.credit_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">Bank Transfer Sales</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.bank_transfer_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between font-extrabold border-t pt-1.5 mt-2">
+                        <span className="text-gray-900">Total Profit</span>
+                        <span className={`font-mono text-base ${plReport.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {parseFloat(plReport.summary.net_profit || 0).toFixed(3)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Credit Recovery Section */}
+                  <div className="space-y-2 pt-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Credit Recovery :</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Cash Recovery</span>
+                        <span className="font-mono text-gray-900 font-semibold">{parseFloat(plReport.summary.cash_recovery || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Card Recovery</span>
+                        <span className="font-mono text-gray-900 font-semibold">{parseFloat(plReport.summary.card_recovery || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Bank Transfer</span>
+                        <span className="font-mono text-gray-900 font-semibold">{parseFloat(plReport.summary.bank_recovery || 0).toFixed(3)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Purchase Details Section */}
+                  <div className="space-y-2 pt-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Purchase Details:</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Total Purchase</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.total_purchases || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Purchase Return</span>
+                        <span className="font-mono text-gray-900">0.000</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expense Details Section */}
+                  <div className="space-y-2 pt-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Expense Details:</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Total Expense</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.total_expenses || 0).toFixed(3)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Print Footer */}
+                <div className="hidden print:block pt-12 text-center text-[10px] text-gray-400 border-t border-dashed">
+                  Thank you for choosing Sniper Car Care POS System.
                 </div>
               </div>
 
-              {/* Categorized breakdown sections */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-                
+              {/* Categorized breakdowns displayed on screen only */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 no-print border-t">
                 {/* Purchases by Category */}
                 <div className="space-y-3">
-                  <h3 className="text-lg font-black text-gray-800 border-b pb-2">📦 Purchases by Category</h3>
+                  <h3 className="text-sm font-extrabold text-gray-800 border-b pb-2 uppercase tracking-wide">📦 Purchases by Category</h3>
                   {plReport.purchases_by_category && plReport.purchases_by_category.length > 0 ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left">
+                      <table className="w-full text-left text-xs">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Category</th>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Count</th>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Cost</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500">Category</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500 text-center">Count</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500 text-right">Total Cost</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y">
+                        <tbody className="divide-y text-xs">
                           {plReport.purchases_by_category.map((cat, idx) => (
                             <tr key={idx} className="hover:bg-gray-50/50">
-                              <td className="px-4 py-2 text-sm font-semibold text-gray-700 capitalize">{cat.category}</td>
-                              <td className="px-4 py-2 text-sm text-center font-mono text-gray-600">{cat.count}</td>
-                              <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
-                                AED {parseFloat(cat.total).toFixed(2)}
+                              <td className="px-4 py-2 font-semibold text-gray-700 capitalize">{cat.category}</td>
+                              <td className="px-4 py-2 text-center font-mono text-gray-600">{cat.count}</td>
+                              <td className="px-4 py-2 font-bold text-right text-gray-900">
+                                AED {parseFloat(cat.total).toFixed(3)}
                               </td>
                             </tr>
                           ))}
@@ -1040,24 +1119,24 @@ const Reports = () => {
 
                 {/* Expenses by Category */}
                 <div className="space-y-3">
-                  <h3 className="text-lg font-black text-gray-800 border-b pb-2">💸 Expenses by Category</h3>
+                  <h3 className="text-sm font-extrabold text-gray-800 border-b pb-2 uppercase tracking-wide">💸 Expenses by Category</h3>
                   {plReport.expenses_by_category && plReport.expenses_by_category.length > 0 ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left">
+                      <table className="w-full text-left text-xs">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Category</th>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Count</th>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Cost</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500">Category</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500 text-center">Count</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500 text-right">Total Cost</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y">
+                        <tbody className="divide-y text-xs">
                           {plReport.expenses_by_category.map((cat, idx) => (
                             <tr key={idx} className="hover:bg-gray-50/50">
-                              <td className="px-4 py-2 text-sm font-semibold text-gray-700 capitalize">{cat.category}</td>
-                              <td className="px-4 py-2 text-sm text-center font-mono text-gray-600">{cat.count}</td>
-                              <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
-                                AED {parseFloat(cat.total).toFixed(2)}
+                              <td className="px-4 py-2 font-semibold text-gray-700 capitalize">{cat.category}</td>
+                              <td className="px-4 py-2 text-center font-mono text-gray-600">{cat.count}</td>
+                              <td className="px-4 py-2 font-bold text-right text-gray-900">
+                                AED {parseFloat(cat.total).toFixed(3)}
                               </td>
                             </tr>
                           ))}
@@ -1070,7 +1149,153 @@ const Reports = () => {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
+      {/* Stock Report */}
+      {activeTab === 'stock' && (
+        <div className="bg-white p-6 rounded-lg shadow space-y-6">
+          <div className="flex justify-between items-center border-b pb-4 no-print">
+            <h2 className="text-xl font-bold text-gray-800">Stock Inventory Report</h2>
+            <button
+              onClick={handlePrint}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition flex items-center gap-2 text-xs"
+            >
+              🖨️ Print Stock Report
+            </button>
+          </div>
+
+          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-end bg-gray-50 p-4 rounded-xl border no-print">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date (for sales count)</label>
+              <input
+                type="date"
+                value={stockStartDate}
+                onChange={(e) => setStockStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg bg-white"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date (for sales count)</label>
+              <input
+                type="date"
+                value={stockEndDate}
+                onChange={(e) => setStockEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg bg-white"
+              />
+            </div>
+            <button
+              onClick={fetchStockReport}
+              disabled={stockLoading}
+              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-bold"
+            >
+              {stockLoading ? 'Generating...' : 'Generate Report'}
+            </button>
+          </div>
+
+          {stockReport && (
+            <div className="space-y-6 print-full-width">
+              {/* Report Header for printing */}
+              <div className="hidden print:block text-center border-b pb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <h2 className="text-base font-bold text-gray-650">Stock Inventory & Sales Report</h2>
+                <p className="text-xs text-gray-450 mt-1">
+                  Sales Period: {stockStartDate && stockEndDate ? `${stockStartDate} to ${stockEndDate}` : 'All Time'}
+                </p>
+                <p className="text-xs text-gray-450">Generated At: {new Date().toLocaleString()}</p>
+              </div>
+
+              {/* Summary Metrics */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl text-center">
+                  <span className="text-xs text-gray-500 uppercase font-black">Total Stock Items</span>
+                  <p className="text-2xl font-black text-blue-700 mt-1">
+                    {stockReport.reduce((sum, item) => sum + parseInt(item.current_stock || 0), 0)}
+                  </p>
+                </div>
+                <div className="bg-red-50/50 border border-red-100 p-4 rounded-xl text-center">
+                  <span className="text-xs text-gray-500 uppercase font-black">Out of Stock Items</span>
+                  <p className="text-2xl font-black text-red-700 mt-1">
+                    {stockReport.filter(item => parseInt(item.current_stock || 0) === 0).length}
+                  </p>
+                </div>
+                <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl text-center">
+                  <span className="text-xs text-gray-500 uppercase font-black">Low Stock Items (≤5)</span>
+                  <p className="text-2xl font-black text-amber-700 mt-1">
+                    {stockReport.filter(item => parseInt(item.current_stock || 0) <= 5 && parseInt(item.current_stock || 0) > 0).length}
+                  </p>
+                </div>
+                <div className="bg-green-50/50 border border-green-100 p-4 rounded-xl text-center">
+                  <span className="text-xs text-gray-500 uppercase font-black">Total Units Sold (Period)</span>
+                  <p className="text-2xl font-black text-green-700 mt-1">
+                    {stockReport.reduce((sum, item) => sum + parseInt(item.quantity_sold || 0), 0)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Table of Details */}
+              <div className="overflow-x-auto border rounded-xl shadow-sm bg-white">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 border-b font-bold text-gray-700">
+                      <th className="p-3">Product ID</th>
+                      <th className="p-3">Product Name</th>
+                      <th className="p-3">Category</th>
+                      <th className="p-3 text-right">Cost Price (AED)</th>
+                      <th className="p-3 text-right">Selling Price (AED)</th>
+                      <th className="p-3 text-right">Qty Sold</th>
+                      <th className="p-3 text-right">Qty Remaining (Stock)</th>
+                      <th className="p-3 text-center">Status</th>
+                      <th className="p-3 text-right">Shortage Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {stockReport.length > 0 ? (
+                      stockReport.map((item) => (
+                        <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="p-3 font-mono text-gray-500">#{item.id}</td>
+                          <td className="p-3 font-bold text-gray-800">{item.name}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-slate-100 text-slate-700">
+                              {item.category}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right font-mono text-gray-650">
+                            {parseFloat(item.cost_price || 0).toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right font-mono text-gray-900 font-semibold">
+                            {parseFloat(item.selling_price || 0).toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right font-semibold text-green-600">{item.quantity_sold}</td>
+                          <td className={`p-3 text-right font-extrabold ${parseInt(item.current_stock || 0) === 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                            {item.current_stock}
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
+                              item.stock_status === 'Out of Stock' ? 'bg-red-100 text-red-800' :
+                              item.stock_status === 'Low Stock' ? 'bg-amber-100 text-amber-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {item.stock_status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right font-bold text-red-650">
+                            {item.quantity_short > 0 ? `${item.quantity_short} units` : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="9" className="p-6 text-center text-gray-400">
+                          No stock items registered in the database.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

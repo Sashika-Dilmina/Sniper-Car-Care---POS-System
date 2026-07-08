@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 const Purchases = () => {
   const [purchases, setPurchases] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [dbProductsList, setDbProductsList] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   
   // Filters State
@@ -27,7 +29,8 @@ const Purchases = () => {
     purchase_date: new Date().toISOString().split('T')[0],
     payment_status: 'paid',
     payment_method: 'cash',
-    notes: ''
+    notes: '',
+    selling_price: ''
   });
 
   const categories = ['Product', 'Service', 'Equipment', 'Chemicals', 'Other'];
@@ -35,9 +38,10 @@ const Purchases = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [purchasesRes, suppliersRes] = await Promise.all([
+      const [purchasesRes, suppliersRes, productsRes] = await Promise.all([
         axios.get('/api/purchases'),
-        axios.get('/api/suppliers')
+        axios.get('/api/suppliers'),
+        axios.get('/api/products')
       ]);
 
       if (purchasesRes.data.success) {
@@ -45,6 +49,9 @@ const Purchases = () => {
       }
       if (suppliersRes.data.success) {
         setSuppliers(suppliersRes.data.suppliers || []);
+      }
+      if (productsRes.data.products) {
+        setDbProductsList(productsRes.data.products || []);
       }
     } catch (error) {
       toast.error('Failed to load purchases data');
@@ -59,6 +66,7 @@ const Purchases = () => {
 
   const handleOpenAddModal = () => {
     setIsEditMode(false);
+    setSelectedProduct(null);
     setFormData({
       supplier_id: suppliers.length > 0 ? suppliers[0].id : '',
       item_name: '',
@@ -68,7 +76,8 @@ const Purchases = () => {
       purchase_date: new Date().toISOString().split('T')[0],
       payment_status: 'paid',
       payment_method: 'cash',
-      notes: ''
+      notes: '',
+      selling_price: ''
     });
     setIsModalOpen(true);
   };
@@ -76,6 +85,8 @@ const Purchases = () => {
   const handleOpenEditModal = (p) => {
     setIsEditMode(true);
     setCurrentPurchaseId(p.id);
+    const matched = dbProductsList.find(item => item.name.toLowerCase() === p.item_name.toLowerCase());
+    setSelectedProduct(matched || null);
     setFormData({
       supplier_id: p.supplier_id || '',
       item_name: p.item_name,
@@ -85,7 +96,8 @@ const Purchases = () => {
       purchase_date: new Date(p.purchase_date).toISOString().split('T')[0],
       payment_status: p.payment_status || 'paid',
       payment_method: p.payment_method || 'cash',
-      notes: p.notes || ''
+      notes: p.notes || '',
+      selling_price: matched ? matched.price : ''
     });
     setIsModalOpen(true);
   };
@@ -102,20 +114,45 @@ const Purchases = () => {
     }
 
     try {
+      let isSuccess = false;
       if (isEditMode) {
         const response = await axios.put(`/api/purchases/${currentPurchaseId}`, formData);
         if (response.data.success) {
+          isSuccess = true;
           toast.success('Purchase updated successfully');
-          fetchData();
-          setIsModalOpen(false);
         }
       } else {
         const response = await axios.post('/api/purchases', formData);
         if (response.data.success) {
+          isSuccess = true;
           toast.success('Purchase logged successfully');
-          fetchData();
-          setIsModalOpen(false);
         }
+      }
+
+      if (isSuccess) {
+        // If it's a product and we have a matched product in our database, update it!
+        if (formData.category === 'Product' && selectedProduct) {
+          try {
+            await axios.put(`/api/products/${selectedProduct.id}`, {
+              name: selectedProduct.name,
+              description: selectedProduct.description,
+              category: selectedProduct.category,
+              price: parseFloat(formData.selling_price) || selectedProduct.price,
+              purchase_price: parseFloat(formData.unit_price),
+              stock: parseInt(selectedProduct.stock) + (isEditMode ? 0 : parseInt(formData.quantity)), // only increment stock on new purchase log, not edit
+              image_url: selectedProduct.image_url,
+              supplier_id: formData.supplier_id || selectedProduct.supplier_id,
+              vehicle_type: selectedProduct.vehicle_type
+            });
+            toast.success('Product price & stock updated in database');
+          } catch (err) {
+            console.error('Failed to update product details:', err);
+            toast.error('Failed to update product details in database');
+          }
+        }
+        
+        fetchData();
+        setIsModalOpen(false);
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to save purchase details');
@@ -353,11 +390,52 @@ const Purchases = () => {
                 <input
                   type="text"
                   required
+                  list="db-items"
                   placeholder="e.g. Detailing Spray, Hydraulic Oil"
                   value={formData.item_name}
-                  onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData(prev => ({ ...prev, item_name: val }));
+                    const matched = dbProductsList.find(p => p.name.toLowerCase() === val.toLowerCase());
+                    if (matched) {
+                      setSelectedProduct(matched);
+                      
+                      // Map category from DB if applicable
+                      let formCategory = formData.category;
+                      if (matched.category === 'Services') {
+                        formCategory = 'Service';
+                      } else if (matched.category === 'Accessories' || matched.category === 'Spare Parts') {
+                        formCategory = 'Product';
+                      }
+                      
+                      setFormData(prev => ({
+                        ...prev,
+                        item_name: matched.name,
+                        category: formCategory,
+                        unit_price: matched.purchase_price || '',
+                        selling_price: matched.price || ''
+                      }));
+                    } else {
+                      setSelectedProduct(null);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-bold bg-white"
                 />
+                <datalist id="db-items">
+                  {dbProductsList
+                    .filter(p => {
+                      if (formData.category === 'Product') {
+                        return p.category === 'Accessories' || p.category === 'Spare Parts';
+                      }
+                      if (formData.category === 'Service') {
+                        return p.category === 'Services';
+                      }
+                      return true;
+                    })
+                    .map(p => (
+                      <option key={p.id} value={p.name} />
+                    ))}
+                </datalist>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -394,11 +472,11 @@ const Purchases = () => {
                     min="1"
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-semibold"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Unit Price (AED) *</label>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Cost / Unit Price (AED) *</label>
                   <input
                     type="number"
                     required
@@ -407,10 +485,26 @@ const Purchases = () => {
                     placeholder="e.g. 50.00"
                     value={formData.unit_price}
                     onChange={(e) => setFormData({ ...formData, unit_price: parseFloat(e.target.value) || '' })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-semibold"
                   />
                 </div>
               </div>
+
+              {formData.category === 'Product' && (
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Selling Price (AED) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    placeholder="e.g. 75.00"
+                    value={formData.selling_price}
+                    onChange={(e) => setFormData({ ...formData, selling_price: parseFloat(e.target.value) || '' })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-bold text-indigo-700 bg-indigo-50/30 border-indigo-200"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

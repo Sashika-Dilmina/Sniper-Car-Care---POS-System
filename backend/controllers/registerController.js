@@ -183,8 +183,6 @@ const getRegisterReport = asyncHandler(async (req, res) => {
       other_payments: otherSales,
       credit_sales: creditSales,
       credit_sale_recovery: creditRecoveries,
-      delivery_sales: 0.00,
-      delivery_sale_recovery: 0.00,
       sale_return: 0.00,
       total_expense: totalExpenses,
       cash_expense: cashExpenses,
