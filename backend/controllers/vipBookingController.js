@@ -176,9 +176,9 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
     // Fallback if price is 0 (ensure VIP pricing is always correct)
     if (price === 0) {
       if (service_type === 'Saloon VIP Service') {
-        price = 75.00;
+        price = 95.00;
       } else if (service_type === '4x4 VIP Service') {
-        price = 90.00;
+        price = 115.00;
       }
     }
 

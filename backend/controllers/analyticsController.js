@@ -14,26 +14,34 @@ const sendExcelFile = (res, workbook, filename) => {
 // @route   GET /api/analytics/dashboard
 // @access  Private
 const getDashboardAnalytics = asyncHandler(async (req, res) => {
-  const { period = 'today' } = req.query; // today, week, month, year
+  const { period = 'today', start_date, end_date } = req.query; // today, week, month, year
 
   let dateFilter = '';
-  const params = [];
 
-  switch (period) {
-    case 'today':
-      dateFilter = 'DATE(created_at) = CURDATE()';
-      break;
-    case 'week':
-      dateFilter = 'YEARWEEK(created_at) = YEARWEEK(CURDATE())';
-      break;
-    case 'month':
-      dateFilter = 'YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())';
-      break;
-    case 'year':
-      dateFilter = 'YEAR(created_at) = YEAR(CURDATE())';
-      break;
-    default:
-      dateFilter = 'DATE(created_at) = CURDATE()';
+  if (start_date && end_date) {
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateRegex.test(start_date) && dateRegex.test(end_date)) {
+      dateFilter = `DATE(created_at) BETWEEN '${start_date}' AND '${end_date}'`;
+    } else {
+      dateFilter = "DATE(created_at) = CURDATE()";
+    }
+  } else {
+    switch (period) {
+      case 'today':
+        dateFilter = 'DATE(created_at) = CURDATE()';
+        break;
+      case 'week':
+        dateFilter = 'YEARWEEK(created_at) = YEARWEEK(CURDATE())';
+        break;
+      case 'month':
+        dateFilter = 'YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())';
+        break;
+      case 'year':
+        dateFilter = 'YEAR(created_at) = YEAR(CURDATE())';
+        break;
+      default:
+        dateFilter = 'DATE(created_at) = CURDATE()';
+    }
   }
 
   // Payment breakdown by method - use payment date filter

@@ -335,7 +335,7 @@ const LandingPage = () => {
   const [customerInfo, setCustomerInfo] = useState(null);
   const [bookingForm, setBookingForm] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     vehicle_type: '4x4',
     emirate: '',
     plate_code: '',
@@ -346,7 +346,7 @@ const LandingPage = () => {
   const [vipPlateCodes, setVipPlateCodes] = useState([]);
   const [vipBookingForm, setVipBookingForm] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -367,7 +367,7 @@ const LandingPage = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productForm, setProductForm] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     vehicle_plate: '',
     quantity: 1,
     notes: ''
@@ -555,7 +555,7 @@ const LandingPage = () => {
           );
           setBookingForm({
             name: response.data.customer.name || '',
-            phone: response.data.customer.phone || '',
+            phone: response.data.customer.phone || '+9715',
             vehicle_type: response.data.customer.vehicle_type || '4x4',
             vehicle_plate: vehiclePlate,
             notes: ''
@@ -730,7 +730,7 @@ const LandingPage = () => {
       setSelectedService(null);
       setBookingForm({
         name: '',
-        phone: '',
+        phone: '+9715',
         vehicle_type: '4x4',
         emirate: '',
         plate_code: '',
@@ -754,7 +754,7 @@ const LandingPage = () => {
     setShowProductModal(true);
     setProductForm({
       name: customerInfo?.name || '',
-      phone: customerInfo?.phone || '',
+      phone: customerInfo?.phone || '+9715',
       vehicle_plate: vehiclePlate || customerInfo?.vehicle_plate || '',
       quantity: 1,
       notes: ''
@@ -815,16 +815,14 @@ const LandingPage = () => {
   const resolveImageUrl = (url) => {
     if (!url) return '';
     
-    // Normalize legacy localhost URLs to relative paths
     let cleanUrl = url;
-    if (url.startsWith('http://localhost:5000')) {
-      cleanUrl = url.replace('http://localhost:5000', '');
-    } else if (url.startsWith('https://localhost:5000')) {
-      cleanUrl = url.replace('https://localhost:5000', '');
+    if (cleanUrl.includes('/uploads/')) {
+      cleanUrl = '/uploads/' + cleanUrl.split('/uploads/')[1];
     }
+    if (cleanUrl.startsWith('http') && !cleanUrl.includes('/uploads/')) return cleanUrl;
 
-    if (cleanUrl.startsWith('http')) return cleanUrl;
-    const apiBaseUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/$/, '') : (import.meta.env.PROD ? '' : 'http://localhost:5000');
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const apiBaseUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/$/, '') : (import.meta.env.PROD ? '' : `http://${hostname}:5000`);
     return `${apiBaseUrl}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
   };
 
@@ -920,7 +918,7 @@ const LandingPage = () => {
 
       setVipBookingForm({
         name: '',
-        phone: '',
+        phone: '+9715',
         emirate: '',
         plate_code: '',
         plate_number: '',
@@ -955,7 +953,7 @@ const LandingPage = () => {
 
     setVipBookingForm({
       name: customerInfo?.name || '',
-      phone: customerInfo?.phone || '',
+      phone: customerInfo?.phone || '+9715',
       emirate: emirate,
       plate_code: plateCode,
       plate_number: plateNumber,
@@ -1006,7 +1004,7 @@ const LandingPage = () => {
 
     setBookingForm({
       name: '',
-      phone: '',
+      phone: '+9715',
       emirate: emirate,
       plate_code: plateCode,
       plate_number: plateNumber,
@@ -1161,22 +1159,22 @@ const LandingPage = () => {
         
         <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-2xl mx-auto w-full px-1">
           {displayPackages.map((pkg, idx) => {
-            const isFullBody = pkg.name.toLowerCase().includes('full body') || pkg.name.toLowerCase().includes('full service');
+            const isFullBody = pkg.name.toLowerCase().includes('full body') || pkg.name.toLowerCase().includes('full service') || pkg.name.toLowerCase().includes('full wash');
             return (
               <Reveal 
                 key={pkg.id || pkg.name} 
                 delay={idx * 50} 
-                className={`flex w-full min-w-0 ${isFullBody ? 'col-span-2' : 'col-span-1'}`}
+                className={`flex w-full min-w-0 ${isFullBody ? 'col-span-2 justify-center' : 'col-span-1'}`}
               >
                 <div 
                   role="button"
                   onClick={() => handleServiceClick(pkg)}
-                  className="group relative flex flex-col w-full h-24 sm:h-44 rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
+                  className={`group relative flex flex-col rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300 aspect-square ${isFullBody ? 'w-[calc(50%-0.375rem)] sm:w-[calc(50%-0.75rem)]' : 'w-full'}`}
                 >
                   <img 
                     src={getServiceImage(pkg)} 
                     alt={pkg.name} 
-                    className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out" 
+                    className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 ease-out"
                   />
                   <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
@@ -1206,19 +1204,13 @@ const LandingPage = () => {
                 else openVIPModal();
               }
             }}
-            className="group relative flex flex-col w-full h-32 sm:h-64 rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
+            className="group relative w-full rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
           >
-            {(() => {
-              const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
-              const vipImg = vipPkg ? getServiceImage(vipPkg) : images.vip;
-              return (
-                <img 
-                  src={vipImg} 
-                  alt="VIP Service" 
-                  className="h-full w-full object-cover object-center group-hover:scale-102 transition-transform duration-500 ease-out" 
-                />
-              );
-            })()}
+            <img 
+              src={images.vip} 
+              alt="VIP Service" 
+              className="w-full h-auto object-contain group-hover:scale-[1.02] transition-transform duration-500 ease-out" 
+            />
             <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           </div>
         </Reveal>
