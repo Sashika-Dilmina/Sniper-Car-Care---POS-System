@@ -1,5 +1,6 @@
--- Migration to sync products list, names, and images from local database changes
+-- Alter table to allow 'Car Freshner' and other categories
 USE sniper_car_care;
+ALTER TABLE products MODIFY COLUMN category ENUM('Accessories', 'Services', 'Spare Parts', 'Car Freshner', 'Acce') NOT NULL;
 
 -- Update Saloon Services Images
 UPDATE products SET image_url = '/uploads/service_1783492722998_659256667.png' WHERE category = 'Services' AND vehicle_type = 'Saloon' AND name = 'Full Body Service';
