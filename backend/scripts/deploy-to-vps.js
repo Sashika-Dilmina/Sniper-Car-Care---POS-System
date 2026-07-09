@@ -1,5 +1,7 @@
 const { Client } = require('ssh2');
 const path = require('path');
+const fs = require('fs');
+const { execSync } = require('child_process');
 
 // Load environment variables
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
@@ -25,7 +27,7 @@ const conn = new Client();
 
 function executeCommand(conn, cmd) {
   return new Promise((resolve, reject) => {
-    console.log(`\n🤖 Executing: ${cmd}`);
+    console.log(`\n🤖 VPS executing: ${cmd}`);
     conn.exec(cmd, (err, stream) => {
       if (err) return reject(err);
       let stdout = '';
@@ -43,35 +45,75 @@ function executeCommand(conn, cmd) {
   });
 }
 
+function uploadFile(conn, localPath, remotePath) {
+  return new Promise((resolve, reject) => {
+    console.log(`\n📤 Uploading: ${path.basename(localPath)} -> ${remotePath}...`);
+    conn.sftp((err, sftp) => {
+      if (err) return reject(err);
+      sftp.fastPut(localPath, remotePath, (err) => {
+        sftp.end();
+        if (err) return reject(err);
+        console.log(`✅ Upload complete: ${path.basename(localPath)}`);
+        resolve();
+      });
+    });
+  });
+}
+
 conn.on('ready', async () => {
   console.log('⚡ Connected to Hostinger VPS via SSH');
   try {
     const repoPath = '/root/Sniper-Car-Care---POS-System';
-    
-    // 1. Pull changes
-    console.log('📦 Pulling changes from GitHub...');
+    const rootDir = path.resolve(__dirname, '../..');
+
+    // 1. Pull backend/code changes on VPS via git
+    console.log('\n📦 Pulling latest code changes on VPS...');
     const pullRes = await executeCommand(conn, `cd ${repoPath} && git pull origin ravix`);
     if (pullRes.code !== 0) throw new Error('Git pull failed');
 
-    // 2. Install backend dependencies & Restart backend
-    console.log('⚙️ Installing backend dependencies & restarting...');
+    // 2. Install backend dependencies and restart Node app
+    console.log('\n⚙️ Updating backend dependencies & restarting...');
     const backendRes = await executeCommand(conn, `cd ${repoPath}/backend && npm install && pm2 restart all`);
-    if (backendRes.code !== 0) throw new Error('Backend update failed');
+    if (backendRes.code !== 0) throw new Error('Backend update/restart failed');
 
-    // 3. Build & Deploy POS Dashboard
-    console.log('🖥️ Building POS Dashboard...');
-    const posRes = await executeCommand(conn, `cd ${repoPath}/frontend && npm install && npm run build && cp -rf dist/* /var/www/pos-dashboard/`);
-    if (posRes.code !== 0) throw new Error('POS build failed');
+    // 3. Build frontends locally
+    console.log('\n🛠️ Building POS Dashboard locally...');
+    execSync('npm run build', { cwd: path.join(rootDir, 'frontend'), stdio: 'inherit' });
+    execSync('tar -czf ../frontend.tar.gz -C dist .', { cwd: path.join(rootDir, 'frontend'), stdio: 'inherit' });
 
-    // 4. Build & Deploy Saloon customer website
-    console.log('💇 Building Saloon Website...');
-    const saloonRes = await executeCommand(conn, `cd ${repoPath}/customer-website-saloon && npm install && npm run build && cp -rf dist/* /var/www/customer-saloon/`);
-    if (saloonRes.code !== 0) throw new Error('Saloon website build failed');
+    console.log('\n💇 Building Saloon Website locally...');
+    execSync('npm run build', { cwd: path.join(rootDir, 'customer-website-saloon'), stdio: 'inherit' });
+    execSync('tar -czf ../saloon.tar.gz -C dist .', { cwd: path.join(rootDir, 'customer-website-saloon'), stdio: 'inherit' });
 
-    // 5. Build & Deploy 4x4 customer website
-    console.log('🚗 Building 4x4 Website...');
-    const website4x4Res = await executeCommand(conn, `cd ${repoPath}/customer-website-4x4 && npm install && npm run build && cp -rf dist/* /var/www/customer-4x4/`);
-    if (website4x4Res.code !== 0) throw new Error('4x4 website build failed');
+    console.log('\n🚗 Building 4x4 Website locally...');
+    execSync('npm run build', { cwd: path.join(rootDir, 'customer-website-4x4'), stdio: 'inherit' });
+    execSync('tar -czf ../4x4.tar.gz -C dist .', { cwd: path.join(rootDir, 'customer-website-4x4'), stdio: 'inherit' });
+
+    // 4. Upload build bundles to VPS
+    await uploadFile(conn, path.join(rootDir, 'frontend.tar.gz'), '/tmp/frontend.tar.gz');
+    await uploadFile(conn, path.join(rootDir, 'saloon.tar.gz'), '/tmp/saloon.tar.gz');
+    await uploadFile(conn, path.join(rootDir, '4x4.tar.gz'), '/tmp/4x4.tar.gz');
+
+    // 5. Extract build bundles on VPS
+    console.log('\n📦 Extracting assets on VPS...');
+    await executeCommand(conn, 'mkdir -p /var/www/pos-dashboard /var/www/customer-saloon /var/www/customer-4x4');
+    
+    const extract1 = await executeCommand(conn, 'tar -xzf /tmp/frontend.tar.gz -C /var/www/pos-dashboard');
+    if (extract1.code !== 0) throw new Error('Extract POS dashboard failed');
+    
+    const extract2 = await executeCommand(conn, 'tar -xzf /tmp/saloon.tar.gz -C /var/www/customer-saloon');
+    if (extract2.code !== 0) throw new Error('Extract Saloon failed');
+    
+    const extract3 = await executeCommand(conn, 'tar -xzf /tmp/4x4.tar.gz -C /var/www/customer-4x4');
+    if (extract3.code !== 0) throw new Error('Extract 4x4 failed');
+
+    // 6. Clean up temporary files on local and remote
+    console.log('\n🧹 Cleaning up temporary archives...');
+    await executeCommand(conn, 'rm -f /tmp/frontend.tar.gz /tmp/saloon.tar.gz /tmp/4x4.tar.gz');
+    
+    fs.unlinkSync(path.join(rootDir, 'frontend.tar.gz'));
+    fs.unlinkSync(path.join(rootDir, 'saloon.tar.gz'));
+    fs.unlinkSync(path.join(rootDir, '4x4.tar.gz'));
 
     console.log('\n🎉 ================================================');
     console.log('🎉 VPS DEPLOYMENT COMPLETED SUCCESSFULLY!');
