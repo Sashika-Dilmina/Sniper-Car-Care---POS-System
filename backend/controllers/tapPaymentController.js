@@ -18,7 +18,7 @@ const initiateTapPayment = asyncHandler(async (req, res) => {
   try {
     // 1. Fetch Order and Customer details from database
     const [orderRows] = await pool.query(
-      `SELECT o.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email 
+      `SELECT o.*, c.name as customer_name, c.phone as customer_phone 
        FROM orders o 
        LEFT JOIN customers c ON o.customer_id = c.id 
        WHERE o.id = ?`,
