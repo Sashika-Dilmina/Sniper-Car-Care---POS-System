@@ -212,6 +212,7 @@ const PaymentPage = () => {
                                 </div>
                             </div>
                         )}
+                    </div>
                                  {/* Contextual Checkout Render */}
                     <div className="pt-4 border-t border-gray-800">
                         {paymentMethod === 'tap' && tapSubOption === 'apple_pay' && (
