@@ -26,6 +26,10 @@ router.post('/orders/confirm', publicOrderController.confirmOrder);
 router.post('/payments/create-intent', publicOrderController.createPaymentIntent);
 router.post('/payments/confirm', publicOrderController.confirmPayment);
 
+const { initiateTapPayment, handleTapCallback } = require('../controllers/tapPaymentController');
+router.post('/payments/tap/create', initiateTapPayment);
+router.get('/payments/tap-callback', handleTapCallback);
+
 // Public plate codes lookup (used by customer registration)
 router.get('/plate-codes/:emirate', getPlateCodesByEmirate);
 

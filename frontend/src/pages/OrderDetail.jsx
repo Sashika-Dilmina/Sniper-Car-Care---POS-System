@@ -1,115 +1,31 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_key');
-
-const PaymentForm = ({ orderId, amount, onSuccess }) => {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [loading, setLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('card');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!stripe || !elements) return;
-
-    setLoading(true);
-
-    try {
-      if (paymentMethod === 'cash') {
-        // Manual cash payment
-        await axios.post('/api/payments/manual', {
-          order_id: orderId,
-          amount,
-          method: 'cash'
-        });
-        toast.success('Cash payment recorded');
-        onSuccess();
-      } else {
-        // Stripe payment
-        const { data } = await axios.post('/api/payments/create-intent', {
-          order_id: orderId,
-          amount,
-          payment_method: paymentMethod
-        });
-
-        const { error, paymentIntent } = await stripe.confirmCardPayment(
-          data.client_secret,
-          {
-            payment_method: {
-              card: elements.getElement(CardElement),
-            }
-          }
-        );
-
-        if (error) {
-          toast.error(error.message);
-        } else if (paymentIntent.status === 'succeeded') {
-          await axios.post('/api/payments/confirm', {
-            order_id: orderId,
-            payment_intent_id: paymentIntent.id,
-            amount,
-            method: paymentMethod
-          });
-          toast.success('Payment successful!');
-          onSuccess();
-        }
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Payment failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Payment Method
-        </label>
-        <select
-          value={paymentMethod}
-          onChange={(e) => setPaymentMethod(e.target.value)}
-          className="w-full px-4 py-2 border rounded-lg"
-        >
-          <option value="card">Card</option>
-          <option value="cash">Cash</option>
-          <option value="apple_pay">Apple Pay</option>
-          <option value="samsung_pay">Samsung Pay</option>
-        </select>
-      </div>
-
-      {paymentMethod === 'card' && (
-        <div className="p-4 border rounded-lg">
-          <CardElement />
-        </div>
-      )}
-
-      <button
-        type="submit"
-        disabled={loading || !stripe}
-        className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
-      >
-        {loading ? 'Processing...' : `Pay AED {parseFloat(amount).toLocaleString()}`}
-      </button>
-    </form>
-  );
-};
 
 const OrderDetail = () => {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
+  const [loadingTap, setLoadingTap] = useState(false);
+
 
   useEffect(() => {
     fetchOrder();
+
+    // Check url query parameters for payment status notifications
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    const err = params.get('error');
+    if (status === 'success') {
+      toast.success('Payment completed successfully via Tap Payments!');
+      // Clean query params so toast doesn't show again on refresh
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (status === 'failed') {
+      toast.error(`Payment failed: ${decodeURIComponent(err || 'Unknown error')}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, [id]);
 
   const fetchOrder = async () => {
@@ -132,6 +48,27 @@ const OrderDetail = () => {
       toast.error('Failed to update status');
     }
   };
+
+  const handleTapCheckout = async () => {
+    setLoadingTap(true);
+    try {
+      const response = await axios.post('/api/payments/tap/create', {
+        order_id: order.id,
+        amount: remainingAmount,
+        redirect_url: window.location.href
+      });
+      if (response.data?.transaction_url) {
+        window.location.href = response.data.transaction_url;
+      } else {
+        toast.error('Failed to get payment URL');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Payment initiation failed');
+    } finally {
+      setLoadingTap(false);
+    }
+  };
+
 
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
@@ -340,12 +277,21 @@ const OrderDetail = () => {
                 </div>
               </div>
             ) : (
-              <button
-                onClick={() => setShowPayment(true)}
-                className="px-6 py-3 border-2 border-primary-600 text-primary-600 font-bold rounded-full hover:bg-primary-50 transition flex items-center gap-2"
-              >
-                Record Cash/Manual Payment
-              </button>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowPayment(true)}
+                  className="px-6 py-3 border-2 border-primary-600 text-primary-600 font-bold rounded-full hover:bg-primary-50 transition flex items-center gap-2"
+                >
+                  Record Cash/Manual Payment
+                </button>
+                <button
+                  onClick={handleTapCheckout}
+                  disabled={loadingTap}
+                  className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-full hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50"
+                >
+                  💳 {loadingTap ? 'Redirecting...' : 'Pay Online via Tap'}
+                </button>
+              </div>
             )}
           </div>
         </div>
