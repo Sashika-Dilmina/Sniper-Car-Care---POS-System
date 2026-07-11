@@ -51,8 +51,13 @@ const createOrder = asyncHandler(async (req, res) => {
         'SELECT vehicle_type FROM customers WHERE id = ?',
         [finalCustomerId]
       );
-      if (existingCustomer.length > 0) {
-        vehicleType = existingCustomer[0].vehicle_type;
+      if (existingCustomer.length > 0 && existingCustomer[0].vehicle_type) {
+        const val = existingCustomer[0].vehicle_type.toString().trim();
+        if (val === 'Saloon' || val === '4x4') {
+          vehicleType = val;
+        } else if (val.toLowerCase().includes('4x4') || val.toLowerCase().includes('4-wheel') || val.toLowerCase().includes('4wheel')) {
+          vehicleType = '4x4';
+        }
       }
     }
 

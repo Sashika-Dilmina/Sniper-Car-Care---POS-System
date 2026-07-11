@@ -244,6 +244,7 @@ const closeRegister = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Register closed successfully',
+    register_id: register.id,
     closing_balance: amountInCashDrawer,
     closed_amount: parseFloat(closed_amount)
   });

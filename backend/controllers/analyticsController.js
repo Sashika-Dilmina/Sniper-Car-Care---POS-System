@@ -110,7 +110,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   // Total customers
   try {
     const [customersResult] = await pool.query(
-      `SELECT COUNT(*) as total_customers FROM customers`
+      `SELECT COUNT(*) as total_customers FROM customers WHERE ${dateFilter}`
     );
     customers = customersResult;
   } catch (error) {
@@ -143,7 +143,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
        LEFT JOIN customers c ON o.customer_id = c.id
        LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
        LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
-       WHERE o.status IN ('pending', 'processing')
+       WHERE o.status IN ('pending', 'processing') AND ${dateFilter.replace(/created_at/g, 'o.created_at')}
        GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')`
     );
     pendingSaloonCount = pendingVehiclesResult.find(item => item.vehicleType === 'Saloon')?.count || 0;

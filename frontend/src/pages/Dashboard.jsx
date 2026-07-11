@@ -87,9 +87,7 @@ const Dashboard = () => {
         setRegisterNotes('');
         setShowCloseRegisterModal(false);
         fetchRegisterStatus();
-        if (isAdmin) {
-          navigate('/reports?tab=registers');
-        }
+        navigate(`/reports?tab=registers&print_register_id=${resp.data.register_id}`);
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to close register');

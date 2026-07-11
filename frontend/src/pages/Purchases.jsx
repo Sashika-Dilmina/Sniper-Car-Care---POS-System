@@ -404,7 +404,7 @@ const Purchases = () => {
                       let formCategory = formData.category;
                       if (matched.category === 'Services') {
                         formCategory = 'Service';
-                      } else if (matched.category === 'Accessories' || matched.category === 'Spare Parts') {
+                      } else if (matched.category === 'Accessories' || matched.category === 'Spare Parts' || matched.category === 'Acce') {
                         formCategory = 'Product';
                       }
                       
@@ -425,7 +425,7 @@ const Purchases = () => {
                   {dbProductsList
                     .filter(p => {
                       if (formData.category === 'Product') {
-                        return p.category === 'Accessories' || p.category === 'Spare Parts';
+                        return p.category === 'Accessories' || p.category === 'Spare Parts' || p.category === 'Acce';
                       }
                       if (formData.category === 'Service') {
                         return p.category === 'Services';

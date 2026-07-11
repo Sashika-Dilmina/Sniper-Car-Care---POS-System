@@ -2,17 +2,23 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const Reports = () => {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabParam || 'daily');
+  const [activeTab, setActiveTab] = useState(user?.role === 'admin' ? (tabParam || 'daily') : 'registers');
 
   useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
+    if (user?.role === 'admin') {
+      if (tabParam) {
+        setActiveTab(tabParam);
+      }
+    } else {
+      setActiveTab('registers');
     }
-  }, [tabParam]);
+  }, [tabParam, user]);
 
   // Daily Summary State
   const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
@@ -66,6 +72,58 @@ const Reports = () => {
   const [loadingRegisters, setLoadingRegisters] = useState(false);
   const [selectedRegisterReport, setSelectedRegisterReport] = useState(null);
   const [loadingRegisterReport, setLoadingRegisterReport] = useState(false);
+  const printRegisterId = searchParams.get('print_register_id');
+
+  const formatRegisterDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    
+    const day = d.getDate();
+    let suffix = 'th';
+    if (day === 1 || day === 21 || day === 31) suffix = 'st';
+    else if (day === 2 || day === 22) suffix = 'nd';
+    else if (day === 3 || day === 23) suffix = 'rd';
+    
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    
+    let hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    
+    return `${day}${suffix} ${month}, ${year} ${hours}:${minutes} ${ampm}`;
+  };
+
+  useEffect(() => {
+    if (printRegisterId) {
+      fetchRegisterReport(printRegisterId);
+    }
+  }, [printRegisterId]);
+
+  useEffect(() => {
+    if (printRegisterId && selectedRegisterReport && selectedRegisterReport.register_id === parseInt(printRegisterId)) {
+      const handleAfterPrint = () => {
+        const newParams = new URLSearchParams(window.location.search);
+        if (newParams.has('print_register_id')) {
+          newParams.delete('print_register_id');
+          setSearchParams(newParams);
+        }
+        window.removeEventListener('afterprint', handleAfterPrint);
+      };
+
+      const timer = setTimeout(() => {
+        window.addEventListener('afterprint', handleAfterPrint);
+        window.print();
+      }, 1000);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('afterprint', handleAfterPrint);
+      };
+    }
+  }, [selectedRegisterReport, printRegisterId, setSearchParams]);
 
   const fetchRegistersList = async () => {
     setLoadingRegisters(true);
@@ -100,11 +158,13 @@ const Reports = () => {
   useEffect(() => {
     if (activeTab === 'registers') {
       fetchRegistersList();
-      setSelectedRegisterReport(null);
+      if (!printRegisterId) {
+        setSelectedRegisterReport(null);
+      }
     } else if (activeTab === 'stock') {
       fetchStockReport();
     }
-  }, [activeTab]);
+  }, [activeTab, printRegisterId]);
 
   // Daily Business Summary
   const fetchDailySummary = async () => {
@@ -360,7 +420,7 @@ const Reports = () => {
     }
   };
 
-  const tabs = [
+  const tabs = user?.role === 'admin' ? [
     { id: 'daily', label: 'Daily Business Summary' },
     { id: 'business_summary', label: 'Business Summary Report (P&L)' },
     { id: 'stock', label: 'Stock Report' },
@@ -370,6 +430,8 @@ const Reports = () => {
     { id: 'purchases', label: 'Purchase of Items' },
     { id: 'credit', label: 'Credit Report' },
     { id: 'registers', label: 'Cash Register Sessions' },
+  ] : [
+    { id: 'registers', label: 'Cash Register Sessions' },
   ];
 
   const handlePrint = () => {
@@ -378,6 +440,10 @@ const Reports = () => {
 
   const printStyle = `
     @media print {
+      @page {
+        size: auto;
+        margin: 10mm !important;
+      }
       aside, nav, .no-print, button, input, select, header {
         display: none !important;
       }
@@ -391,6 +457,12 @@ const Reports = () => {
       main {
         padding: 0 !important;
         margin: 0 !important;
+      }
+      .print-card {
+        margin: 0 !important;
+        padding: 0 !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
       }
       .print-full-width {
         width: 100% !important;
@@ -428,18 +500,21 @@ const Reports = () => {
   return (
     <div className="space-y-6">
       <style>{printStyle}</style>
-      <div className="flex justify-between items-center no-print">
-        <h1 className="text-3xl font-bold text-gray-800">Reports</h1>
-        <button
-          onClick={handlePrint}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm font-semibold"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-          </svg>
-          Print Report
-        </button>
-      </div>
+      
+      {/* Screen layout content (Hidden during printing) */}
+      <div className="space-y-6 no-print">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-800">Reports</h1>
+          <button
+            onClick={handlePrint}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm font-semibold"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Print Report
+          </button>
+        </div>
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow no-print">
@@ -1508,130 +1583,146 @@ const Reports = () => {
                 >
                   🖨️ Print Statement
                 </button>
-              </div>
-
-              {/* Printable Cash Register Report Card */}
-              <div className="print-full-width p-6 border rounded-2xl bg-gray-50/10 space-y-6 text-black">
-                <div className="text-center border-b pb-4">
-                  <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
-                  <p className="text-sm text-gray-650 font-bold">Daily Cash Register Statement</p>
-                  <p className="text-xs text-gray-450 mt-1">Session ID: #{selectedRegisterReport.register_id}</p>
+                  {/* Printable Cash Register Report Card */}
+              <div className="print-full-width mx-auto max-w-3xl p-6 border rounded-2xl bg-white space-y-4 text-black font-mono text-[14px] shadow-sm">
+                <div className="text-center pb-3 border-b border-dashed border-gray-400">
+                  <h2 className="text-sm font-bold uppercase tracking-wider">Register Details</h2>
+                  <p className="text-[10px] text-gray-600 mt-1">
+                    ({formatRegisterDate(selectedRegisterReport.opened_at)} - {selectedRegisterReport.closed_at ? formatRegisterDate(selectedRegisterReport.closed_at) : 'Active Session'})
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div className="text-left">
-                    <p><span className="font-bold text-gray-700">Opened At:</span> {new Date(selectedRegisterReport.opened_at).toLocaleString()}</p>
-                    <p><span className="font-bold text-gray-700">Closed At:</span> {selectedRegisterReport.closed_at ? new Date(selectedRegisterReport.closed_at).toLocaleString() : 'Active Session'}</p>
+                <div className="space-y-2 pt-2">
+                  <div className="flex justify-between">
+                    <span>Opening Balance</span>
+                    <span className="font-semibold">{selectedRegisterReport.opening_balance.toFixed(3)}</span>
                   </div>
-                  <div className="text-right">
-                    <p><span className="font-bold text-gray-700">Status:</span> {selectedRegisterReport.status.toUpperCase()}</p>
+                  <div className="flex justify-between">
+                    <span>Cash Sale</span>
+                    <span>{selectedRegisterReport.cash_payments.sale.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Card Sale</span>
+                    <span>{selectedRegisterReport.card_payments.sale.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Bank Sale</span>
+                    <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Other Sale</span>
+                    <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Credit Sale</span>
+                    <span>{selectedRegisterReport.credit_sales.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Credit Sale Recovery</span>
+                    <span>{selectedRegisterReport.credit_sale_recovery.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Expense</span>
+                    <span>{selectedRegisterReport.total_expense.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t border-dashed pt-1.5 mt-1">
+                    <span>Total Sales</span>
+                    <span>{selectedRegisterReport.total_sales.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Cash In Drawer</span>
+                    <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Difference Amount</span>
+                    <span>
+                      {(selectedRegisterReport.closed_amount !== null
+                        ? selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer
+                        : 0.00
+                      ).toFixed(3)}
+                    </span>
                   </div>
                 </div>
-
-                <table className="w-full text-xs border-collapse mt-4 text-left">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300 bg-gray-100 font-bold">
-                      <th className="p-2">Transaction Type</th>
-                      <th className="text-right p-2">Details</th>
-                      <th className="text-right p-2">Total Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    <tr>
-                      <td className="p-2 font-bold">Starting Cash Balance</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Opening Balance</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.opening_balance.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Cash Sales (POS checkouts)</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">AED {selectedRegisterReport.cash_payments.sale.toFixed(2)}</td>
-                      <td className="p-2 text-right">AED {selectedRegisterReport.cash_payments.sale.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Cash Credit Recoveries</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">AED {selectedRegisterReport.cash_payments.recovery.toFixed(2)}</td>
-                      <td className="p-2 text-right">AED {selectedRegisterReport.cash_payments.recovery.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Cash Expenses</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">-AED {selectedRegisterReport.cash_expense.toFixed(2)}</td>
-                      <td className="p-2 text-right text-red-650">-AED {selectedRegisterReport.cash_expense.toFixed(2)}</td>
-                    </tr>
-                    <tr className="bg-gray-50 font-bold">
-                      <td className="p-2">Expected Cash in Drawer</td>
-                      <td className="p-2 text-right text-gray-555 font-normal">Calculated Cash</td>
-                      <td className="p-2 text-right">AED {selectedRegisterReport.amount_in_cash_drawer.toFixed(2)}</td>
-                    </tr>
-                    {selectedRegisterReport.closed_amount !== null && (
-                      <>
-                        <tr className="font-bold border-t-2">
-                          <td className="p-2">Actual Cash Drawer Count</td>
-                          <td className="p-2 text-right text-gray-550 font-normal">Counted Cash</td>
-                          <td className="p-2 text-right text-blue-700">AED {selectedRegisterReport.closed_amount.toFixed(2)}</td>
-                        </tr>
-                        <tr className="font-bold">
-                          <td className="p-2">Cash Discrepancy (Over/Short)</td>
-                          <td className="p-2 text-right text-gray-555 font-normal">Drawer Variance</td>
-                          <td className={`p-2 text-right ${selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            AED {(selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer).toFixed(2)}
-                          </td>
-                        </tr>
-                      </>
-                    )}
-                    <tr className="border-t-2 bg-gray-150">
-                      <td colSpan="3" className="p-1 font-bold text-[10px] uppercase text-gray-500 text-left">Non-Cash Transactions Summary</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Card Payments (Sales + Recoveries)</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Sale: {selectedRegisterReport.card_payments.sale.toFixed(2)} / Rec: {selectedRegisterReport.card_payments.recovery.toFixed(2)}</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.card_payments.total.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Tap Payments (Apple Pay / Samsung Pay)</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Mobile contactless</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.other_payments.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Bank Transfer Sales</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Bank payments</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.bank_transfer.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Cheque Payments</td>
-                      <td className="p-2 text-right text-gray-555 font-normal font-normal">Cheque transactions</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.cheque_payments.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-bold text-gray-600">Credit Sales (Unpaid)</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">To credit balances</td>
-                      <td className="p-2 text-right text-gray-600 font-semibold">AED {selectedRegisterReport.credit_sales.toFixed(2)}</td>
-                    </tr>
-                    <tr className="font-bold bg-gray-100 border-t-2 text-sm">
-                      <td className="p-2">Total Net Sales Revenue</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Grand Total</td>
-                      <td className="p-2 text-right">AED {selectedRegisterReport.total_sales.toFixed(2)}</td>
-                    </tr>
-                  </tbody>
-                </table>
 
                 {selectedRegisterReport.notes && (
-                  <div className="mt-4 p-3 border rounded bg-yellow-50 text-xs text-left">
-                    <p className="font-bold text-gray-700">Register Notes:</p>
-                    <p className="text-gray-600 mt-1">{selectedRegisterReport.notes}</p>
+                  <div className="border-t border-dashed pt-2 mt-2 text-[10px] text-gray-600">
+                    <p className="font-bold">Notes:</p>
+                    <p>{selectedRegisterReport.notes}</p>
                   </div>
                 )}
+              </div>              </div>
+            </div>
+          )}
+        </div>
+      )}
+      </div>
 
-                <div className="mt-12 grid grid-cols-2 gap-8 text-center text-xs">
-                  <div className="border-t pt-2">
-                    <p>Staff Member Signature</p>
-                    <p className="text-gray-400 mt-4">(...................................................)</p>
-                  </div>
-                  <div className="border-t pt-2">
-                    <p>Manager Signature</p>
-                    <p className="text-gray-400 mt-4">(...................................................)</p>
-                  </div>
-                </div>
-              </div>
+      {/* Printable Cash Register Report Card (Only visible when printing) */}
+      {selectedRegisterReport && (
+        <div className="hidden print:block print-card mx-auto max-w-3xl p-6 border rounded-2xl bg-white space-y-4 text-black font-mono text-[14px] shadow-sm">
+          <div className="text-center pb-3 border-b border-dashed border-gray-400">
+            <h2 className="text-sm font-bold uppercase tracking-wider">Register Details</h2>
+            <p className="text-[10px] text-gray-655 mt-1">
+              ({formatRegisterDate(selectedRegisterReport.opened_at)} - {selectedRegisterReport.closed_at ? formatRegisterDate(selectedRegisterReport.closed_at) : 'Active Session'})
+            </p>
+          </div>
+
+          <div className="space-y-2 pt-2">
+            <div className="flex justify-between">
+              <span>Opening Balance</span>
+              <span className="font-semibold">{selectedRegisterReport.opening_balance.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Cash Sale</span>
+              <span>{selectedRegisterReport.cash_payments.sale.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Card Sale</span>
+              <span>{selectedRegisterReport.card_payments.sale.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Bank Sale</span>
+              <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Other Sale</span>
+              <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Credit Sale</span>
+              <span>{selectedRegisterReport.credit_sales.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Credit Sale Recovery</span>
+              <span>{selectedRegisterReport.credit_sale_recovery.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Total Expense</span>
+              <span>{selectedRegisterReport.total_expense.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold border-t border-dashed pt-1.5 mt-1">
+              <span>Total Sales</span>
+              <span>{selectedRegisterReport.total_sales.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Cash In Drawer</span>
+              <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Difference Amount</span>
+              <span>
+                {(selectedRegisterReport.closed_amount !== null
+                  ? selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer
+                  : 0.00
+                ).toFixed(3)}
+              </span>
+            </div>
+          </div>
+
+          {selectedRegisterReport.notes && (
+            <div className="border-t border-dashed pt-2 mt-2 text-[10px] text-gray-600">
+              <p className="font-bold">Notes:</p>
+              <p>{selectedRegisterReport.notes}</p>
             </div>
           )}
         </div>

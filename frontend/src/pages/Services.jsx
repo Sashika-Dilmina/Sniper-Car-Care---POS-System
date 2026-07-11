@@ -296,9 +296,11 @@ const Services = () => {
                   <span className="bg-primary-600 text-white font-black px-3 py-1 rounded-full text-xs shadow-md">
                     Sell: AED {parseFloat(service.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </span>
-                  <span className="bg-gray-800 text-white font-semibold px-2 py-0.5 rounded-full text-[10px] shadow-md">
-                    Cost: AED {parseFloat(service.purchase_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </span>
+                  {user?.role === 'admin' && (
+                    <span className="bg-gray-800 text-white font-semibold px-2 py-0.5 rounded-full text-[10px] shadow-md">
+                      Cost: AED {parseFloat(service.purchase_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </span>
+                  )}
                 </div>
               </div>
               

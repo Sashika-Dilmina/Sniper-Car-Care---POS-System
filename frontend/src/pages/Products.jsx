@@ -512,7 +512,7 @@ const Products = () => {
                     className="w-full px-4 py-2 border rounded-lg font-semibold bg-white"
                   >
                     <option value="Car Freshner">Car Freshner</option>
-                    <option value="Accessories">Accessories</option>
+                    <option value="Acce">Acce</option>
                   </select>
                 </div>
                 <div>
