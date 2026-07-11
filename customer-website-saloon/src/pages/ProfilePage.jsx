@@ -85,8 +85,8 @@ const ProfilePage = () => {
                 <p className="text-sm text-gray-400 mb-6">Earn a free wash every 5 visits</p>
                 
                 <div className="flex justify-between items-center px-2">
-                  {[...Array(5)].map((_, i) => {
-                    const isEarned = i < (customerData.loyalty.wash_stamps % 5);
+                   {[...Array(5)].map((_, i) => {
+                    const isEarned = i < (customerData.loyalty.wash_stamps >= 5 ? 5 : (customerData.loyalty.wash_stamps % 5));
                     return (
                       <div key={i} className="flex flex-col items-center gap-2 relative z-10">
                         <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center transition-all ${
@@ -94,7 +94,11 @@ const ProfilePage = () => {
                             ? 'shadow-lg shadow-red-600/50 scale-110 ring-2 ring-red-500' 
                             : 'border border-gray-700'
                         }`}>
-                          <img src={stamps[i]} alt={`Stamp ${i+1}`} className="w-full h-full object-contain p-0.5 rounded-full" />
+                          <img 
+                            src={isEarned ? stamp1 : stamp4} 
+                            alt={`Stamp ${i+1}`} 
+                            className="w-full h-full object-contain p-0.5 rounded-full transition-all duration-300" 
+                          />
                         </div>
                         <span className="text-[10px] sm:text-xs font-bold text-gray-400 mt-1">{i + 1}</span>
                       </div>
@@ -106,7 +110,12 @@ const ProfilePage = () => {
                         ? 'shadow-lg shadow-red-600/50 scale-110 ring-2 ring-red-500 animate-pulse' 
                         : 'border border-gray-700'
                     }`}>
-                      <img src={freeStamp} alt="Free Wash" className="w-full h-full object-contain p-1 rounded-full" />
+                      <img 
+                        src={freeStamp} 
+                        alt="Free Wash" 
+                        className="w-full h-full object-contain p-1 rounded-full transition-all duration-300" 
+                        style={{ filter: customerData.loyalty.free_wash_ready ? 'none' : 'grayscale(100%) opacity(0.35)' }}
+                      />
                     </div>
                     <span className="text-[10px] sm:text-xs font-bold text-red-500 mt-1 uppercase tracking-wide">Free</span>
                   </div>

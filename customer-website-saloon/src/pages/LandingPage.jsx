@@ -88,7 +88,11 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
                     : 'border border-gray-300'
                 }`}
               >
-                <img src={stamps[n - 1]} alt={`Stamp ${n}`} className="w-full h-full object-contain" />
+                <img 
+                  src={isFilled ? stamp1 : stamp4} 
+                  alt={`Stamp ${n}`} 
+                  className="w-full h-full object-contain transition-all duration-300" 
+                />
               </div>
               <span className="text-[10px] sm:text-xs font-bold text-gray-500 mt-1.5">{n}</span>
             </div>
@@ -102,7 +106,12 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
                 : 'border border-gray-300'
             }`}
           >
-            <img src={freeStamp} alt="Free Wash" className="w-full h-full object-contain p-0.5 rounded-full" />
+            <img 
+              src={freeStamp} 
+              alt="Free Wash" 
+              className="w-full h-full object-contain p-0.5 rounded-full transition-all duration-300" 
+              style={{ filter: freeReady ? 'none' : 'grayscale(100%) opacity(0.35)' }}
+            />
           </div>
           <span className="text-[10px] sm:text-xs font-bold text-red-600 mt-1.5 uppercase tracking-wide">Free</span>
         </div>
@@ -1168,7 +1177,7 @@ const LandingPage = () => {
                 <div 
                   role="button"
                   onClick={() => handleServiceClick(pkg)}
-                  className={`group relative flex flex-col rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300 aspect-square ${isFullBody ? 'w-[calc(50%-0.375rem)] sm:w-[calc(50%-0.75rem)]' : 'w-full'}`}
+                  className={`group relative flex flex-col rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300 ${isFullBody ? 'w-full aspect-[1.5/1]' : 'w-full aspect-square'}`}
                 >
                   <img 
                     src={getServiceImage(pkg)} 
