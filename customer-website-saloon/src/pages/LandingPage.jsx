@@ -6,6 +6,14 @@ import { images, getServiceImage } from '../config/siteImages';
 import BottomNav from '../components/BottomNav';
 import VehiclePlatePreview from '../components/VehiclePlatePreview';
 import SearchableSelect from '../components/SearchableSelect';
+import stamp1 from '../assets/loyalty/stamp-1.png';
+import stamp2 from '../assets/loyalty/stamp-2.png';
+import stamp3 from '../assets/loyalty/stamp-3.png';
+import stamp4 from '../assets/loyalty/stamp-4.png';
+import stamp5 from '../assets/loyalty/stamp-5.png';
+import freeStamp from '../assets/loyalty/free-stamp.png';
+
+const stamps = [stamp1, stamp2, stamp3, stamp4, stamp5];
 
 const Reveal = ({ children, delay = 0, className = '' }) => {
   const elementRef = useRef(null);
@@ -74,29 +82,38 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
           return (
             <div key={n} className="flex flex-col items-center">
               <div
-                className={`flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center rounded-full border border-gray-200 shadow-sm transition-all duration-300 ${
+                className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full overflow-hidden transition-all duration-300 ${
                   isFilled
-                    ? 'border-red-600 bg-red-600 text-white'
-                    : 'bg-white text-gray-400'
+                    ? 'shadow-md ring-2 ring-red-500 scale-110'
+                    : 'border border-gray-300'
                 }`}
               >
-                <svg viewBox="0 0 640 512" fill="currentColor" className="w-3.5 h-3.5 sm:w-5 sm:h-5">
-                  <path d="M544 192h-16L419.22 56.02A64.025 64.025 0 0 0 369.24 32H155.33c-26.17 0-49.7 15.93-59.42 40.23L48 194.26C20.44 201.4 0 226.21 0 256v112c0 8.84 7.16 16 16 16h48c0 53.02 42.98 96 96 96s96-42.98 96-96h128c0 53.02 42.98 96 96 96s96-42.98 96-96h48c8.84 0 16-7.16 16-16v-80c0-53.02-42.98-96-96-96zM160 432c-26.47 0-48-21.53-48-48s21.53-48 48-48 48 21.53 48 48-21.53 48-48 48zm72-240H116.93l38.4-96H232v96zm48 0V96h89.24l76.8 96H280zm200 240c-26.47 0-48-21.53-48-48s21.53-48 48-48 48 21.53 48 48-21.53 48-48 48z"/>
-                </svg>
+                <img 
+                  src={isFilled ? stamp1 : stamp4} 
+                  alt={`Stamp ${n}`} 
+                  className="w-full h-full object-contain transition-all duration-300" 
+                />
               </div>
+              <span className="text-[10px] sm:text-xs font-bold text-gray-500 mt-1.5">{n}</span>
             </div>
           );
         })}
         <div className="flex flex-col items-center">
           <div
-            className={`flex h-7 w-7 sm:h-10 sm:w-10 items-center justify-center rounded-full text-[10px] sm:text-sm transition-all duration-300 ${
+            className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full transition-all duration-300 ${
               freeReady
-                ? 'bg-red-600 text-white shadow-md ring-2 ring-red-200 scale-110 animate-pulse'
-                : 'bg-gray-100 text-gray-400 border border-gray-200'
+                ? 'shadow-md ring-2 ring-red-500 scale-110 animate-pulse'
+                : 'border border-gray-300'
             }`}
           >
-            🎁
+            <img 
+              src={freeStamp} 
+              alt="Free Wash" 
+              className="w-full h-full object-contain p-0.5 rounded-full transition-all duration-300" 
+              style={{ filter: freeReady ? 'none' : 'grayscale(100%) opacity(0.35)' }}
+            />
           </div>
+          <span className="text-[10px] sm:text-xs font-bold text-red-600 mt-1.5 uppercase tracking-wide">Free</span>
         </div>
       </div>
     </div>
@@ -327,7 +344,7 @@ const LandingPage = () => {
   const [customerInfo, setCustomerInfo] = useState(null);
   const [bookingForm, setBookingForm] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     vehicle_type: 'Saloon',
     emirate: '',
     plate_code: '',
@@ -338,7 +355,7 @@ const LandingPage = () => {
   const [vipPlateCodes, setVipPlateCodes] = useState([]);
   const [vipBookingForm, setVipBookingForm] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -359,7 +376,7 @@ const LandingPage = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productForm, setProductForm] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     vehicle_plate: '',
     quantity: 1,
     notes: ''
@@ -547,7 +564,7 @@ const LandingPage = () => {
           );
           setBookingForm({
             name: response.data.customer.name || '',
-            phone: response.data.customer.phone || '',
+            phone: response.data.customer.phone || '+9715',
             vehicle_type: response.data.customer.vehicle_type || 'Saloon',
             vehicle_plate: vehiclePlate,
             notes: ''
@@ -722,7 +739,7 @@ const LandingPage = () => {
       setSelectedService(null);
       setBookingForm({
         name: '',
-        phone: '',
+        phone: '+9715',
         vehicle_type: 'Saloon',
         emirate: '',
         plate_code: '',
@@ -746,7 +763,7 @@ const LandingPage = () => {
     setShowProductModal(true);
     setProductForm({
       name: customerInfo?.name || '',
-      phone: customerInfo?.phone || '',
+      phone: customerInfo?.phone || '+9715',
       vehicle_plate: vehiclePlate || customerInfo?.vehicle_plate || '',
       quantity: 1,
       notes: ''
@@ -807,16 +824,14 @@ const LandingPage = () => {
   const resolveImageUrl = (url) => {
     if (!url) return '';
     
-    // Normalize legacy localhost URLs to relative paths
     let cleanUrl = url;
-    if (url.startsWith('http://localhost:5000')) {
-      cleanUrl = url.replace('http://localhost:5000', '');
-    } else if (url.startsWith('https://localhost:5000')) {
-      cleanUrl = url.replace('https://localhost:5000', '');
+    if (cleanUrl.includes('/uploads/')) {
+      cleanUrl = '/uploads/' + cleanUrl.split('/uploads/')[1];
     }
+    if (cleanUrl.startsWith('http') && !cleanUrl.includes('/uploads/')) return cleanUrl;
 
-    if (cleanUrl.startsWith('http')) return cleanUrl;
-    const apiBaseUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/$/, '') : (import.meta.env.PROD ? '' : 'http://localhost:5000');
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const apiBaseUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/$/, '') : (import.meta.env.PROD ? '' : `http://${hostname}:5000`);
     return `${apiBaseUrl}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
   };
 
@@ -912,7 +927,7 @@ const LandingPage = () => {
 
       setVipBookingForm({
         name: '',
-        phone: '',
+        phone: '+9715',
         emirate: '',
         plate_code: '',
         plate_number: '',
@@ -947,7 +962,7 @@ const LandingPage = () => {
 
     setVipBookingForm({
       name: customerInfo?.name || '',
-      phone: customerInfo?.phone || '',
+      phone: customerInfo?.phone || '+9715',
       emirate: emirate,
       plate_code: plateCode,
       plate_number: plateNumber,
@@ -998,7 +1013,7 @@ const LandingPage = () => {
 
     setBookingForm({
       name: '',
-      phone: '',
+      phone: '+9715',
       emirate: emirate,
       plate_code: plateCode,
       plate_number: plateNumber,
@@ -1034,30 +1049,20 @@ const LandingPage = () => {
 
 
 
-  const originalServiceNames = [
-    'full body service',
-    'double soap',
-    'ceramic wash',
-    'body wash',
-    'just water'
-  ];
-  const originalPackages = packages.filter(pkg => 
-    originalServiceNames.includes(pkg.name.toLowerCase())
-  );
-
-  const topRowServices = originalPackages.filter(pkg => {
-    const name = pkg.name.toLowerCase();
-    return name === 'body wash' || name === 'just water';
-  }).sort((a, b) => {
-    if (a.name.toLowerCase() === 'body wash') return -1;
-    if (b.name.toLowerCase() === 'body wash') return 1;
-    return 0;
+  const sortedPackages = [...packages].sort((a, b) => {
+    const getOrder = (name) => {
+      const n = name.toLowerCase();
+      if (n.includes('full body') || n.includes('full service') || n.includes('full wash')) return 1;
+      if (n.includes('double soap')) return 2;
+      if (n.includes('ceramic')) return 3;
+      if (n.includes('body wash') || n.includes('exterior wash')) return 4;
+      if (n.includes('just water') || n.includes('water wash') || n.includes('quick wash')) return 5;
+      return 100;
+    };
+    return getOrder(a.name) - getOrder(b.name);
   });
 
-  const bottomRowServices = originalPackages.filter(pkg => {
-    const name = pkg.name.toLowerCase();
-    return name !== 'body wash' && name !== 'just water';
-  });
+  const displayPackages = sortedPackages.filter(pkg => !pkg.name.toLowerCase().includes('vip'));
 
   return (
     <div className="bg-white text-gray-900 overflow-hidden pb-24">
@@ -1160,62 +1165,30 @@ const LandingPage = () => {
             <p className="mt-2 text-sm sm:text-base text-gray-600 font-medium">Select the service that suits your needs.</p>
           </div>
         </Reveal>
-        <div className="flex flex-col gap-4 sm:gap-6">
-          {/* Top Row: Body Wash and Just Water */}
-          <div className="grid grid-cols-2 gap-1.5 sm:gap-4 max-w-xl mx-auto w-full px-1">
-            {topRowServices.map((pkg, idx) => (
-              <Reveal key={pkg.name} delay={idx * 50} className="flex w-full min-w-0">
-                <div className={`template-card flex flex-col w-full h-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white ${pkg.featured ? 'ring-1 ring-red-600' : ''}`}>
-                  <div className="p-1 sm:p-2 text-center shrink-0 bg-white h-[36px] sm:h-[48px] flex items-center justify-center">
-                    <h3 className="text-[7px] sm:text-xs font-black uppercase tracking-tighter text-gray-900 leading-[1.1] break-words line-clamp-3">{pkg.name}</h3>
-                  </div>
-                  <div className="relative h-14 sm:h-24 bg-gray-900 overflow-visible shrink-0 border-y border-gray-100">
-                    <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center opacity-90" />
-                    <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex h-6 w-6 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-600 text-white text-[7px] sm:text-sm font-bold shadow-md ring-2 ring-white z-10">
-                      {String(pkg.price).replace(' AED', '')}
-                    </div>
-                  </div>
-                  <div className="px-1 pt-4 pb-2 sm:pt-6 sm:pb-3 flex flex-col flex-1 items-center text-center bg-white justify-between">
-                    <p className="text-[6px] sm:text-[10px] text-gray-500 leading-[1.2] mb-1.5 sm:mb-2 line-clamp-3 w-full break-words">{pkg.description}</p>
-                    <button
-                      onClick={() => handleServiceClick(pkg)}
-                      className="w-[90%] rounded bg-black py-1 sm:py-1.5 text-[6px] sm:text-[9px] font-bold uppercase tracking-widest text-white hover:bg-red-600 transition"
-                    >
-                      SELECT
-                    </button>
-                  </div>
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-2xl mx-auto w-full px-1">
+          {displayPackages.map((pkg, idx) => {
+            const isFullBody = pkg.name.toLowerCase().includes('full body') || pkg.name.toLowerCase().includes('full service') || pkg.name.toLowerCase().includes('full wash');
+            return (
+              <Reveal 
+                key={pkg.id || pkg.name} 
+                delay={idx * 50} 
+                className={`flex w-full min-w-0 ${isFullBody ? 'col-span-2 justify-center' : 'col-span-1'}`}
+              >
+                <div 
+                  role="button"
+                  onClick={() => handleServiceClick(pkg)}
+                  className={`group relative flex flex-col rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300 ${isFullBody ? 'w-full aspect-[1.5/1]' : 'w-full aspect-square'}`}
+                >
+                  <img 
+                    src={getServiceImage(pkg)} 
+                    alt={pkg.name} 
+                    className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 ease-out"
+                  />
+                  <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
               </Reveal>
-            ))}
-          </div>
-
-          {/* Bottom Row: Remaining Services */}
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-4 max-w-3xl mx-auto w-full px-1">
-            {bottomRowServices.map((pkg, idx) => (
-              <Reveal key={pkg.name} delay={(idx + 2) * 50} className="flex w-full min-w-0">
-                <div className={`template-card flex flex-col w-full h-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white ${pkg.featured ? 'ring-1 ring-red-600' : ''}`}>
-                  <div className="p-1 sm:p-2 text-center shrink-0 bg-white h-[36px] sm:h-[48px] flex items-center justify-center">
-                    <h3 className="text-[7px] sm:text-xs font-black uppercase tracking-tighter text-gray-900 leading-[1.1] break-words line-clamp-3">{pkg.name}</h3>
-                  </div>
-                  <div className="relative h-14 sm:h-24 bg-gray-900 overflow-visible shrink-0 border-y border-gray-100">
-                    <img src={getServiceImage(pkg)} alt={pkg.name} className="service-card-photo h-full w-full object-cover object-center opacity-90" />
-                    <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex h-6 w-6 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-600 text-white text-[7px] sm:text-sm font-bold shadow-md ring-2 ring-white z-10">
-                      {String(pkg.price).replace(' AED', '')}
-                    </div>
-                  </div>
-                  <div className="px-1 pt-4 pb-2 sm:pt-6 sm:pb-3 flex flex-col flex-1 items-center text-center bg-white justify-between">
-                    <p className="text-[6px] sm:text-[10px] text-gray-500 leading-[1.2] mb-1.5 sm:mb-2 line-clamp-3 w-full break-words">{pkg.description}</p>
-                    <button
-                      onClick={() => handleServiceClick(pkg)}
-                      className="w-[90%] rounded bg-black py-1 sm:py-1.5 text-[6px] sm:text-[9px] font-bold uppercase tracking-widest text-white hover:bg-red-600 transition"
-                    >
-                      SELECT
-                    </button>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </section>
 
@@ -1224,38 +1197,29 @@ const LandingPage = () => {
           <div
             role="button"
             tabIndex={0}
-            onClick={openVIPModal}
-            onKeyDown={(e) => e.key === 'Enter' && openVIPModal()}
-            className="relative overflow-hidden rounded-2xl bg-black cursor-pointer group hover:ring-2 hover:ring-red-600 transition-shadow"
+            onClick={() => {
+              const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
+              if (vipPkg) {
+                handleServiceClick(vipPkg);
+              } else {
+                openVIPModal();
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
+                if (vipPkg) handleServiceClick(vipPkg);
+                else openVIPModal();
+              }
+            }}
+            className="group relative w-full rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
           >
-            <div className="flex flex-row items-stretch">
-              <div className="p-4 sm:p-6 relative z-10 flex flex-col justify-center w-[60%] sm:w-1/2 shrink-0">
-                <div className="flex items-center gap-2 sm:gap-4">
-                  <CrownIcon className="w-10 h-10 sm:w-16 sm:h-16 shrink-0 text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]" />
-                  <span className="text-2xl sm:text-4xl font-black uppercase text-red-600 vip-neon-text leading-none">
-                    VIP
-                  </span>
-                </div>
-                <p className="mt-1 sm:mt-2 text-[10px] sm:text-sm text-gray-300 font-medium tracking-wide">
-                  Premium Car Care Service
-                </p>
-                <div className="mt-2 sm:mt-3 flex flex-wrap gap-x-3 gap-y-1">
-                  {vipHighlights.map((label) => (
-                    <span key={label} className="flex items-center gap-1 text-[8px] sm:text-xs text-gray-300">
-                      <span className="text-red-600">●</span> {label}
-                    </span>
-                  ))}
-                </div>
-                <span className="mt-3 sm:mt-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 sm:px-4 sm:py-2 text-[9px] sm:text-sm font-bold uppercase tracking-wide text-white group-hover:bg-red-700 transition w-max">
-                  Discover VIP
-                  <span>▸</span>
-                </span>
-              </div>
-              <div className="relative flex-1">
-                <img src={images.vip} alt="" className="absolute inset-0 h-full w-full object-cover object-center opacity-85" />
-                <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent pointer-events-none" />
-              </div>
-            </div>
+            <img 
+              src={images.vip} 
+              alt="VIP Service" 
+              className="w-full h-auto object-contain group-hover:scale-[1.02] transition-transform duration-500 ease-out" 
+            />
+            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           </div>
         </Reveal>
       </section>
@@ -1268,36 +1232,90 @@ const LandingPage = () => {
             <p className="mt-2 text-sm text-gray-500">Professional-grade car care products available for purchase.</p>
           </div>
         </Reveal>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {(dbProducts.length > 0 ? dbProducts : products).map((product, index) => (
-            <Reveal key={product.name} delay={index * 100}>
-              <div className="template-card overflow-hidden flex flex-col h-full">
-                <div className="relative h-40 bg-gray-100">
-                  {renderProductArt(product)}
-                </div>
-                <div className="p-5 flex flex-col flex-1">
-                  <div className="flex justify-between text-[10px] uppercase tracking-widest text-red-600 font-bold">
-                    <span>Sniper</span>
-                    <span>{typeof product.price === 'number' ? `${product.price} AED` : product.price}</span>
+
+        {(() => {
+          const allProducts = dbProducts.length > 0 ? dbProducts : products;
+          const freshnerProducts = allProducts.filter(p =>
+            p.category === 'Car Freshner' || p.category === 'car freshner' || p.category === 'Car Freshener'
+          );
+          const acceProducts = allProducts.filter(p =>
+            p.category === 'Acce' || p.category === 'Accessories' || p.category === 'accessories' || p.category === 'acce'
+          );
+
+          const CategoryBox = ({ title, icon, products: catProducts, colorClass }) => {
+            const [open, setOpen] = useState(false);
+            return (
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <button
+                  onClick={() => setOpen(!open)}
+                  className="w-full flex items-center gap-4 p-5 sm:p-6 hover:bg-gray-50 transition-colors group"
+                >
+                  <div className={`flex items-center justify-center w-12 h-12 rounded-xl ${colorClass} text-white text-2xl shadow-md flex-shrink-0`}>
+                    {icon}
                   </div>
-                  <h3 className="mt-3 text-lg font-bold text-gray-900">{product.name}</h3>
-                  <p className="mt-1 text-xs text-gray-600">{product.description}</p>
-                  <ul className="mt-3 space-y-1 text-xs text-gray-500">
-                    {getProductBenefits(product).map((benefit) => (
-                      <li key={benefit} className="flex gap-2"><span className="text-red-600">•</span>{benefit}</li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => handleProductPurchaseClick(product)}
-                    className="w-full mt-5 inline-flex items-center justify-center rounded-lg border-2 border-gray-900 py-3 text-xs sm:text-sm font-bold uppercase text-gray-900 hover:bg-gray-900 hover:text-white transition active:scale-[0.98]"
-                  >
-                    Purchase
-                  </button>
-                </div>
+                  <div className="flex-1 text-left">
+                    <h3 className="text-base sm:text-lg font-black text-gray-900 uppercase tracking-wide">{title}</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">{catProducts.length} product{catProducts.length !== 1 ? 's' : ''} available</p>
+                  </div>
+                  <span className={`text-gray-400 text-xl transition-transform duration-300 ${open ? 'rotate-180' : ''}`}>▾</span>
+                </button>
+
+                {open && (
+                  <div className="border-t border-gray-100 px-5 pb-6 pt-4">
+                    {catProducts.length > 0 ? (
+                      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                        {catProducts.map((product) => (
+                          <div key={product.name} className="template-card overflow-hidden flex flex-col h-full">
+                            <div className="relative h-36 bg-gray-100">
+                              {renderProductArt(product)}
+                            </div>
+                            <div className="p-4 flex flex-col flex-1">
+                              <div className="flex justify-between text-[10px] uppercase tracking-widest text-red-600 font-bold">
+                                <span>Sniper</span>
+                                <span>{typeof product.price === 'number' ? `${product.price} AED` : product.price}</span>
+                              </div>
+                              <h4 className="mt-2 text-sm font-bold text-gray-900">{product.name}</h4>
+                              <p className="mt-1 text-xs text-gray-500">{product.description}</p>
+                              <button
+                                onClick={() => handleProductPurchaseClick(product)}
+                                className="w-full mt-4 inline-flex items-center justify-center rounded-lg border-2 border-gray-900 py-2.5 text-xs font-bold uppercase text-gray-900 hover:bg-gray-900 hover:text-white transition active:scale-[0.98]"
+                              >
+                                Purchase
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-400 text-center py-4">No products available in this category yet.</p>
+                    )}
+                  </div>
+                )}
               </div>
-            </Reveal>
-          ))}
-        </div>
+            );
+          };
+
+          return (
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Reveal>
+                <CategoryBox
+                  title="Car Freshner"
+                  icon="🌸"
+                  products={freshnerProducts}
+                  colorClass="bg-red-600"
+                />
+              </Reveal>
+              <Reveal delay={100}>
+                <CategoryBox
+                  title="Acce"
+                  icon="🛠️"
+                  products={acceProducts}
+                  colorClass="bg-red-600"
+                />
+              </Reveal>
+            </div>
+          );
+        })()}
       </section>
 
       <section id="reviews" className="mx-auto max-w-6xl px-4 pb-10">

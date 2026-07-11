@@ -1,115 +1,31 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_key');
-
-const PaymentForm = ({ orderId, amount, onSuccess }) => {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [loading, setLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('card');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!stripe || !elements) return;
-
-    setLoading(true);
-
-    try {
-      if (paymentMethod === 'cash') {
-        // Manual cash payment
-        await axios.post('/api/payments/manual', {
-          order_id: orderId,
-          amount,
-          method: 'cash'
-        });
-        toast.success('Cash payment recorded');
-        onSuccess();
-      } else {
-        // Stripe payment
-        const { data } = await axios.post('/api/payments/create-intent', {
-          order_id: orderId,
-          amount,
-          payment_method: paymentMethod
-        });
-
-        const { error, paymentIntent } = await stripe.confirmCardPayment(
-          data.client_secret,
-          {
-            payment_method: {
-              card: elements.getElement(CardElement),
-            }
-          }
-        );
-
-        if (error) {
-          toast.error(error.message);
-        } else if (paymentIntent.status === 'succeeded') {
-          await axios.post('/api/payments/confirm', {
-            order_id: orderId,
-            payment_intent_id: paymentIntent.id,
-            amount,
-            method: paymentMethod
-          });
-          toast.success('Payment successful!');
-          onSuccess();
-        }
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Payment failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Payment Method
-        </label>
-        <select
-          value={paymentMethod}
-          onChange={(e) => setPaymentMethod(e.target.value)}
-          className="w-full px-4 py-2 border rounded-lg"
-        >
-          <option value="card">Card</option>
-          <option value="cash">Cash</option>
-          <option value="apple_pay">Apple Pay</option>
-          <option value="samsung_pay">Samsung Pay</option>
-        </select>
-      </div>
-
-      {paymentMethod === 'card' && (
-        <div className="p-4 border rounded-lg">
-          <CardElement />
-        </div>
-      )}
-
-      <button
-        type="submit"
-        disabled={loading || !stripe}
-        className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
-      >
-        {loading ? 'Processing...' : `Pay AED {parseFloat(amount).toLocaleString()}`}
-      </button>
-    </form>
-  );
-};
 
 const OrderDetail = () => {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
+  const [loadingTap, setLoadingTap] = useState(false);
+
 
   useEffect(() => {
     fetchOrder();
+
+    // Check url query parameters for payment status notifications
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    const err = params.get('error');
+    if (status === 'success') {
+      toast.success('Payment completed successfully via Tap Payments!');
+      // Clean query params so toast doesn't show again on refresh
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (status === 'failed') {
+      toast.error(`Payment failed: ${decodeURIComponent(err || 'Unknown error')}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, [id]);
 
   const fetchOrder = async () => {
@@ -133,6 +49,27 @@ const OrderDetail = () => {
     }
   };
 
+  const handleTapCheckout = async () => {
+    setLoadingTap(true);
+    try {
+      const response = await axios.post('/api/payments/tap/create', {
+        order_id: order.id,
+        amount: remainingAmount,
+        redirect_url: window.location.href
+      });
+      if (response.data?.transaction_url) {
+        window.location.href = response.data.transaction_url;
+      } else {
+        toast.error('Failed to get payment URL');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Payment initiation failed');
+    } finally {
+      setLoadingTap(false);
+    }
+  };
+
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
   }
@@ -148,12 +85,21 @@ const OrderDetail = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-800">Order #{order.id}</h1>
-        <Link to="/orders" className="text-primary-600 hover:underline">
-          ← Back to Orders
-        </Link>
-      </div>
+      <div className="space-y-6 no-print">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-gray-800">Order #{order.id}</h1>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => window.print()}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+            >
+              🖨️ Print Bill/Receipt
+            </button>
+            <Link to="/orders" className="text-primary-600 hover:underline">
+              ← Back to Orders
+            </Link>
+          </div>
+        </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow">
@@ -340,12 +286,21 @@ const OrderDetail = () => {
                 </div>
               </div>
             ) : (
-              <button
-                onClick={() => setShowPayment(true)}
-                className="px-6 py-3 border-2 border-primary-600 text-primary-600 font-bold rounded-full hover:bg-primary-50 transition flex items-center gap-2"
-              >
-                Record Cash/Manual Payment
-              </button>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowPayment(true)}
+                  className="px-6 py-3 border-2 border-primary-600 text-primary-600 font-bold rounded-full hover:bg-primary-50 transition flex items-center gap-2"
+                >
+                  Record Cash/Manual Payment
+                </button>
+                <button
+                  onClick={handleTapCheckout}
+                  disabled={loadingTap}
+                  className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-full hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50"
+                >
+                  💳 {loadingTap ? 'Redirecting...' : 'Pay Online via Tap'}
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -376,6 +331,139 @@ const OrderDetail = () => {
           </div>
         </div>
       )}
+      </div>
+
+      {/* Printable Invoice Sheet (Only visible when printing) */}
+      <div className="hidden print:block print-card font-sans text-sm text-black space-y-6 p-4">
+        <style dangerouslySetInnerHTML={{__html: `
+          @media print {
+            @page {
+              size: auto;
+              margin: 10mm !important;
+            }
+            aside, nav, header, button, input, select, .no-print, .text-primary-600 {
+              display: none !important;
+            }
+            body, html {
+              background: white !important;
+              color: black !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              font-size: 11px !important;
+            }
+            main {
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+            .print-card {
+              margin: 0 !important;
+              padding: 0 !important;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
+            }
+            .grid {
+              display: block !important;
+            }
+            .bg-white {
+              border: none !important;
+              box-shadow: none !important;
+              padding: 0 !important;
+              margin-bottom: 20px !important;
+            }
+            .shadow {
+              box-shadow: none !important;
+            }
+            .border-2 {
+              border: none !important;
+            }
+          }
+        `}} />
+
+        <div className="text-center border-b pb-4">
+          <h1 className="text-3xl font-black tracking-wide">SNIPER CAR CARE</h1>
+          <p className="text-xs text-gray-550">Auto Detailing & Ceramic Coatings</p>
+          <p className="text-xs text-gray-500 mt-1">Tel: +971 50 114 6245 | Abu Dhabi, UAE</p>
+        </div>
+
+        <div className="flex justify-between text-xs">
+          <div>
+            <h3 className="font-bold text-xs uppercase mb-1">Bill To:</h3>
+            <p className="font-semibold text-gray-800">{order.customer_name || 'Walk-in Customer'}</p>
+            {order.customer_phone && <p>Tel: {order.customer_phone}</p>}
+            {order.vehicle_plate && <p className="font-mono mt-1 bg-gray-150 px-2 py-0.5 rounded inline-block">Plate: {order.vehicle_plate}</p>}
+          </div>
+          <div className="text-right">
+            <h3 className="font-bold text-xs uppercase mb-1">Invoice Info:</h3>
+            <p><span className="font-bold">Invoice #:</span> CC-{order.id}</p>
+            <p><span className="font-bold">Date:</span> {new Date(order.created_at).toLocaleDateString()}</p>
+            <p><span className="font-bold">Status:</span> {order.status === 'completed' ? 'Completed' : 'In Progress'}</p>
+            <p><span className="font-bold">Payment:</span> {order.payment_status.toUpperCase()}</p>
+          </div>
+        </div>
+
+        <table className="w-full text-left border-collapse text-xs mt-4">
+          <thead>
+            <tr className="border-b-2 border-gray-300 font-bold bg-gray-100">
+              <th className="p-2">Item Description</th>
+              <th className="p-2 text-center">Qty</th>
+              <th className="p-2 text-right">Unit Price</th>
+              <th className="p-2 text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {order.items?.map((item) => (
+              <tr key={item.id}>
+                <td className="p-2 font-semibold">{item.product_name}</td>
+                <td className="p-2 text-center">{item.quantity}</td>
+                <td className="p-2 text-right">AED {parseFloat(item.price).toFixed(2)}</td>
+                <td className="p-2 text-right">AED {parseFloat(item.price * item.quantity).toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="flex justify-end pt-4 border-t">
+          <div className="w-64 space-y-1.5 text-xs">
+            <div className="flex justify-between">
+              <span>Subtotal:</span>
+              <span>AED {(parseFloat(order.total) + (parseFloat(order.discount) || 0)).toFixed(2)}</span>
+            </div>
+            {order.discount > 0 && (
+              <div className="flex justify-between text-red-650">
+                <span>Discount:</span>
+                <span>-AED {parseFloat(order.discount).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-sm border-t pt-1">
+              <span>Net Amount:</span>
+              <span>AED {parseFloat(order.total).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between font-bold border-b pb-1 text-gray-600">
+              <span>Remaining Balance:</span>
+              <span>AED {remainingAmount.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {order.payments && order.payments.length > 0 && (
+          <div className="pt-4 mt-4 border-t">
+            <h4 className="font-bold text-xs uppercase mb-2">Payment Logs</h4>
+            <div className="space-y-1 text-[10px]">
+              {order.payments.map((payment) => (
+                <div key={payment.id} className="flex justify-between py-1 border-b border-dashed">
+                  <span>{new Date(payment.created_at).toLocaleString()} - Method: <span className="capitalize font-semibold">{payment.method}</span> ({payment.status})</span>
+                  <span className="font-semibold">AED {parseFloat(payment.amount).toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="text-center pt-8 text-[10px] text-gray-400">
+          <p>Thank you for choosing Sniper Car Care!</p>
+          <p>This is a computer generated invoice. No signature required.</p>
+        </div>
+      </div>
     </div>
   );
 };

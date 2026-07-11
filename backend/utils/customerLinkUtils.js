@@ -1,5 +1,6 @@
 function isFourByFour(vehicleType = '') {
-  const normalized = vehicleType.toLowerCase();
+  const safeType = vehicleType || '';
+  const normalized = safeType.toLowerCase();
   return normalized.includes('4x4') || normalized.includes('4-wheel') || normalized.includes('4wheel');
 }
 

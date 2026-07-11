@@ -168,7 +168,7 @@ const getOrderPayments = asyncHandler(async (req, res) => {
 // @route   POST /api/payments/manual
 // @access  Private
 const processManualPayment = asyncHandler(async (req, res) => {
-  const { order_id, amount, method } = req.body;
+  const { order_id, amount, method, status = 'completed' } = req.body;
 
   if (!order_id || !amount || !method) {
     return res.status(400).json({ message: 'Order ID, amount, and method are required' });
@@ -181,7 +181,7 @@ const processManualPayment = asyncHandler(async (req, res) => {
     // Record payment
     await connection.query(
       'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
-      [order_id, amount, method, 'completed']
+      [order_id, amount, method, status]
     );
 
     // Update order payment status
@@ -197,9 +197,9 @@ const processManualPayment = asyncHandler(async (req, res) => {
         [order_id]
       );
 
-      const totalPaid = parseFloat(payments[0].total_paid || 0) + parseFloat(amount);
+      const totalPaid = parseFloat(payments[0].total_paid || 0);
 
-      const newPaymentStatus = totalPaid >= orderTotal ? 'paid' : 'partial';
+      const newPaymentStatus = totalPaid >= orderTotal ? 'paid' : (totalPaid > 0 ? 'partial' : 'pending');
       await connection.query(
         'UPDATE orders SET payment_status = ? WHERE id = ?',
         [newPaymentStatus, order_id]

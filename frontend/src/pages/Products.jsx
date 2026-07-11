@@ -13,7 +13,7 @@ const Products = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    category: 'Accessories',
+    category: 'Car Freshner',
     price: '',
     purchase_price: '',
     stock: '',
@@ -132,7 +132,7 @@ const Products = () => {
       setFormData({
         name: '',
         description: '',
-        category: 'Accessories',
+        category: 'Car Freshner',
         price: '',
         purchase_price: '',
         stock: '',
@@ -270,7 +270,7 @@ const Products = () => {
                 setFormData({
                   name: '',
                   description: '',
-                  category: 'Accessories',
+                  category: 'Car Freshner',
                   price: '',
                   purchase_price: '',
                   stock: '',
@@ -504,15 +504,15 @@ const Products = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category
+                    Select Category
                   </label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg"
+                    className="w-full px-4 py-2 border rounded-lg font-semibold bg-white"
                   >
-                    <option value="Accessories">Accessories</option>
-                    <option value="Spare Parts">Spare Parts</option>
+                    <option value="Car Freshner">Car Freshner</option>
+                    <option value="Acce">Acce</option>
                   </select>
                 </div>
                 <div>

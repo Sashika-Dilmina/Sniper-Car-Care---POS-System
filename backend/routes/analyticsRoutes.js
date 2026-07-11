@@ -9,7 +9,8 @@ const {
   getCustomerWiseReport,
   getSupplierPaymentReport,
   getPurchasesReport,
-  getProfitLossReport
+  getProfitLossReport,
+  getStockReport
 } = require('../controllers/analyticsController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -27,6 +28,7 @@ router.get('/reports/customer-wise', authorize('admin'), getCustomerWiseReport);
 router.get('/reports/supplier-payments', authorize('admin'), getSupplierPaymentReport);
 router.get('/reports/purchases', authorize('admin'), getPurchasesReport);
 router.get('/reports/profit-loss', authorize('admin'), getProfitLossReport);
+router.get('/reports/stock', authorize('admin'), getStockReport);
 
 module.exports = router;
 

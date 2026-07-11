@@ -111,7 +111,10 @@ const Layout = () => {
     return () => clearInterval(interval);
   }, [user]);
 
-  const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
+  const isActive = (path) => {
+    const cleanPath = path.split('?')[0];
+    return location.pathname === cleanPath || location.pathname.startsWith(cleanPath + '/');
+  };
 
   const navIcons = {
     dashboard: (
@@ -222,14 +225,16 @@ const Layout = () => {
       { path: '/products', label: 'Products', icon: 'products' },
       { path: '/services', label: 'Services', icon: 'services' },
       { path: '/vip', label: 'VIP', icon: 'vip' },
+      { path: '/expenses', label: 'Expenses', icon: 'expenses' },
       { path: '/anpr', label: 'ANPR', icon: 'anpr' },
+      { path: '/reports?tab=registers', label: 'Cash Register Report', icon: 'reports' },
     ];
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-screen bg-white shadow-lg z-50 transition-all duration-300 flex flex-col ${isCollapsed ? 'w-20' : 'w-64'}`}>
+      <aside className={`fixed left-0 top-0 h-screen bg-white shadow-lg z-50 transition-all duration-300 flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} no-print`}>
         <div className="p-6 border-b flex items-center justify-between flex-shrink-0">
           <div className={`transition-opacity duration-300 ${isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
             <h1 className="text-2xl font-bold text-primary-600 whitespace-nowrap">Sniper Car Care</h1>

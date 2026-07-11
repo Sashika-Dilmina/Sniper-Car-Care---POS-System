@@ -183,8 +183,6 @@ const getRegisterReport = asyncHandler(async (req, res) => {
       other_payments: otherSales,
       credit_sales: creditSales,
       credit_sale_recovery: creditRecoveries,
-      delivery_sales: 0.00,
-      delivery_sale_recovery: 0.00,
       sale_return: 0.00,
       total_expense: totalExpenses,
       cash_expense: cashExpenses,
@@ -246,6 +244,7 @@ const closeRegister = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Register closed successfully',
+    register_id: register.id,
     closing_balance: amountInCashDrawer,
     closed_amount: parseFloat(closed_amount)
   });

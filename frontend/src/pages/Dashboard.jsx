@@ -10,7 +10,8 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [analytics, setAnalytics] = useState(null);
   const [vipAppointments, setVipAppointments] = useState([]);
-  const [period, setPeriod] = useState('today');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [vipLoading, setVipLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [completedServices, setCompletedServices] = useState([]);
@@ -86,9 +87,7 @@ const Dashboard = () => {
         setRegisterNotes('');
         setShowCloseRegisterModal(false);
         fetchRegisterStatus();
-        if (isAdmin) {
-          navigate('/reports?tab=registers');
-        }
+        navigate(`/reports?tab=registers&print_register_id=${resp.data.register_id}`);
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to close register');
@@ -132,7 +131,7 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    fetchAnalytics(false, period);
+    fetchAnalytics(false, startDate, endDate);
     fetchVIPAppointments();
     fetchRegisterStatus();
     if (isAdmin) {
@@ -140,7 +139,7 @@ const Dashboard = () => {
     }
 
     const interval = setInterval(() => {
-      fetchAnalytics(true, period);
+      fetchAnalytics(true, startDate, endDate);
       fetchVIPAppointments(true);
       fetchRegisterStatus();
       if (isAdmin) {
@@ -149,7 +148,7 @@ const Dashboard = () => {
     }, 7000);
 
     return () => clearInterval(interval);
-  }, [isAdmin, period]);
+  }, [isAdmin, startDate, endDate]);
 
   const fetchCompletedServices = async (silent = false) => {
     if (!silent) setServicesLoading(true);
@@ -196,10 +195,10 @@ const Dashboard = () => {
     }
   };
 
-  const fetchAnalytics = async (silent = false, currentPeriod = period) => {
+  const fetchAnalytics = async (silent = false, start = startDate, end = endDate) => {
     if (!silent) setLoading(true);
     try {
-      const response = await axios.get(`/api/analytics/dashboard?period=${currentPeriod}`);
+      const response = await axios.get(`/api/analytics/dashboard?start_date=${start}&end_date=${end}`);
       console.log('Analytics response:', response.data);
       if (response.data) {
         setAnalytics(response.data);
@@ -288,18 +287,28 @@ const Dashboard = () => {
         }
       `}} />
 
-      <div className="flex justify-between items-center no-print">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print">
         <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          className="px-4 py-2 border rounded-lg"
-        >
-          <option value="today">Today</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-        </select>
+        <div className="flex flex-wrap items-center gap-3 bg-white p-2 border rounded-xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase">From</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-1.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase">To</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-1.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Cash Register Session Widget */}

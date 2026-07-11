@@ -13,7 +13,7 @@ router.use(protect);
 
 router.route('/')
   .get(getExpenses)
-  .post(authorize('admin'), createExpense);
+  .post(createExpense);
 
 router.route('/:id')
   .get(getExpense)

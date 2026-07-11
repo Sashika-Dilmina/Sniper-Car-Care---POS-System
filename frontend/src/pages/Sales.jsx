@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
@@ -29,7 +29,7 @@ const Sales = () => {
   const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -69,6 +69,7 @@ const Sales = () => {
   const [paymentMethod, setPaymentMethod] = useState('cash'); // cash, tap, card, credit (unpaid)
   const [tapSubOption, setTapSubOption] = useState('apple_pay');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const isCheckingOutRef = useRef(false);
 
   // Register check state
   const [activeRegister, setActiveRegister] = useState(null);
@@ -86,6 +87,19 @@ const Sales = () => {
       setActiveSubTab('pos');
     }
   }, [user]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    const err = params.get('error');
+    if (status === 'success') {
+      toast.success('Payment completed successfully via Tap Payments!');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (status === 'failed') {
+      toast.error(`Payment failed: ${decodeURIComponent(err || 'Unknown error')}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     fetchProducts();
@@ -236,7 +250,7 @@ const Sales = () => {
       // Reset registration form
       setNewCustomer({
         name: '',
-        phone: '',
+        phone: '+9715',
         emirate: '',
         plate_code: '',
         plate_number: '',
@@ -255,6 +269,7 @@ const Sales = () => {
 
   // Complete Order Checkout Flow
   const handleCheckout = async () => {
+    if (isCheckingOutRef.current) return;
     if (cart.length === 0) {
       toast.error('Your cart is empty!');
       return;
@@ -265,6 +280,7 @@ const Sales = () => {
       return;
     }
 
+    isCheckingOutRef.current = true;
     setIsCheckingOut(true);
     try {
       // 1. Create order in the backend
@@ -285,24 +301,26 @@ const Sales = () => {
       const createdOrder = orderResponse.data.order;
 
       // 2. Process payment based on method
-      if (paymentMethod === 'cash') {
+      if (paymentMethod === 'cash' || paymentMethod === 'card') {
+        const hasService = cart.some(item => item.category === 'Services');
         await axios.post('/api/payments/manual', {
           order_id: createdOrder.id,
           amount: total,
-          method: 'cash'
+          method: paymentMethod,
+          status: hasService ? 'pending' : 'completed'
         });
       } else if (paymentMethod === 'tap') {
-        await axios.post('/api/payments/manual', {
+        const tapResponse = await axios.post('/api/payments/tap/create', {
           order_id: createdOrder.id,
           amount: total,
-          method: tapSubOption
+          redirect_url: window.location.origin + '/sales?status=success&order_id=' + createdOrder.id
         });
-      } else if (paymentMethod === 'card') {
-        await axios.post('/api/payments/manual', {
-          order_id: createdOrder.id,
-          amount: total,
-          method: 'card'
-        });
+        if (tapResponse.data?.transaction_url) {
+          window.location.href = tapResponse.data.transaction_url;
+          return; // Stop cart clearing since we redirect
+        } else {
+          throw new Error('Failed to retrieve Tap payment URL');
+        }
       } else if (paymentMethod === 'credit') {
         await axios.post('/api/credits', {
           customer_id: selectedCustomer.id,
@@ -324,14 +342,14 @@ const Sales = () => {
       setSelectedCustomer(null);
       setCustomerSearch('');
       setPaymentMethod('cash');
-      setCardSubOption('card');
       
       // Refresh local products (for updated stock counts)
       fetchProducts();
     } catch (error) {
       console.error(error);
-      toast.error(error.response?.data?.message || 'Failed to complete sale');
+      toast.error(error.response?.data?.message || error.message || 'Failed to complete sale');
     } finally {
+      isCheckingOutRef.current = false;
       setIsCheckingOut(false);
     }
   };
@@ -518,7 +536,7 @@ const Sales = () => {
               {/* Category tabs and Search bar */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex bg-gray-100 p-1.5 rounded-xl gap-1 overflow-x-auto">
-                  {['All', 'Services', 'Accessories', 'Spare Parts'].map(cat => (
+                  {['All', 'Services', 'Car Freshner', 'Acce'].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
@@ -866,31 +884,7 @@ const Sales = () => {
                     </div>
                   </div>
 
-                  {/* Tap Sub-payment methods */}
-                  {paymentMethod === 'tap' && (
-                    <div className="space-y-1.5 p-3 bg-gray-50 border border-gray-150 rounded-xl">
-                      <label className="block text-[11px] font-black uppercase text-gray-500">Tap Type</label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[
-                          { key: 'apple_pay', label: ' Apple Pay' },
-                          { key: 'samsung_pay', label: '📱 Samsung Pay' }
-                        ].map(sub => (
-                          <button
-                            key={sub.key}
-                            type="button"
-                            onClick={() => setTapSubOption(sub.key)}
-                            className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition-all ${
-                              tapSubOption === sub.key
-                                ? 'bg-gray-800 text-white border-gray-800 shadow-sm'
-                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
-                            }`}
-                          >
-                            {sub.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+
 
                 </div>
               )}

@@ -67,11 +67,11 @@ const getOrders = asyncHandler(async (req, res) => {
     params.push(customer_id);
   }
 
-  if (req.user && req.user.role === 'staff') {
-    query += ' AND DATE(o.created_at) = CURDATE()';
-  } else if (date) {
+  if (date) {
     query += ' AND DATE(o.created_at) = ?';
     params.push(date);
+  } else if (req.user && req.user.role === 'staff') {
+    query += ' AND DATE(o.created_at) = CURDATE()';
   }
 
   // Filter by service time at SQL level
@@ -214,8 +214,13 @@ const createOrder = asyncHandler(async (req, res) => {
     let vehicleType = 'Saloon';
     if (customer_id) {
       const [custRows] = await connection.query('SELECT vehicle_type FROM customers WHERE id = ?', [customer_id]);
-      if (custRows.length > 0) {
-        vehicleType = custRows[0].vehicle_type;
+      if (custRows.length > 0 && custRows[0].vehicle_type) {
+        const val = custRows[0].vehicle_type.toString().trim();
+        if (val === 'Saloon' || val === '4x4') {
+          vehicleType = val;
+        } else if (val.toLowerCase().includes('4x4') || val.toLowerCase().includes('4-wheel') || val.toLowerCase().includes('4wheel')) {
+          vehicleType = '4x4';
+        }
       }
     }
 

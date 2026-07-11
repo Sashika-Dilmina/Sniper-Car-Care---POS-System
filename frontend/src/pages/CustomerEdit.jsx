@@ -71,7 +71,7 @@ const CustomerEdit = () => {
 
       setFormData({
         name: customer.name || '',
-        phone: customer.phone || '',
+        phone: customer.phone || '+9715',
         emirate: emirate,
         plate_code: plateCode,
         plate_number: plateNumber,

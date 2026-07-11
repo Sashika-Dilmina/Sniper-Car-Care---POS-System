@@ -134,7 +134,7 @@ const Customers = () => {
   const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -192,7 +192,7 @@ const Customers = () => {
       setShowAddModal(false);
       setNewCustomer({
         name: '',
-        phone: '',
+        phone: '+9715',
         emirate: '',
         plate_code: '',
         plate_number: '',
@@ -209,7 +209,7 @@ const Customers = () => {
     setCheckinForm({
       customer_id: customer.id,
       name: customer.name || '',
-      phone: customer.phone || '',
+      phone: customer.phone || '+9715',
       vehicle_plate: customer.vehicle_plate || '',
       vehicle_type: customer.vehicle_type || 'Saloon',
       province: customer.province || 'Dubai',
