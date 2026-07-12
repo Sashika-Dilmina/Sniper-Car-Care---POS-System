@@ -21,17 +21,24 @@ const CustomerDetail = () => {
 
   useEffect(() => {
     fetchCustomer();
+
+    const interval = setInterval(() => {
+      fetchCustomer(true);
+    }, 7000);
+
+    return () => clearInterval(interval);
   }, [id]);
 
-  const fetchCustomer = async () => {
+  const fetchCustomer = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const response = await axios.get(`/api/customers/${id}`);
       setCustomer(response.data.customer);
       setOrders(response.data.orders || []);
     } catch (error) {
-      toast.error('Failed to load customer details');
+      if (!silent) toast.error('Failed to load customer details');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 

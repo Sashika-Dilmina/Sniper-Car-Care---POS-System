@@ -935,10 +935,6 @@ const Dashboard = () => {
                   <span className="text-gray-600">Cash Expenses:</span>
                   <span className="font-semibold text-red-600">- AED {registerReport.cash_expense.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between border-t pt-2 font-bold">
-                  <span>Expected Cash in Drawer:</span>
-                  <span>AED {registerReport.amount_in_cash_drawer.toFixed(2)}</span>
-                </div>
                 <div className="flex justify-between border-t pt-2 text-xs text-gray-500">
                   <span>Other Sales (Card, Bank, Tap):</span>
                   <span>AED {(registerReport.card_payments.total + registerReport.bank_transfer + registerReport.other_payments).toFixed(2)}</span>

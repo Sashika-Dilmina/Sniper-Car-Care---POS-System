@@ -188,13 +188,23 @@ const createOrder = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
-    // Check if any of the products in items is a service
+    // Verify stock and check if any product is a service
     let hasService = false;
     for (let item of items) {
-      const [prodRows] = await connection.query('SELECT category FROM products WHERE id = ?', [item.product_id]);
-      if (prodRows.length > 0 && prodRows[0].category === 'Services') {
-        hasService = true;
-        break;
+      const [prodRows] = await connection.query('SELECT name, stock, category FROM products WHERE id = ?', [item.product_id]);
+      if (prodRows.length > 0) {
+        const prod = prodRows[0];
+        const isService = prod.category === 'Services' || prod.category === 'VIP';
+        if (isService) {
+          hasService = true;
+        } else {
+          // Verify stock limit
+          if (prod.stock < item.quantity) {
+            await connection.rollback();
+            connection.release();
+            return res.status(400).json({ message: `Insufficient stock for product ${prod.name}. Available: ${prod.stock}` });
+          }
+        }
       }
     }
 
@@ -231,15 +241,19 @@ const createOrder = asyncHandler(async (req, res) => {
         [orderId, item.product_id, item.quantity, item.price]
       );
 
-      // Update product stock
-      await connection.query(
-        'UPDATE products SET stock = stock - ? WHERE id = ?',
-        [item.quantity, item.product_id]
-      );
+      const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
+      const isService = prodRows.length > 0 && (prodRows[0].category === 'Services' || prodRows[0].category === 'VIP');
+
+      // Update product stock (only for non-service items)
+      if (!isService) {
+        await connection.query(
+          'UPDATE products SET stock = stock - ? WHERE id = ?',
+          [item.quantity, item.product_id]
+        );
+      }
 
       // Check if item is a service, and create service task
-      const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
-      if (prodRows.length > 0 && prodRows[0].category === 'Services') {
+      if (isService) {
         await connection.query(
           'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, started_at, order_id) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)',
           [customer_id || null, prodRows[0].name, vehicleType, item.price, 'Added via POS Order', 'in_progress', orderId]

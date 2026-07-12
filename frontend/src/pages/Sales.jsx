@@ -173,7 +173,7 @@ const Sales = () => {
 
   // Add Product/Service to Cart
   const addToCart = (product) => {
-    if (product.stock !== undefined && product.stock <= 0 && product.category !== 'Services') {
+    if (product.stock !== undefined && product.stock <= 0 && product.category !== 'Services' && product.category !== 'VIP') {
       toast.error('Item is out of stock!');
       return;
     }
@@ -182,7 +182,7 @@ const Sales = () => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
         // If not a service, check stock limits
-        if (product.category !== 'Services' && existing.quantity >= product.stock) {
+        if (product.category !== 'Services' && product.category !== 'VIP' && existing.quantity >= product.stock) {
           toast.error(`Only ${product.stock} items available in stock!`);
           return prev;
         }
@@ -203,7 +203,7 @@ const Sales = () => {
           if (newQty <= 0) return null;
           
           // Check stock limits for physical products
-          if (amount > 0 && item.category !== 'Services' && newQty > item.stock) {
+          if (amount > 0 && item.category !== 'Services' && item.category !== 'VIP' && newQty > item.stock) {
             toast.error(`Only ${item.stock} items available in stock!`);
             return item;
           }
@@ -222,7 +222,8 @@ const Sales = () => {
   // Quick Register Customer Submit
   const handleQuickRegisterSubmit = async (e) => {
     e.preventDefault();
-    if (!newCustomer.name || !newCustomer.phone || !newCustomer.plate_number) {
+    const isNoVehicle = newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care';
+    if (!newCustomer.name || !newCustomer.phone || (!isNoVehicle && !newCustomer.plate_number)) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -235,10 +236,16 @@ const Sales = () => {
     }
 
     try {
-      const response = await axios.post('/api/anpr/register', {
+      const payload = {
         ...newCustomer,
         phone: cleanPhone
-      });
+      };
+      if (isNoVehicle) {
+        payload.plate_code = '';
+        payload.plate_number = `${newCustomer.emirate} - ${cleanPhone}`;
+      }
+
+      const response = await axios.post('/api/anpr/register', payload);
       const createdCustomer = response.data.customer;
       toast.success('Customer registered successfully!');
       
@@ -302,7 +309,7 @@ const Sales = () => {
 
       // 2. Process payment based on method
       if (paymentMethod === 'cash' || paymentMethod === 'card') {
-        const hasService = cart.some(item => item.category === 'Services');
+        const hasService = cart.some(item => item.category === 'Services' || item.category === 'VIP');
         await axios.post('/api/payments/manual', {
           order_id: createdOrder.id,
           amount: total,
@@ -383,7 +390,7 @@ const Sales = () => {
   const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
 
   const renderCatalogCard = (product) => {
-    const isService = product.category === 'Services';
+    const isService = product.category === 'Services' || product.category === 'VIP';
     const outOfStock = !isService && product.stock <= 0;
 
     return (
@@ -532,11 +539,10 @@ const Sales = () => {
           {/* LEFT COLUMN: Catalog / Product & Service List (Col Span 2) */}
           <div className="xl:col-span-2 space-y-4">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-              
               {/* Category tabs and Search bar */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex bg-gray-100 p-1.5 rounded-xl gap-1 overflow-x-auto">
-                  {['All', 'Services', 'Car Freshner', 'Acce'].map(cat => (
+                  {['All', 'Services', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
@@ -562,9 +568,9 @@ const Sales = () => {
 
               {/* Catalog Grid */}
               {loadingProducts ? (
-                <div className="flex justify-center items-center h-64 text-gray-500">Loading catalog...</div>
+                <div className="flex justify-center items-center h-64 text-gray-550">Loading catalog...</div>
               ) : filteredProducts.length > 0 ? (
-                selectedCategory === 'Services' ? (
+                (selectedCategory === 'Services' || selectedCategory === 'VIP') ? (
                   <div className="space-y-6 max-h-[600px] overflow-y-auto pr-1">
                     {/* Saloon Services Group */}
                     <div className="space-y-3">
@@ -740,30 +746,38 @@ const Sales = () => {
                           <option value="Umm Al Quwain">Umm Al Quwain</option>
                           <option value="Ras Al Khaimah">Ras Al Khaimah</option>
                           <option value="Fujairah">Fujairah</option>
+                          <option value="Garage">Garage</option>
+                          <option value="Sniper car care">Sniper car care</option>
                         </select>
 
-                        <SearchableSelect
-                          options={plateCodes}
-                          value={newCustomer.plate_code}
-                          onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
-                          disabled={plateCodes.length === 0}
-                        />
+                        {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                          <SearchableSelect
+                            options={plateCodes}
+                            value={newCustomer.plate_code}
+                            onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
+                            disabled={plateCodes.length === 0}
+                          />
+                        )}
                       </div>
 
-                      <input
-                        type="text"
-                        required
-                        placeholder="Plate Number (e.g. 12345) *"
-                        value={newCustomer.plate_number}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
-                        className="w-full px-3 py-1.5 border rounded-lg text-sm font-mono"
-                      />
+                      {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                        <input
+                          type="text"
+                          required={!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care')}
+                          placeholder="Plate Number (e.g. 12345) *"
+                          value={newCustomer.plate_number}
+                          onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                          className="w-full px-3 py-1.5 border rounded-lg text-sm font-mono"
+                        />
+                      )}
 
-                      <VehiclePlatePreview 
-                        emirate={newCustomer.emirate} 
-                        plateCode={newCustomer.plate_code} 
-                        plateNumber={newCustomer.plate_number} 
-                      />
+                      {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                        <VehiclePlatePreview 
+                          emirate={newCustomer.emirate} 
+                          plateCode={newCustomer.plate_code} 
+                          plateNumber={newCustomer.plate_number} 
+                        />
+                      )}
                     </div>
 
                     <div className="flex gap-2 justify-end pt-1">
@@ -859,10 +873,9 @@ const Sales = () => {
                   {/* Payment Method */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       {[
                         { key: 'cash', label: '💵 Cash' },
-                        { key: 'tap', label: '📱 Tap' },
                         { key: 'card', label: '💳 Card' },
                         { key: 'credit', label: '🏦 Credit' }
                       ].map(pm => (

@@ -128,7 +128,7 @@ const OrderDetail = () => {
                   {isProductOnly ? 'Order Placed' : (order.status === 'processing' ? 'In Progress' : order.status)}
                 </span>
 
-                {order.status === 'processing' && !isProductOnly && (
+                {(order.status === 'processing' || order.status === 'pending') && !isProductOnly && (
                   <button
                     onClick={() => handleStatusUpdate('completed')}
                     className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98]"

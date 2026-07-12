@@ -38,18 +38,15 @@ const getEmployee = asyncHandler(async (req, res) => {
 // @route   POST /api/employees
 // @access  Private (Admin only)
 const createEmployee = asyncHandler(async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
+  const role = req.body.role === 'admin' ? 'admin' : 'staff';
 
-  if (!name || !email || !password || !role) {
+  if (!name || !email || !password) {
     return res.status(400).json({ message: 'Please provide all required fields' });
   }
 
   if (password.length < 6) {
     return res.status(400).json({ message: 'Password must be at least 6 characters' });
-  }
-
-  if (!['admin', 'staff'].includes(role)) {
-    return res.status(400).json({ message: 'Invalid role. Must be admin or staff' });
   }
 
   // Check if email already exists
@@ -86,7 +83,8 @@ const createEmployee = asyncHandler(async (req, res) => {
 // @access  Private (Admin only)
 const updateEmployee = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
+  const role = req.body.role === 'admin' ? 'admin' : 'staff';
 
   const [employees] = await pool.query('SELECT id FROM users WHERE id = ?', [id]);
   if (employees.length === 0) {

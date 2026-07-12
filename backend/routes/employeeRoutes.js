@@ -10,16 +10,15 @@ const {
 const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect);
-router.use(authorize('admin'));
 
 router.route('/')
   .get(getEmployees)
-  .post(createEmployee);
+  .post(authorize('admin'), createEmployee);
 
 router.route('/:id')
-  .get(getEmployee)
-  .put(updateEmployee)
-  .delete(deleteEmployee);
+  .get(authorize('admin'), getEmployee)
+  .put(authorize('admin'), updateEmployee)
+  .delete(authorize('admin'), deleteEmployee);
 
 module.exports = router;
 
