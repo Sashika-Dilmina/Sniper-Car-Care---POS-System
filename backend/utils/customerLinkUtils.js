@@ -21,8 +21,9 @@ function buildCustomerWebsiteUrl(vehicleType = 'Saloon', plateNumber) {
     return baseUrl;
   }
 
+  const cleanPlate = plateNumber.replace(/\s+/g, '');
   const separator = baseUrl.includes('?') ? '&' : '?';
-  return `${baseUrl}${separator}plate=${encodeURIComponent(plateNumber)}`;
+  return `${baseUrl}${separator}plate=${encodeURIComponent(cleanPlate)}`;
 }
 
 function buildFeedbackUrl({ vehicleType = 'Saloon', customerId, plate, orderId }) {
@@ -41,7 +42,7 @@ function buildFeedbackUrl({ vehicleType = 'Saloon', customerId, plate, orderId }
   const params = new URLSearchParams();
 
   if (customerId) params.append('customer_id', customerId);
-  if (plate) params.append('plate', plate);
+  if (plate) params.append('plate', plate.replace(/\s+/g, ''));
   if (orderId) params.append('order_id', orderId);
 
   return params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
@@ -62,7 +63,7 @@ function buildPaymentUrl({ vehicleType = 'Saloon', plate, orderId }) {
   const baseUrl = (isFourByFour(vehicleType) ? fourByFourBase : saloonBase) + '/payment';
 
   const params = new URLSearchParams();
-  if (plate) params.append('plate', plate);
+  if (plate) params.append('plate', plate.replace(/\s+/g, ''));
   if (orderId) params.append('order_id', orderId);
 
   return `${baseUrl}?${params.toString()}`;
@@ -85,7 +86,13 @@ function formatPhoneNumber(rawPhone) {
     return `+${digits.slice(2)}`;
   }
 
-  const defaultCode = process.env.RESON8_DEFAULT_COUNTRY_CODE || '+94';
+  const defaultCode = process.env.RESON8_DEFAULT_COUNTRY_CODE || '+971';
+  const defaultCodeDigits = defaultCode.replace(/\D/g, '');
+
+  if (digits.startsWith(defaultCodeDigits)) {
+    return `+${digits}`;
+  }
+
   if (digits.startsWith('0')) {
     return `${defaultCode}${digits.slice(1)}`;
   }

@@ -397,7 +397,14 @@ const OrderDetail = () => {
             <p><span className="font-bold">Invoice #:</span> CC-{order.id}</p>
             <p><span className="font-bold">Date:</span> {new Date(order.created_at).toLocaleDateString()}</p>
             <p><span className="font-bold">Status:</span> {order.status === 'completed' ? 'Completed' : 'In Progress'}</p>
-            <p><span className="font-bold">Payment:</span> {order.payment_status.toUpperCase()}</p>
+            {order.credit_status ? (
+              <>
+                <p><span className="font-bold">Payment:</span> CREDIT</p>
+                <p><span className="font-bold">Credit Status:</span> {order.credit_status.replace('_', ' ').toUpperCase()}</p>
+              </>
+            ) : (
+              <p><span className="font-bold">Payment:</span> {order.payment_status.toUpperCase()}</p>
+            )}
           </div>
         </div>
 
@@ -438,10 +445,17 @@ const OrderDetail = () => {
               <span>Net Amount:</span>
               <span>AED {parseFloat(order.total).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between font-bold border-b pb-1 text-gray-600">
-              <span>Remaining Balance:</span>
-              <span>AED {remainingAmount.toFixed(2)}</span>
-            </div>
+            {order.credit_status ? (
+              <div className="flex justify-between font-bold border-b pb-1 text-red-600">
+                <span>Credit Balance (To Pay):</span>
+                <span>AED {parseFloat(order.credit_remaining || 0).toFixed(2)}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between font-bold border-b pb-1 text-gray-600">
+                <span>Remaining Balance:</span>
+                <span>AED {remainingAmount.toFixed(2)}</span>
+              </div>
+            )}
           </div>
         </div>
 

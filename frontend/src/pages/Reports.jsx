@@ -515,6 +515,7 @@ const Reports = () => {
             Print Report
           </button>
         </div>
+      </div>
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow no-print">
@@ -1583,7 +1584,9 @@ const Reports = () => {
                 >
                   🖨️ Print Statement
                 </button>
-                  {/* Printable Cash Register Report Card */}
+              </div>
+              
+              {/* Printable Cash Register Report Card */}
               <div className="print-full-width mx-auto max-w-3xl p-6 border rounded-2xl bg-white space-y-4 text-black font-mono text-[14px] shadow-sm">
                 <div className="text-center pb-3 border-b border-dashed border-gray-400">
                   <h2 className="text-sm font-bold uppercase tracking-wider">Register Details</h2>
@@ -1650,12 +1653,11 @@ const Reports = () => {
                     <p>{selectedRegisterReport.notes}</p>
                   </div>
                 )}
-              </div>              </div>
+              </div>
             </div>
           )}
         </div>
       )}
-      </div>
 
       {/* Printable Cash Register Report Card (Only visible when printing) */}
       {selectedRegisterReport && (

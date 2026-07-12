@@ -12,9 +12,16 @@ const getCustomerByPlate = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Vehicle plate is required' });
   }
 
+  const cleanPlate = plate.replace(/\s+/g, '');
   const [customers] = await pool.query(
-    'SELECT * FROM customers WHERE vehicle_plate = ?',
-    [plate]
+    `SELECT DISTINCT c.* FROM customers c
+     LEFT JOIN vehicles v ON c.id = v.CustomerId
+     WHERE c.vehicle_plate = ?
+        OR REPLACE(c.vehicle_plate, ' ', '') = ?
+        OR v.VehicleRegistrationNumber = ?
+        OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = ?
+     LIMIT 1`,
+    [plate, cleanPlate, plate, cleanPlate]
   );
 
   if (customers.length === 0) {
@@ -87,9 +94,16 @@ const getCustomerOrders = asyncHandler(async (req, res) => {
   let customerId = id;
 
   if (!customerId) {
+    const cleanPlate = plate.replace(/\s+/g, '');
     const [customers] = await pool.query(
-      'SELECT id FROM customers WHERE vehicle_plate = ?',
-      [plate]
+      `SELECT DISTINCT c.id FROM customers c
+       LEFT JOIN vehicles v ON c.id = v.CustomerId
+       WHERE c.vehicle_plate = ?
+          OR REPLACE(c.vehicle_plate, ' ', '') = ?
+          OR v.VehicleRegistrationNumber = ?
+          OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = ?
+       LIMIT 1`,
+      [plate, cleanPlate, plate, cleanPlate]
     );
     if (customers.length === 0) {
       return res.status(404).json({ message: 'Customer not found' });
@@ -152,9 +166,13 @@ const getCustomerNotifications = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Vehicle plate is required' });
   }
 
+  const cleanPlate = plate.replace(/\s+/g, '');
   const [notifications] = await pool.query(
-    'SELECT * FROM customer_notifications WHERE vehicle_plate = ? ORDER BY created_at DESC LIMIT 50',
-    [plate]
+    `SELECT * FROM customer_notifications 
+     WHERE vehicle_plate = ? 
+        OR REPLACE(vehicle_plate, ' ', '') = ? 
+     ORDER BY created_at DESC LIMIT 50`,
+    [plate, cleanPlate]
   );
 
   res.json({
@@ -173,9 +191,12 @@ const markNotificationsAsRead = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Vehicle plate is required' });
   }
 
+  const cleanPlate = plate.replace(/\s+/g, '');
   await pool.query(
-    'UPDATE customer_notifications SET is_read = 1 WHERE vehicle_plate = ? AND is_read = 0',
-    [plate]
+    `UPDATE customer_notifications SET is_read = 1 
+     WHERE (vehicle_plate = ? OR REPLACE(vehicle_plate, ' ', '') = ?) 
+       AND is_read = 0`,
+    [plate, cleanPlate]
   );
 
   res.json({
