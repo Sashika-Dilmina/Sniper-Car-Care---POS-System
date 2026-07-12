@@ -131,7 +131,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
     pendingPayments = [{ pending_amount: 0, pending_count: 0 }];
   }
 
-  // Pending orders by vehicle type (statuses: 'pending', 'processing')
+  // Pending orders by vehicle type (statuses: 'pending', 'processing'), excluding VIP bookings
   let pendingSaloonCount = 0;
   let pending4x4Count = 0;
   try {
@@ -143,13 +143,30 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
        LEFT JOIN customers c ON o.customer_id = c.id
        LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
        LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
-       WHERE o.status IN ('pending', 'processing') AND ${dateFilter.replace(/created_at/g, 'o.created_at')}
+       WHERE o.status IN ('pending', 'processing') 
+         AND o.vip_booking_id IS NULL
+         AND ${dateFilter.replace(/created_at/g, 'o.created_at')}
        GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')`
     );
     pendingSaloonCount = pendingVehiclesResult.find(item => item.vehicleType === 'Saloon')?.count || 0;
     pending4x4Count = pendingVehiclesResult.find(item => item.vehicleType === '4x4')?.count || 0;
   } catch (error) {
     console.error('Pending vehicles count query error:', error);
+  }
+
+  // Pending VIP bookings
+  let pendingVipCount = 0;
+  try {
+    const [pendingVipResult] = await pool.query(
+      `SELECT COUNT(*) as count
+       FROM orders o
+       WHERE o.status IN ('pending', 'processing') 
+         AND o.vip_booking_id IS NOT NULL 
+         AND ${dateFilter.replace(/created_at/g, 'o.created_at')}`
+    );
+    pendingVipCount = pendingVipResult[0]?.count || 0;
+  } catch (error) {
+    console.error('Pending VIP count query error:', error);
   }
 
   // Recent orders (latest 5)
@@ -260,13 +277,11 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
     salesByDay = [];
   }
 
-  // Product categories revenue
+  // Category revenue (only paid orders)
   let categoryRevenue = [];
   try {
     const [categoryRevenueResult] = await pool.query(`
-      SELECT p.category,
-             SUM(oi.quantity * oi.price) as revenue,
-             SUM(oi.quantity) as quantity_sold
+      SELECT p.category, COALESCE(SUM(oi.price * oi.quantity), 0) as revenue
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
@@ -313,7 +328,8 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
       pending_amount: parseFloat(pendingPayments[0]?.pending_amount || 0),
       pending_count: parseInt(pendingPayments[0]?.pending_count || 0),
       pending_saloon_count: parseInt(pendingSaloonCount || 0),
-      pending_4x4_count: parseInt(pending4x4Count || 0)
+      pending_4x4_count: parseInt(pending4x4Count || 0),
+      pending_vip_count: parseInt(pendingVipCount || 0)
     },
     top_customers: topCustomers || [],
     top_services: topServices || [],

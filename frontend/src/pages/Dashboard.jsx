@@ -76,6 +76,14 @@ const Dashboard = () => {
       toast.error('Please enter a valid cash drawer count.');
       return;
     }
+
+    const pendingSaloon = Number(summary.pending_saloon_count) || 0;
+    const pending4x4 = Number(summary.pending_4x4_count) || 0;
+    if (pendingSaloon > 0 || pending4x4 > 0) {
+      toast.error(`Cannot close register. There are still pending/processing vehicles (${pendingSaloon} Saloon, ${pending4x4} 4x4) that must be completed first.`);
+      return;
+    }
+
     try {
       const resp = await axios.post('/api/registers/close', {
         closed_amount: parseFloat(closedAmountInput),
@@ -436,6 +444,15 @@ const Dashboard = () => {
             <p className="text-gray-600 text-sm">Pending 4x4 Vehicles</p>
             <p className="text-2xl font-bold text-orange-600">
               {summary.pending_4x4_count || 0}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div>
+            <p className="text-gray-600 text-sm">Total VIP Pending Vehicles</p>
+            <p className="text-2xl font-bold text-purple-600">
+              {summary.pending_vip_count || 0}
             </p>
           </div>
         </div>

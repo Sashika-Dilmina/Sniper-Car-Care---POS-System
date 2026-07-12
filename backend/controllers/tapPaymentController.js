@@ -162,18 +162,6 @@ const handleTapCallback = asyncHandler(async (req, res) => {
               console.log(`[VIP] Auto-started VIP service booking ${order.vip_booking_id} after Tap payment`);
             }
           }
-
-          // Handle Loyalty Stamps for Website Bookings
-          const isWebsiteServiceBooking = 
-            order.customer_id &&
-            ((order.source || '').includes('customer_website') ||
-             order.source === 'customer_website_saloon' ||
-             order.source === 'customer_website_4x4');
-             
-          if (isWebsiteServiceBooking && orderTotal > 0 && hasService) {
-            await ensureLoyaltyRow(connection, order.customer_id);
-            await incrementWashStamp(connection, order.customer_id);
-          }
         }
 
         await connection.commit();

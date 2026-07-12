@@ -342,6 +342,7 @@ const LandingPage = () => {
   const [vipStep, setVipStep] = useState(1);
   const [selectedService, setSelectedService] = useState(null);
   const [customerInfo, setCustomerInfo] = useState(null);
+  const [showFreeWashPopup, setShowFreeWashPopup] = useState(false);
   const [bookingForm, setBookingForm] = useState({
     name: '',
     phone: '+9715',
@@ -728,6 +729,7 @@ const LandingPage = () => {
 
       if (isFreeWash) {
         toast.success('Service booked! You earned a FREE wash — enjoy your reward!', { duration: 5000 });
+        setShowFreeWashPopup(true);
       } else if (response.data.loyalty) {
         toast.success(
           `Service booked! Loyalty progress: ${response.data.loyalty.wash_stamps}/5 washes.`
@@ -888,9 +890,10 @@ const LandingPage = () => {
     e.preventDefault();
 
     const isRegistered = !!customerInfo;
+    const isNoVehicle = vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care';
     const requiredFields = isRegistered
       ? (vipBookingForm.name && vipBookingForm.phone && vipBookingForm.service_type)
-      : (vipBookingForm.name && vipBookingForm.phone && vipBookingForm.emirate && vipBookingForm.plate_number && vipBookingForm.service_type);
+      : (vipBookingForm.name && vipBookingForm.phone && vipBookingForm.emirate && (isNoVehicle || vipBookingForm.plate_number) && vipBookingForm.service_type);
 
     if (!requiredFields) {
       toast.error('Please fill all required fields');
@@ -905,7 +908,7 @@ const LandingPage = () => {
 
     const plateStr = isRegistered
       ? (vehiclePlate || customerInfo.vehicle_plate || '')
-      : `${vipBookingForm.plate_code} ${vipBookingForm.emirate} ${vipBookingForm.plate_number}`;
+      : (isNoVehicle ? `${vipBookingForm.emirate} - ${cleanPhone}` : `${vipBookingForm.plate_code} ${vipBookingForm.emirate} ${vipBookingForm.plate_number}`);
 
     try {
       await axios.post('/api/vip/bookings', {
@@ -1026,7 +1029,8 @@ const LandingPage = () => {
 
     if (!selectedService) return;
 
-    if (!bookingForm.name || !bookingForm.phone || !bookingForm.emirate || !bookingForm.plate_number) {
+    const isNoVehicle = bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care';
+    if (!bookingForm.name || !bookingForm.phone || !bookingForm.emirate || (!isNoVehicle && !bookingForm.plate_number)) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -1038,7 +1042,9 @@ const LandingPage = () => {
       return;
     }
 
-    const plateStr = `${bookingForm.plate_code} ${bookingForm.emirate} ${bookingForm.plate_number}`;
+    const plateStr = isNoVehicle 
+      ? `${bookingForm.emirate} - ${cleanPhone}`
+      : `${bookingForm.plate_code} ${bookingForm.emirate} ${bookingForm.plate_number}`;
 
     await submitBooking(selectedService, {
       ...bookingForm,
@@ -1515,41 +1521,49 @@ const LandingPage = () => {
                       <option value="Umm Al Quwain">Umm Al Quwain</option>
                       <option value="Ras Al Khaimah">Ras Al Khaimah</option>
                       <option value="Fujairah">Fujairah</option>
+                      <option value="Garage">Garage</option>
+                      <option value="Sniper car care">Sniper car care</option>
                     </select>
                   </div>
 
                   {/* Plate Code Dropdown */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
-                    <SearchableSelect
-                      options={plateCodes}
-                      value={bookingForm.plate_code}
-                      onChange={(val) => setBookingForm(prev => ({ ...prev, plate_code: val }))}
-                      disabled={plateCodes.length === 0}
-                    />
-                  </div>
+                  {!(bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care') && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
+                      <SearchableSelect
+                        options={plateCodes}
+                        value={bookingForm.plate_code}
+                        onChange={(val) => setBookingForm(prev => ({ ...prev, plate_code: val }))}
+                        disabled={plateCodes.length === 0}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Plate Number Input */}
-                <div className="mt-3">
-                  <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
-                  <input
-                    type="text"
-                    required
-                    value={bookingForm.plate_number}
-                    onChange={(e) => setBookingForm({ ...bookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
-                    placeholder="12345"
-                  />
-                </div>
+                {!(bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care') && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
+                    <input
+                      type="text"
+                      required={!(bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care')}
+                      value={bookingForm.plate_number}
+                      onChange={(e) => setBookingForm({ ...bookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
+                      placeholder="12345"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Plate Live Preview */}
-              <VehiclePlatePreview 
-                emirate={bookingForm.emirate}
-                plateCode={bookingForm.plate_code}
-                plateNumber={bookingForm.plate_number}
-              />
+              {!(bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care') && (
+                <VehiclePlatePreview 
+                  emirate={bookingForm.emirate}
+                  plateCode={bookingForm.plate_code}
+                  plateNumber={bookingForm.plate_number}
+                />
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Special Requests (Optional)</label>
                 <textarea
@@ -1648,41 +1662,49 @@ const LandingPage = () => {
                           <option value="Umm Al Quwain">Umm Al Quwain</option>
                           <option value="Ras Al Khaimah">Ras Al Khaimah</option>
                           <option value="Fujairah">Fujairah</option>
+                          <option value="Garage">Garage</option>
+                          <option value="Sniper car care">Sniper car care</option>
                         </select>
                       </div>
 
                       {/* Plate Code Dropdown */}
-                      <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
-                        <SearchableSelect
-                          options={vipPlateCodes}
-                          value={vipBookingForm.plate_code}
-                          onChange={(val) => setVipBookingForm(prev => ({ ...prev, plate_code: val }))}
-                          disabled={vipPlateCodes.length === 0}
-                        />
-                      </div>
+                      {!(vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care') && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
+                          <SearchableSelect
+                            options={vipPlateCodes}
+                            value={vipBookingForm.plate_code}
+                            onChange={(val) => setVipBookingForm(prev => ({ ...prev, plate_code: val }))}
+                            disabled={vipPlateCodes.length === 0}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Plate Number Input */}
-                    <div className="mt-3">
-                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
-                      <input
-                        type="text"
-                        required={!customerInfo}
-                        value={vipBookingForm.plate_number}
-                        onChange={(e) => setVipBookingForm({ ...vipBookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
-                        className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
-                        placeholder="12345"
-                      />
-                    </div>
+                    {!(vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care') && (
+                      <div className="mt-3">
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
+                        <input
+                          type="text"
+                          required={!customerInfo && !(vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care')}
+                          value={vipBookingForm.plate_number}
+                          onChange={(e) => setVipBookingForm({ ...vipBookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                          className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
+                          placeholder="12345"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Plate Live Preview */}
-                  <VehiclePlatePreview 
-                    emirate={vipBookingForm.emirate}
-                    plateCode={vipBookingForm.plate_code}
-                    plateNumber={vipBookingForm.plate_number}
-                  />
+                  {!(vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care') && (
+                    <VehiclePlatePreview 
+                      emirate={vipBookingForm.emirate}
+                      plateCode={vipBookingForm.plate_code}
+                      plateNumber={vipBookingForm.plate_number}
+                    />
+                  )}
                 </>
               )}
 
@@ -1858,6 +1880,22 @@ const LandingPage = () => {
                 Confirm Purchase - {(parseFloat(typeof selectedProduct.price === 'number' ? selectedProduct.price : String(selectedProduct.price).replace(/[^0-9.]/g, '')) * productForm.quantity).toLocaleString()} AED
               </button>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Free Wash Celebration Popup */}
+      {showFreeWashPopup && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-3xl p-8 max-w-md w-full text-center border-4 border-white shadow-2xl relative animate-scaleUp">
+            <div className="text-6xl mb-4 animate-bounce">🎁</div>
+            <h2 className="text-3xl font-black text-white italic tracking-wide mb-2 uppercase">FREE WASH EARNED!</h2>
+            <p className="text-white font-bold text-lg mb-6">Congratulations! You completed 5 washes. Your 6th service is 100% FREE!</p>
+            <button
+              onClick={() => setShowFreeWashPopup(false)}
+              className="w-full py-4 bg-white text-yellow-600 font-black rounded-xl hover:bg-gray-150 transition-all text-lg shadow-md uppercase tracking-wider"
+            >
+              Great, Thank you!
+            </button>
           </div>
         </div>
       )}

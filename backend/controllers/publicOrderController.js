@@ -315,22 +315,6 @@ const confirmOrder = asyncHandler(async (req, res) => {
       );
     }
 
-    // Sync loyalty stamps for paid website bookings confirmed with Cash (only for service orders)
-    const [orderRows] = await connection.query('SELECT customer_id, source, total FROM orders WHERE id = ?', [order_id]);
-    if (orderRows.length > 0) {
-      const order = orderRows[0];
-      const isWebsiteServiceBooking = 
-        order.customer_id &&
-        (order.source === 'customer_website_saloon' ||
-         order.source === 'customer_website_4x4' ||
-         (order.source || '').includes('customer_website'));
-         
-      if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
-        await ensureLoyaltyRow(connection, order.customer_id);
-        await incrementWashStamp(connection, order.customer_id);
-      }
-    }
-
     // Fetch order total to create/update payments row
     const [orders] = await connection.query('SELECT total FROM orders WHERE id = ?', [order_id]);
     if (orders.length > 0) {
@@ -438,21 +422,10 @@ const confirmPayment = asyncHandler(async (req, res) => {
           );
         }
 
-        // Fetch order details for loyalty and VIP sync
-        const [orderRows] = await connection.query('SELECT customer_id, source, total, vip_booking_id FROM orders WHERE id = ?', [order_id]);
+        // Fetch order details for VIP sync
+        const [orderRows] = await connection.query('SELECT vip_booking_id FROM orders WHERE id = ?', [order_id]);
         if (orderRows.length > 0) {
           const order = orderRows[0];
-          const isWebsiteServiceBooking = 
-            order.customer_id &&
-            (order.source === 'customer_website_saloon' ||
-             order.source === 'customer_website_4x4' ||
-             (order.source || '').includes('customer_website'));
-             
-          if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
-            await ensureLoyaltyRow(connection, order.customer_id);
-            await incrementWashStamp(connection, order.customer_id);
-          }
-
           // If it is a VIP booking order, update VIP booking status to 'confirmed'
           if (order.vip_booking_id) {
             await connection.query(

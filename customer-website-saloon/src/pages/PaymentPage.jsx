@@ -192,55 +192,18 @@ const PaymentPage = () => {
                             </button>
                         </div>
 
-                        {/* Tap Sub-options */}
+                        {/* Tap Checkout Render */}
                         {paymentMethod === 'tap' && (
-                            <div className="space-y-2 p-3 bg-gray-950/20 border border-gray-800 rounded-xl mt-2">
-                                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold text-left">Select Wallet Type</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button
-                                        onClick={() => setTapSubOption('apple_pay')}
-                                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border transition text-sm ${tapSubOption === 'apple_pay' ? 'border-yellow-500 bg-yellow-500/5 text-yellow-500 font-bold' : 'border-gray-800 text-gray-400 hover:text-white'}`}
-                                    >
-                                        <span>🍎</span> Apple Pay
-                                    </button>
-                                    <button
-                                        onClick={() => setTapSubOption('samsung_pay')}
-                                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border transition text-sm ${tapSubOption === 'samsung_pay' ? 'border-yellow-500 bg-yellow-500/5 text-yellow-500 font-bold' : 'border-gray-800 text-gray-400 hover:text-white'}`}
-                                    >
-                                        <span>📱</span> Samsung Pay
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                                 {/* Contextual Checkout Render */}
-                    <div className="pt-4 border-t border-gray-800">
-                        {paymentMethod === 'tap' && tapSubOption === 'apple_pay' && (
-                            <div className="space-y-4">
+                            <div className="space-y-4 pt-2">
                                 <p className="text-xs text-gray-400 leading-relaxed text-center">
-                                    Express pay with Apple Pay. You will be redirected to Tap Payments' secure billing page.
+                                    Express pay using Tap Payments. You will be redirected to Tap Payments' secure billing page.
                                 </p>
                                 <button
                                     onClick={handleTapCheckout}
                                     disabled={loadingTap}
                                     className="w-full py-4 bg-white text-black font-black text-lg rounded-xl hover:bg-gray-100 transition flex items-center justify-center gap-2 disabled:opacity-50"
                                 >
-                                    {loadingTap ? 'Redirecting...' : <><span></span> Pay with Apple Pay</>}
-                                </button>
-                            </div>
-                        )}
-
-                        {paymentMethod === 'tap' && tapSubOption === 'samsung_pay' && (
-                            <div className="space-y-4">
-                                <p className="text-xs text-gray-400 leading-relaxed text-center">
-                                    Express pay with Samsung Pay. You will be redirected to Tap Payments' secure billing page.
-                                </p>
-                                <button
-                                    onClick={handleTapCheckout}
-                                    disabled={loadingTap}
-                                    className="w-full py-4 bg-blue-600 text-white font-black text-lg rounded-xl hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
-                                >
-                                    {loadingTap ? 'Redirecting...' : <><span>📱</span> Pay with Samsung Pay</>}
+                                    {loadingTap ? 'Redirecting...' : <><span>📱</span> Pay with Tap Payments</>}
                                 </button>
                             </div>
                         )}

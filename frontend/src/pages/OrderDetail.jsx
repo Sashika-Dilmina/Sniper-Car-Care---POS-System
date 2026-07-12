@@ -39,6 +39,20 @@ const OrderDetail = () => {
     }
   };
 
+  const handleWhatsAppShare = () => {
+    if (!order) return;
+    const itemsList = order.items?.map(item => `- ${item.product_name} (Qty: ${item.quantity}) - AED ${parseFloat(item.price).toFixed(2)}`).join('\n') || '';
+    const message = `*Sniper Car Care - Order Receipt*\n` +
+      `*Order ID:* #${order.id}\n` +
+      `*Customer:* ${order.customer_name || 'Walk-in'}\n` +
+      `*Plate:* ${order.vehicle_plate || 'N/A'}\n` +
+      `*Items:* \n${itemsList}\n` +
+      `*Total Amount:* AED ${parseFloat(order.total).toFixed(2)}\n\n` +
+      `Thank you for choosing Sniper Car Care!`;
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
   const handleStatusUpdate = async (status) => {
     try {
       await axios.put(`/api/orders/${id}/status`, { status });
@@ -88,7 +102,13 @@ const OrderDetail = () => {
       <div className="space-y-6 no-print">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold text-gray-800">Order #{order.id}</h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 no-print">
+            <button
+              onClick={handleWhatsAppShare}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+            >
+              💬 Share via WhatsApp
+            </button>
             <button
               onClick={() => window.print()}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"

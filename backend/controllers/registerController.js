@@ -210,6 +210,20 @@ const closeRegister = asyncHandler(async (req, res) => {
   }
 
   const register = rows[0];
+
+  // Check for any pending or processing saloon or 4x4 vehicles (excluding VIP)
+  const [pendingVehicles] = await pool.query(
+    `SELECT COUNT(*) as count 
+     FROM orders o
+     WHERE o.status IN ('pending', 'processing') 
+       AND o.vip_booking_id IS NULL`
+  );
+  if (pendingVehicles[0].count > 0) {
+    return res.status(400).json({ 
+      message: `Cannot close register. There are still ${pendingVehicles[0].count} pending/processing vehicles that must be completed first.` 
+    });
+  }
+
   const openedAt = register.opened_at;
   const closedAt = new Date();
 

@@ -402,6 +402,25 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
           order.payment_status = 'paid';
         }
       }
+
+      // Handle Loyalty Stamps for Website Bookings only upon completion
+      const isWebsiteServiceBooking = 
+        order.customer_id_ref &&
+        (order.source === 'customer_website_saloon' ||
+         order.source === 'customer_website_4x4' ||
+         (order.source || '').includes('customer_website'));
+         
+      const [serviceRows] = await connection.query(
+        'SELECT id FROM services WHERE order_id = ? LIMIT 1',
+        [id]
+      );
+      const hasService = serviceRows.length > 0;
+
+      if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
+        const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
+        await ensureLoyaltyRow(connection, order.customer_id_ref);
+        await incrementWashStamp(connection, order.customer_id_ref);
+      }
     }
 
     await connection.commit();
