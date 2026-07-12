@@ -66,11 +66,6 @@ exports.getVIPBookings = asyncHandler(async (req, res) => {
     LEFT JOIN orders o ON o.vip_booking_id = vb.id
   `;
   const params = [];
-
-  if (req.user && req.user.role === 'staff') {
-    query += ' WHERE YEAR(vb.appointment_date) = YEAR(CURDATE()) AND MONTH(vb.appointment_date) = MONTH(CURDATE())';
-  }
-
   query += ' ORDER BY vb.id DESC';
 
   const [bookings] = await db.query(query, params);

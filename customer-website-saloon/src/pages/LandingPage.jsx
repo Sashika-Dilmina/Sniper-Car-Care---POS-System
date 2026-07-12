@@ -699,59 +699,83 @@ const LandingPage = () => {
         servicePrice = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
       }
 
-      // Create order with service details
-      const orderData = {
-        customer_id: customerInfo?.id || null,
-        customer_name: form.name,
-        customer_phone: form.phone,
-        vehicle_plate: form.vehicle_plate || null,
-        vehicle_type: form.vehicle_type,
-        items: [], // Empty items array since we're booking a service, not a product
-        total: servicePrice,
-        source: 'customer_website_saloon',
-        status: 'pending',
-        payment_status: 'pending',
-        notes: form.notes || `One-Tap Booking via Website - ${service.name}`
-      };
+      // Check if eligible for a Free Wash
+      const isEligibleForFreeWash = washStamps >= 5;
 
-      const response = await axios.post('/api/public/orders', orderData);
-      const order = response.data.order;
+      if (isEligibleForFreeWash) {
+        // If it is a free wash, we create the order immediately (no payment needed)
+        const orderData = {
+          customer_id: customerInfo?.id || null,
+          customer_name: form.name,
+          customer_phone: form.phone,
+          vehicle_plate: form.vehicle_plate || null,
+          vehicle_type: form.vehicle_type,
+          items: [], 
+          total: servicePrice,
+          source: 'customer_website_saloon',
+          status: 'pending',
+          payment_status: 'paid', // Immediately paid
+          notes: form.notes || `One-Tap Booking via Website - ${service.name}`
+        };
 
-      if (form.vehicle_plate) {
-        setSearchParams({ plate: form.vehicle_plate });
-      }
+        const response = await axios.post('/api/public/orders', orderData);
+        const order = response.data.order;
 
-      if (response.data.loyalty?.wash_stamps !== undefined) {
-        setWashStamps(response.data.loyalty.wash_stamps);
-      }
+        if (form.vehicle_plate) {
+          setSearchParams({ plate: form.vehicle_plate });
+        }
 
-      const isFreeWash = response.data.loyalty?.free_wash_earned;
+        if (response.data.loyalty?.wash_stamps !== undefined) {
+          setWashStamps(response.data.loyalty.wash_stamps);
+        }
 
-      if (isFreeWash) {
         toast.success('Service booked! You earned a FREE wash — enjoy your reward!', { duration: 5000 });
         setShowFreeWashPopup(true);
-      } else if (response.data.loyalty) {
-        toast.success(
-          `Service booked! Loyalty progress: ${response.data.loyalty.wash_stamps}/5 washes.`
-        );
+        
+        setShowBookingModal(false);
+        setSelectedService(null);
+        setBookingForm({
+          name: '',
+          phone: '+9715',
+          vehicle_type: 'Saloon',
+          emirate: '',
+          plate_code: '',
+          plate_number: '',
+          notes: ''
+        });
       } else {
-        toast.success('Service booked successfully! Redirecting to payment...');
-      }
-      setShowBookingModal(false);
-      setSelectedService(null);
-      setBookingForm({
-        name: '',
-        phone: '+9715',
-        vehicle_type: 'Saloon',
-        emirate: '',
-        plate_code: '',
-        plate_number: '',
-        notes: ''
-      });
+        // Paid booking: Defer order creation until payment method selection!
+        const tempBooking = {
+          customer_id: customerInfo?.id || null,
+          customer_name: form.name,
+          customer_phone: form.phone,
+          vehicle_plate: form.vehicle_plate || null,
+          vehicle_type: form.vehicle_type,
+          service_id: service.id,
+          service_name: service.name,
+          total: servicePrice,
+          source: 'customer_website_saloon',
+          notes: form.notes || `One-Tap Booking via Website - ${service.name}`
+        };
 
-      if (!isFreeWash && order && order.id) {
+        sessionStorage.setItem('temp_booking', JSON.stringify(tempBooking));
+        sessionStorage.removeItem('current_order_id');
+
+        toast.success('Redirecting to payment...');
+        setShowBookingModal(false);
+        setSelectedService(null);
+        setBookingForm({
+          name: '',
+          phone: '+9715',
+          vehicle_type: 'Saloon',
+          emirate: '',
+          plate_code: '',
+          plate_number: '',
+          notes: ''
+        });
+
         setTimeout(() => {
-          navigate(`/payment?order_id=${order.id}&plate=${encodeURIComponent(form.vehicle_plate || '')}`);
+          navigate(`/payment?plate=${encodeURIComponent(form.vehicle_plate || '')}`);
         }, 1500);
       }
     } catch (error) {

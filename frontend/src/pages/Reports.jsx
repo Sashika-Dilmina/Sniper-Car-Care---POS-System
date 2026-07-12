@@ -434,6 +434,132 @@ const Reports = () => {
     { id: 'registers', label: 'Cash Register Sessions' },
   ];
 
+  const handleWhatsAppShare = () => {
+    let message = '';
+    
+    if (activeTab === 'daily') {
+      if (!dailyReport) {
+        toast.error('No daily summary report loaded');
+        return;
+      }
+      message = `*Sniper Car Care - Daily Summary*\n` +
+        `*Date:* ${dailyDate}\n\n` +
+        `*Orders Total:* ${dailyReport.orders?.total_orders || 0}\n` +
+        `*Orders Revenue:* AED ${parseFloat(dailyReport.orders?.total_revenue || 0).toFixed(2)}\n` +
+        `*Services Completed:* ${dailyReport.services?.total_services || 0}\n` +
+        `*Services Revenue:* AED ${parseFloat(dailyReport.services?.services_revenue || 0).toFixed(2)}\n\n` +
+        `*Payment Methods Breakdown:* \n` +
+        (dailyReport.payment_methods?.map(pm => `- ${pm.method.toUpperCase()}: AED ${parseFloat(pm.total_amount).toFixed(2)} (${pm.transaction_count} sales)`).join('\n') || 'None') + `\n\n` +
+        `*Top Products Sold:* \n` +
+        (dailyReport.top_products?.map(p => `- ${p.product_name} (Qty: ${p.total_quantity_sold}) - AED ${parseFloat(p.total_revenue).toFixed(2)}`).join('\n') || 'None');
+    } else if (activeTab === 'business_summary') {
+      if (!plReport || !plReport.summary) {
+        toast.error('No profit & loss summary report loaded');
+        return;
+      }
+      const sum = plReport.summary;
+      message = `*Sniper Car Care - Profit & Loss Statement*\n` +
+        `*Period:* ${plStartDate || 'N/A'} to ${plEndDate || 'N/A'}\n\n` +
+        `*Gross Sales:* AED ${parseFloat(sum.total_sales).toFixed(2)}\n` +
+        `*Net Sales:* AED ${parseFloat(sum.net_sales).toFixed(2)}\n` +
+        `- Cash Sales: AED ${parseFloat(sum.cash_sales).toFixed(2)}\n` +
+        `- Card Sales: AED ${parseFloat(sum.card_sales).toFixed(2)}\n` +
+        `- Credit Sales: AED ${parseFloat(sum.credit_sales).toFixed(2)}\n` +
+        `- Bank Transfer: AED ${parseFloat(sum.bank_transfer_sales).toFixed(2)}\n\n` +
+        `*Credit Recoveries:* AED ${parseFloat((sum.cash_recovery || 0) + (sum.card_recovery || 0) + (sum.bank_recovery || 0)).toFixed(2)}\n` +
+        `*Total Purchases:* AED ${parseFloat(sum.total_purchases).toFixed(2)}\n` +
+        `*Total Expenses:* AED ${parseFloat(sum.total_expenses).toFixed(2)}\n\n` +
+        `*Net Profit/Loss:* AED ${parseFloat(sum.net_profit).toFixed(2)}`;
+    } else if (activeTab === 'stock') {
+      if (!stockReport) {
+        toast.error('No stock report loaded');
+        return;
+      }
+      message = `*Sniper Car Care - Stock Inventory Report*\n` +
+        `*Date:* ${new Date().toLocaleDateString()}\n\n` +
+        stockReport.map(item => `- ${item.name} (${item.category}): Stock: ${item.stock} | Unit Cost: AED ${parseFloat(item.purchase_price || 0).toFixed(2)}`).join('\n');
+    } else if (activeTab === 'payment') {
+      if (!paymentReport) {
+        toast.error('No payment report loaded');
+        return;
+      }
+      message = `*Sniper Car Care - Payment Type Report*\n` +
+        `*Period:* ${paymentStartDate || 'N/A'} to ${paymentEndDate || 'N/A'}\n\n` +
+        paymentReport.map(item => `- ${item.method.toUpperCase()}: AED ${parseFloat(item.total_amount).toFixed(2)} (${item.transaction_count} txs)`).join('\n');
+    } else if (activeTab === 'customer') {
+      if (!customerReport) {
+        toast.error('No customer report loaded');
+        return;
+      }
+      message = `*Sniper Car Care - Customer Wise Report*\n` +
+        `*Period:* ${customerStartDate || 'N/A'} to ${customerEndDate || 'N/A'}\n\n` +
+        customerReport.slice(0, 15).map(item => `- ${item.name} (${item.phone}): ${item.order_count} visits | Spent: AED ${parseFloat(item.total_spent).toFixed(2)}`).join('\n');
+    } else if (activeTab === 'supplier') {
+      if (!supplierReport) {
+        toast.error('No supplier report loaded');
+        return;
+      }
+      message = `*Sniper Car Care - Supplier Payment Report*\n` +
+        `*Period:* ${supplierStartDate || 'N/A'} to ${supplierEndDate || 'N/A'}\n\n` +
+        supplierReport.map(item => `- ${item.supplier_name}: Total Purchases: AED ${parseFloat(item.total_amount).toFixed(2)}`).join('\n');
+    } else if (activeTab === 'purchases') {
+      if (!purchaseReport) {
+        toast.error('No purchases report loaded');
+        return;
+      }
+      message = `*Sniper Car Care - Purchase of Items Report*\n` +
+        `*Period:* ${purchaseStartDate || 'N/A'} to ${purchaseEndDate || 'N/A'}\n\n` +
+        purchaseReport.map(item => `- ${item.product_name} (Qty: ${item.total_quantity}): AED ${parseFloat(item.total_amount).toFixed(2)}`).join('\n');
+    } else if (activeTab === 'credit') {
+      if (!creditReport) {
+        toast.error('No credit report loaded');
+        return;
+      }
+      message = `*Sniper Car Care - Credit Report*\n` +
+        `*Period:* ${creditStartDate || 'N/A'} to ${creditEndDate || 'N/A'}\n\n` +
+        `*Total Credit Granted:* AED ${totalCreditGranted.toFixed(2)}\n` +
+        `*Total Outstanding:* AED ${totalOutstanding.toFixed(2)}\n` +
+        `*Total Recovered:* AED ${totalRecovered.toFixed(2)}\n\n` +
+        `*Active Debtors (Top 10):*\n` +
+        creditReport.slice(0, 10).map(item => `- ${item.customer_name} (${item.customer_phone}): Outstanding AED ${parseFloat(item.remaining_amount).toFixed(2)}`).join('\n');
+    } else if (activeTab === 'registers') {
+      if (!selectedRegisterReport) {
+        toast.error('No active register session report opened');
+        return;
+      }
+      const openDate = formatRegisterDate(selectedRegisterReport.opened_at);
+      const closeDate = selectedRegisterReport.closed_at ? formatRegisterDate(selectedRegisterReport.closed_at) : 'Active Session';
+      const diff = selectedRegisterReport.closed_amount !== null
+        ? (selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer).toFixed(3)
+        : '0.000';
+        
+      message = `*Sniper Car Care - Cash Register Report*\n` +
+        `*Opened:* ${openDate}\n` +
+        `*Closed:* ${closeDate}\n` +
+        `*Status:* ${selectedRegisterReport.status.toUpperCase()}\n\n` +
+        `- Opening Balance: AED ${selectedRegisterReport.opening_balance.toFixed(3)}\n` +
+        `- Cash Sale: AED ${selectedRegisterReport.cash_payments.sale.toFixed(3)}\n` +
+        `- Card Sale: AED ${selectedRegisterReport.card_payments.sale.toFixed(3)}\n` +
+        `- Bank Sale: AED ${selectedRegisterReport.bank_transfer.toFixed(3)}\n` +
+        `- Other Sale: AED ${selectedRegisterReport.other_payments.toFixed(3)}\n` +
+        `- Credit Sale: AED ${selectedRegisterReport.credit_sales.toFixed(3)}\n` +
+        `- Credit Recovery: AED ${selectedRegisterReport.credit_sale_recovery.toFixed(3)}\n` +
+        `- Total Expense: AED ${selectedRegisterReport.total_expense.toFixed(3)}\n` +
+        `*Total Sales:* AED ${selectedRegisterReport.total_sales.toFixed(3)}\n` +
+        `*Cash In Drawer:* AED ${selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}\n` +
+        `*Closed Amount:* AED ${(selectedRegisterReport.closed_amount || 0).toFixed(3)}\n` +
+        `*Difference:* AED ${diff}\n\n` +
+        `Generated by Sniper Car Care System.`;
+    }
+
+    if (message) {
+      const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+    } else {
+      toast.error('No report data found to share.');
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -505,15 +631,23 @@ const Reports = () => {
       <div className="space-y-6 no-print">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-800">Reports</h1>
-          <button
-            onClick={handlePrint}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm font-semibold"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            Print Report
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleWhatsAppShare}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm font-semibold"
+            >
+              💬 Share via WhatsApp
+            </button>
+            <button
+              onClick={handlePrint}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm font-semibold"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Report
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1236,12 +1370,20 @@ const Reports = () => {
         <div className="bg-white p-6 rounded-lg shadow space-y-6">
           <div className="flex justify-between items-center border-b pb-4 no-print">
             <h2 className="text-xl font-bold text-gray-800">Stock Inventory Report</h2>
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition flex items-center gap-2 text-xs"
-            >
-              🖨️ Print Stock Report
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleWhatsAppShare}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition flex items-center gap-2 text-xs"
+              >
+                💬 Share via WhatsApp
+              </button>
+              <button
+                onClick={handlePrint}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition flex items-center gap-2 text-xs"
+              >
+                🖨️ Print Stock Report
+              </button>
+            </div>
           </div>
 
           <div className="mb-4 flex flex-col sm:flex-row gap-4 items-end bg-gray-50 p-4 rounded-xl border no-print">
@@ -1578,12 +1720,20 @@ const Reports = () => {
                 >
                   ← Back to Sessions
                 </button>
-                <button
-                  onClick={handlePrint}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
-                >
-                  🖨️ Print Statement
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleWhatsAppShare}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+                  >
+                    💬 Share via WhatsApp
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+                  >
+                    🖨️ Print Statement
+                  </button>
+                </div>
               </div>
               
               {/* Printable Cash Register Report Card */}

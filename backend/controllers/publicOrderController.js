@@ -201,6 +201,11 @@ const createOrder = asyncHandler(async (req, res) => {
             'UPDATE orders SET total = 0.00, discount = ?, payment_status = ? WHERE id = ?',
             [total, 'paid', orderId]
           );
+
+          await connection.query(
+            'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
+            [orderId]
+          );
         } else {
           // Paid booking, do not increment stamps yet!
           await connection.query(

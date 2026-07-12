@@ -271,8 +271,8 @@ const Sales = () => {
 
   // Calculate Cart Totals
   const subtotal = cart.reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0);
-  const discountVal = paymentMethod === 'free' ? subtotal : (parseFloat(discount) || 0);
-  const total = paymentMethod === 'free' ? 0.00 : Math.max(0, subtotal - discountVal);
+  const discountVal = parseFloat(discount) || 0;
+  const total = Math.max(0, subtotal - discountVal);
 
   // Complete Order Checkout Flow
   const handleCheckout = async () => {
@@ -308,12 +308,12 @@ const Sales = () => {
       const createdOrder = orderResponse.data.order;
 
       // 2. Process payment based on method
-      if (paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'free') {
+      if (paymentMethod === 'cash' || paymentMethod === 'card') {
         const hasService = cart.some(item => item.category === 'Services' || item.category === 'VIP');
         await axios.post('/api/payments/manual', {
           order_id: createdOrder.id,
-          amount: paymentMethod === 'free' ? 0.00 : total,
-          method: paymentMethod,
+          amount: total,
+          method: total === 0 ? 'free' : paymentMethod,
           status: hasService ? 'pending' : 'completed'
         });
       } else if (paymentMethod === 'tap') {
@@ -889,12 +889,11 @@ const Sales = () => {
                   {/* Payment Method */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       {[
                         { key: 'cash', label: '💵 Cash' },
                         { key: 'card', label: '💳 Card' },
-                        { key: 'credit', label: '🏦 Credit' },
-                        { key: 'free', label: '🎁 Free' }
+                        { key: 'credit', label: '🏦 Credit' }
                       ].map(pm => (
                         <button
                           key={pm.key}
@@ -902,7 +901,7 @@ const Sales = () => {
                           onClick={() => {
                             setPaymentMethod(pm.key);
                           }}
-                          className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${
+                          className={`py-2 text-xs font-bold rounded-xl border transition-all ${
                             paymentMethod === pm.key
                               ? 'bg-primary-600 text-white border-primary-600 shadow'
                               : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'

@@ -36,17 +36,64 @@ const PaymentPage = () => {
         if (orderId) {
             fetchOrder();
         } else {
+            // Check for deferred booking in sessionStorage
+            const tempStr = sessionStorage.getItem('temp_booking');
+            if (tempStr) {
+                const tempBooking = JSON.parse(tempStr);
+                setOrder({
+                    id: 'new',
+                    total: tempBooking.total,
+                    customer_name: tempBooking.customer_name,
+                    customer_phone: tempBooking.customer_phone,
+                    vehicle_type: tempBooking.vehicle_type,
+                    vehicle_plate: tempBooking.vehicle_plate,
+                    notes: tempBooking.notes,
+                    service_name: tempBooking.service_name
+                });
+            }
             setLoading(false);
         }
     }, [orderId, searchParams]);
 
+    const createDeferredOrder = async () => {
+        const tempStr = sessionStorage.getItem('temp_booking');
+        if (!tempStr) throw new Error('Booking session expired. Please go back and try again.');
+        const tempBooking = JSON.parse(tempStr);
+
+        const orderData = {
+            customer_id: tempBooking.customer_id,
+            customer_name: tempBooking.customer_name,
+            customer_phone: tempBooking.customer_phone,
+            vehicle_plate: tempBooking.vehicle_plate,
+            vehicle_type: tempBooking.vehicle_type,
+            items: [],
+            total: tempBooking.total,
+            source: 'customer_website_saloon',
+            status: 'pending',
+            payment_status: 'pending',
+            notes: tempBooking.notes
+        };
+
+        const response = await axios.post('/api/public/orders', orderData);
+        const createdOrder = response.data.order;
+        
+        sessionStorage.setItem('current_order_id', createdOrder.id);
+        sessionStorage.removeItem('temp_booking');
+        return createdOrder;
+    };
+
     const handleTapCheckout = async () => {
         setLoadingTap(true);
         try {
-            const redirectUrl = `${window.location.origin}${window.location.pathname}?order_id=${order.id}&plate=${plate || ''}`;
+            let activeOrder = order;
+            if (activeOrder.id === 'new') {
+                activeOrder = await createDeferredOrder();
+                setOrder(activeOrder);
+            }
+            const redirectUrl = `${window.location.origin}${window.location.pathname}?order_id=${activeOrder.id}&plate=${plate || ''}`;
             const response = await axios.post('/api/public/payments/tap/create', {
-                order_id: order.id,
-                amount: order.total,
+                order_id: activeOrder.id,
+                amount: activeOrder.total,
                 redirect_url: redirectUrl
             });
             if (response.data?.transaction_url) {
@@ -55,12 +102,11 @@ const PaymentPage = () => {
                 toast.error('Failed to initiate Tap Payments');
             }
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Payment initiation failed');
+            toast.error(err.response?.data?.message || err.message || 'Payment initiation failed');
         } finally {
             setLoadingTap(false);
         }
     };
-
 
     const fetchOrder = async () => {
         try {
@@ -79,14 +125,19 @@ const PaymentPage = () => {
     const handleCashSubmit = async () => {
         setCashConfirming(true);
         try {
+            let activeOrder = order;
+            if (activeOrder.id === 'new') {
+                activeOrder = await createDeferredOrder();
+                setOrder(activeOrder);
+            }
             await axios.post('/api/public/orders/confirm', {
-                order_id: order.id,
+                order_id: activeOrder.id,
                 payment_method: 'cash'
             });
             toast.success('Booking confirmed with cash payment!');
             setPaid(true);
         } catch (err) {
-            toast.error('Failed to confirm cash booking');
+            toast.error(err.response?.data?.message || 'Failed to confirm cash booking');
         } finally {
             setCashConfirming(false);
         }
@@ -154,7 +205,7 @@ const PaymentPage = () => {
                         </div>
                         <div className="text-right">
                             <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Order ID</p>
-                            <h2 className="text-lg font-mono text-gray-500">#{order.id}</h2>
+                            <h2 className="text-lg font-mono text-gray-500">{order.id === 'new' ? 'New' : `#${order.id}`}</h2>
                         </div>
                     </div>
 
