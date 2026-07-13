@@ -1518,6 +1518,7 @@ module.exports = {
   getSupplierPaymentReport,
   getPurchasesReport,
   getProfitLossReport,
-  getStockReport
+  getStockReport,
+  getReportPDF
 };
 
