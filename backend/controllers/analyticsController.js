@@ -53,11 +53,18 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   try {
     const [paymentResult] = await pool.query(
       `SELECT 
-        p.method,
+        CASE 
+          WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          ELSE p.method 
+        END as method,
         COALESCE(SUM(p.amount), 0) as total_amount
        FROM payments p
        WHERE ${paymentDateFilter} AND p.status = 'completed'
-       GROUP BY p.method`
+       GROUP BY 
+        CASE 
+          WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          ELSE p.method 
+        END`
     );
     paymentBreakdown = paymentResult;
   } catch (error) {
@@ -451,13 +458,20 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
   // Payments by method
   const [paymentMethods] = await pool.query(`
     SELECT 
-      p.method,
+      CASE 
+        WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+        ELSE p.method 
+      END as method,
       COUNT(*) as count,
       COALESCE(SUM(p.amount), 0) as total_amount
     FROM payments p
     JOIN orders o ON p.order_id = o.id
     WHERE DATE(o.created_at) = ? AND p.status = 'completed'
-    GROUP BY p.method
+    GROUP BY 
+      CASE 
+        WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+        ELSE p.method 
+      END
   `, [targetDate]);
 
   // Top products sold
@@ -650,7 +664,10 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
   // Payment breakdown by method
   const [paymentBreakdown] = await pool.query(`
     SELECT 
-      p.method,
+      CASE 
+        WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+        ELSE p.method 
+      END as method,
       COUNT(*) as transaction_count,
       COALESCE(SUM(p.amount), 0) as total_amount,
       COUNT(CASE WHEN p.status = 'completed' THEN 1 END) as completed_count,
@@ -659,7 +676,11 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
     FROM payments p
     JOIN orders o ON p.order_id = o.id
     WHERE 1=1 ${dateFilter}
-    GROUP BY p.method
+    GROUP BY 
+      CASE 
+        WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+        ELSE p.method 
+      END
     ORDER BY total_amount DESC
   `, params);
 
@@ -1151,7 +1172,20 @@ const getReportPDF = asyncHandler(async (req, res) => {
       [targetDate]
     );
     const [paymentMethods] = await pool.query(
-      `SELECT p.method, COUNT(*) as count, COALESCE(SUM(p.amount), 0) as total_amount FROM payments p JOIN orders o ON p.order_id = o.id WHERE DATE(o.created_at) = ? AND p.status = 'completed' GROUP BY p.method`,
+      `SELECT 
+        CASE 
+          WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          ELSE p.method 
+        END as method, 
+        COUNT(*) as count, 
+        COALESCE(SUM(p.amount), 0) as total_amount 
+       FROM payments p JOIN orders o ON p.order_id = o.id 
+       WHERE DATE(o.created_at) = ? AND p.status = 'completed' 
+       GROUP BY 
+        CASE 
+          WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          ELSE p.method 
+        END`,
       [targetDate]
     );
     const [topProducts] = await pool.query(
@@ -1278,10 +1312,23 @@ const getReportPDF = asyncHandler(async (req, res) => {
     reportData = stockData;
   } else if (tab === 'payment') {
     const [paymentMethods] = await pool.query(
-      `SELECT p.method, COUNT(*) as transaction_count, COUNT(CASE WHEN p.status = 'completed' THEN 1 END) as completed_count,
-       COUNT(CASE WHEN p.status = 'pending' THEN 1 END) as pending_count, COUNT(CASE WHEN p.status = 'failed' THEN 1 END) as failed_count,
-       COALESCE(SUM(CASE WHEN p.status = 'completed' THEN p.amount ELSE 0 END), 0) as total_amount
-       FROM payments p JOIN orders o ON p.order_id = o.id WHERE DATE(o.created_at) BETWEEN ? AND ? GROUP BY p.method`,
+      `SELECT 
+        CASE 
+          WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          ELSE p.method 
+        END as method,
+        COUNT(*) as transaction_count, 
+        COUNT(CASE WHEN p.status = 'completed' THEN 1 END) as completed_count,
+        COUNT(CASE WHEN p.status = 'pending' THEN 1 END) as pending_count, 
+        COUNT(CASE WHEN p.status = 'failed' THEN 1 END) as failed_count,
+        COALESCE(SUM(CASE WHEN p.status = 'completed' THEN p.amount ELSE 0 END), 0) as total_amount
+       FROM payments p JOIN orders o ON p.order_id = o.id 
+       WHERE DATE(o.created_at) BETWEEN ? AND ? 
+       GROUP BY 
+        CASE 
+          WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          ELSE p.method 
+        END`,
       [start_date, end_date]
     );
     reportData = { payment_methods: paymentMethods || [] };
