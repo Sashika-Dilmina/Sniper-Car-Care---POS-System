@@ -149,6 +149,11 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
        WHERE o.status IN ('pending', 'processing') 
          AND o.vip_booking_id IS NULL
          AND ${dateFilter.replace(/created_at/g, 'o.created_at')}
+         AND (
+           EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
+           OR
+           EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
+         )
        GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')`
     );
     pendingSaloonCount = pendingVehiclesResult.find(item => item.vehicleType === 'Saloon')?.count || 0;
@@ -165,7 +170,12 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
        FROM orders o
        WHERE o.status IN ('pending', 'processing') 
          AND o.vip_booking_id IS NOT NULL 
-         AND ${dateFilter.replace(/created_at/g, 'o.created_at')}`
+         AND ${dateFilter.replace(/created_at/g, 'o.created_at')}
+         AND (
+           EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
+           OR
+           EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
+         )`
     );
     pendingVipCount = pendingVipResult[0]?.count || 0;
   } catch (error) {

@@ -211,13 +211,18 @@ const closeRegister = asyncHandler(async (req, res) => {
 
   const register = rows[0];
 
-  // Check for any pending or processing saloon or 4x4 vehicles (excluding VIP)
+  // Check for any pending or processing saloon or 4x4 vehicles (excluding VIP) on the date when the register session was opened
   const [pendingVehicles] = await pool.query(
     `SELECT COUNT(*) as count 
      FROM orders o
      WHERE o.status IN ('pending', 'processing') 
        AND o.vip_booking_id IS NULL
-       AND DATE(o.created_at) = DATE(?)`,
+       AND DATE(o.created_at) = DATE(?)
+       AND (
+         EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
+         OR
+         EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
+       )`,
     [register.opened_at]
   );
   if (pendingVehicles[0].count > 0) {
