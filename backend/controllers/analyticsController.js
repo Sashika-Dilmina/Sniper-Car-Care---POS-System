@@ -1,6 +1,9 @@
 const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const XLSX = require('xlsx');
+const path = require('path');
+const fs = require('fs');
+const { generatePDFReport } = require('../utils/pdfReportGenerator');
 
 // Helper function to send Excel file
 const sendExcelFile = (res, workbook, filename) => {
@@ -965,63 +968,99 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Start date and end date are required' });
   }
 
-  // 1. Get total sales (gross without discount, and net with discount)
-  const [salesResult] = await pool.query(
-    "SELECT COALESCE(SUM(total + discount), 0) as total_sales, COALESCE(SUM(total), 0) as net_sales, COALESCE(SUM(discount), 0) as total_discounts, COUNT(*) as sales_count FROM orders WHERE payment_status = 'paid' AND DATE(created_at) BETWEEN ? AND ?",
+  // 1. Query Cash Sales
+  const [cashSalesResult] = await pool.query(
+    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+  
+  // 2. Query Card Sales (group all methods other than cash, bank_transfer, credit, free)
+  const [cardSalesResult] = await pool.query(
+    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method NOT IN ('cash', 'bank_transfer', 'credit', 'free') AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
     [start_date, end_date]
   );
 
-  // 2. Get total purchases
+  // 3. Query Bank Transfer Sales
+  const [bankSalesResult] = await pool.query(
+    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
+  // 4. Query Credit Sales
+  const [creditSalesResult] = await pool.query(
+    "SELECT COALESCE(SUM(cc.amount), 0) as total FROM customer_credits cc JOIN orders o ON cc.order_id = o.id WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
+  // 5. Query Discounts and Count
+  const [discountsResult] = await pool.query(
+    "SELECT COALESCE(SUM(discount), 0) as total_discounts, COUNT(*) as sales_count FROM orders WHERE status != 'cancelled' AND DATE(created_at) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
+  const cashSales = parseFloat(cashSalesResult[0].total || 0);
+  const cardSales = parseFloat(cardSalesResult[0].total || 0);
+  const bankSales = parseFloat(bankSalesResult[0].total || 0);
+  const creditSales = parseFloat(creditSalesResult[0].total || 0);
+  const totalDiscounts = parseFloat(discountsResult[0].total_discounts || 0);
+  const salesCount = discountsResult[0].sales_count || 0;
+
+  const netSales = cashSales + cardSales + bankSales + creditSales;
+  const totalSales = netSales + totalDiscounts;
+
+  // 6. Query Cost of Order Items (for orders with items)
+  const [itemsCostResult] = await pool.query(
+    `SELECT COALESCE(SUM(oi.quantity * COALESCE(p.purchase_price, 0)), 0) as total
+     FROM order_items oi
+     JOIN products p ON oi.product_id = p.id
+     JOIN orders o ON oi.order_id = o.id
+     WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?`,
+    [start_date, end_date]
+  );
+  const itemsCost = parseFloat(itemsCostResult[0].total || 0);
+
+  // 7. Query Cost of Services (for website bookings without order items)
+  const [servicesCostResult] = await pool.query(
+    `SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total
+     FROM services s
+     JOIN orders o ON s.order_id = o.id
+     JOIN products p ON s.service_name = p.name
+     WHERE o.status != 'cancelled' 
+       AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id)
+       AND DATE(o.created_at) BETWEEN ? AND ?`,
+    [start_date, end_date]
+  );
+  const servicesCost = parseFloat(servicesCostResult[0].total || 0);
+
+  const totalCost = itemsCost + servicesCost;
+
+  // 8. Get total purchases
   const [purchasesResult] = await pool.query(
     "SELECT COALESCE(SUM(total_price), 0) as total_purchases, COUNT(*) as purchases_count FROM purchases WHERE DATE(purchase_date) BETWEEN ? AND ?",
     [start_date, end_date]
   );
 
-  // 3. Get total expenses
+  // 9. Get total expenses
   const [expensesResult] = await pool.query(
     "SELECT COALESCE(SUM(amount), 0) as total_expenses, COUNT(*) as expenses_count FROM expenses WHERE DATE(expense_date) BETWEEN ? AND ?",
     [start_date, end_date]
   );
 
-  // 4. Get purchases by category
+  // 10. Get purchases by category
   const [purchasesByCategory] = await pool.query(
     "SELECT category, COALESCE(SUM(total_price), 0) as total, COUNT(*) as count FROM purchases WHERE DATE(purchase_date) BETWEEN ? AND ? GROUP BY category",
     [start_date, end_date]
   );
 
-  // 5. Get expenses by category
+  // 11. Get expenses by category
   const [expensesByCategory] = await pool.query(
     "SELECT category, COALESCE(SUM(amount), 0) as total, COUNT(*) as count FROM expenses WHERE DATE(expense_date) BETWEEN ? AND ? GROUP BY category",
     [start_date, end_date]
   );
 
-  // 6. Get credits outstanding summary
+  // 12. Get credits outstanding summary
   const [creditsResult] = await pool.query(
     "SELECT COALESCE(SUM(remaining_amount), 0) as total_outstanding, COUNT(*) as count FROM customer_credits WHERE status != 'fully_paid'"
-  );
-
-  // Query Cash Sales
-  const [cashSalesResult] = await pool.query(
-    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.payment_status = 'paid' AND p.method = 'cash' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
-    [start_date, end_date]
-  );
-  
-  // Query Card Sales (group all methods other than cash and bank_transfer under card sales)
-  const [cardSalesResult] = await pool.query(
-    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.payment_status = 'paid' AND p.method NOT IN ('cash', 'bank_transfer') AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
-    [start_date, end_date]
-  );
-
-  // Query Bank Transfer Sales
-  const [bankSalesResult] = await pool.query(
-    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.payment_status = 'paid' AND p.method = 'bank_transfer' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
-    [start_date, end_date]
-  );
-
-  // Query Credit Sales
-  const [creditSalesResult] = await pool.query(
-    "SELECT COALESCE(SUM(amount), 0) as total FROM customer_credits WHERE DATE(created_at) BETWEEN ? AND ?",
-    [start_date, end_date]
   );
 
   // Query Cash Recovery
@@ -1042,11 +1081,9 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
     [start_date, end_date]
   );
 
-  const totalSales = parseFloat(salesResult[0].total_sales || 0);
-  const netSales = parseFloat(salesResult[0].net_sales || 0);
   const totalPurchases = parseFloat(purchasesResult[0].total_purchases || 0);
   const totalExpenses = parseFloat(expensesResult[0].total_expenses || 0);
-  const netProfit = netSales - totalPurchases - totalExpenses;
+  const netProfit = netSales - totalCost;
 
   res.json({
     success: true,
@@ -1054,25 +1091,371 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
     summary: {
       total_sales: totalSales,
       net_sales: netSales,
-      total_discounts: parseFloat(salesResult[0].total_discounts || 0),
-      sales_count: salesResult[0].sales_count,
+      total_discounts: totalDiscounts,
+      sales_count: salesCount,
       total_purchases: totalPurchases,
       purchases_count: purchasesResult[0].purchases_count,
       total_expenses: totalExpenses,
       expenses_count: expensesResult[0].expenses_count,
+      total_cost: totalCost,
       net_profit: netProfit,
       outstanding_credit: parseFloat(creditsResult[0].total_outstanding || 0),
       outstanding_credit_count: creditsResult[0].count,
-      cash_sales: parseFloat(cashSalesResult[0].total || 0),
-      card_sales: parseFloat(cardSalesResult[0].total || 0),
-      bank_transfer_sales: parseFloat(bankSalesResult[0].total || 0),
-      credit_sales: parseFloat(creditSalesResult[0].total || 0),
+      cash_sales: cashSales,
+      card_sales: cardSales,
+      bank_transfer_sales: bankSales,
+      credit_sales: creditSales,
       cash_recovery: parseFloat(cashRecoveryResult[0].total || 0),
       card_recovery: parseFloat(cardRecoveryResult[0].total || 0),
       bank_recovery: parseFloat(bankRecoveryResult[0].total || 0)
     },
     purchases_by_category: purchasesByCategory || [],
     expenses_by_category: expensesByCategory || []
+  });
+});
+
+// @desc    Generate report PDF for WhatsApp sharing
+// @route   GET /api/analytics/reports/pdf
+// @access  Private
+const getReportPDF = asyncHandler(async (req, res) => {
+  const { tab, date, start_date, end_date, register_id } = req.query;
+
+  if (!tab) {
+    return res.status(400).json({ success: false, message: 'Tab type is required' });
+  }
+
+  let reportData = null;
+  const params = { date, start_date, end_date, register_id };
+
+  // Fetch report data based on the tab
+  if (tab === 'daily') {
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const [ordersSummary] = await pool.query(
+      `SELECT COUNT(*) as total_orders, COALESCE(SUM(total), 0) as total_revenue, COALESCE(SUM(discount), 0) as total_discounts,
+       COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) as paid_orders, COUNT(CASE WHEN payment_status = 'pending' THEN 1 END) as pending_orders FROM orders WHERE DATE(created_at) = ?`,
+      [targetDate]
+    );
+    const [servicesSummary] = await pool.query(
+      `SELECT COUNT(*) as total_services, COALESCE(SUM(price), 0) as services_revenue,
+       COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_services FROM services WHERE DATE(created_at) = ?`,
+      [targetDate]
+    );
+    const [paymentMethods] = await pool.query(
+      `SELECT p.method, COUNT(*) as count, COALESCE(SUM(p.amount), 0) as total_amount FROM payments p JOIN orders o ON p.order_id = o.id WHERE DATE(o.created_at) = ? AND p.status = 'completed' GROUP BY p.method`,
+      [targetDate]
+    );
+    const [topProducts] = await pool.query(
+      `SELECT p.name, p.category, SUM(oi.quantity) as quantity_sold, SUM(oi.quantity * oi.price) as revenue FROM order_items oi JOIN products p ON oi.product_id = p.id JOIN orders o ON oi.order_id = o.id WHERE DATE(o.created_at) = ? AND o.payment_status = 'paid' GROUP BY p.id ORDER BY revenue DESC LIMIT 10`,
+      [targetDate]
+    );
+    reportData = {
+      orders: ordersSummary[0] || {},
+      services: servicesSummary[0] || {},
+      payment_methods: paymentMethods || [],
+      top_products: topProducts || []
+    };
+  } else if (tab === 'business_summary') {
+    const [cashSalesResult] = await pool.query(
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+    const [cardSalesResult] = await pool.query(
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method NOT IN ('cash', 'bank_transfer', 'credit', 'free') AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+    const [bankSalesResult] = await pool.query(
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+    const [creditSalesResult] = await pool.query(
+      "SELECT COALESCE(SUM(cc.amount), 0) as total FROM customer_credits cc JOIN orders o ON cc.order_id = o.id WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+    const [discountsResult] = await pool.query(
+      "SELECT COALESCE(SUM(discount), 0) as total_discounts, COUNT(*) as sales_count FROM orders WHERE status != 'cancelled' AND DATE(created_at) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+
+    const cashSales = parseFloat(cashSalesResult[0].total || 0);
+    const cardSales = parseFloat(cardSalesResult[0].total || 0);
+    const bankSales = parseFloat(bankSalesResult[0].total || 0);
+    const creditSales = parseFloat(creditSalesResult[0].total || 0);
+    const totalDiscounts = parseFloat(discountsResult[0].total_discounts || 0);
+    const salesCount = discountsResult[0].sales_count || 0;
+    const netSales = cashSales + cardSales + bankSales + creditSales;
+    const totalSales = netSales + totalDiscounts;
+
+    const [itemsCostResult] = await pool.query(
+      `SELECT COALESCE(SUM(oi.quantity * COALESCE(p.purchase_price, 0)), 0) as total FROM order_items oi JOIN products p ON oi.product_id = p.id JOIN orders o ON oi.order_id = o.id WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?`,
+      [start_date, end_date]
+    );
+    const itemsCost = parseFloat(itemsCostResult[0].total || 0);
+
+    const [servicesCostResult] = await pool.query(
+      `SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total FROM services s JOIN orders o ON s.order_id = o.id JOIN products p ON s.service_name = p.name WHERE o.status != 'cancelled' AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) AND DATE(o.created_at) BETWEEN ? AND ?`,
+      [start_date, end_date]
+    );
+    const servicesCost = parseFloat(servicesCostResult[0].total || 0);
+    const totalCost = itemsCost + servicesCost;
+
+    const [purchasesResult] = await pool.query(
+      "SELECT COALESCE(SUM(total_price), 0) as total_purchases, COUNT(*) as purchases_count FROM purchases WHERE DATE(purchase_date) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+    const [expensesResult] = await pool.query(
+      "SELECT COALESCE(SUM(amount), 0) as total_expenses, COUNT(*) as expenses_count FROM expenses WHERE DATE(expense_date) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+    const [purchasesByCategory] = await pool.query(
+      "SELECT category, COALESCE(SUM(total_price), 0) as total, COUNT(*) as count FROM purchases WHERE DATE(purchase_date) BETWEEN ? AND ? GROUP BY category",
+      [start_date, end_date]
+    );
+    const [expensesByCategory] = await pool.query(
+      "SELECT category, COALESCE(SUM(amount), 0) as total, COUNT(*) as count FROM expenses WHERE DATE(expense_date) BETWEEN ? AND ? GROUP BY category",
+      [start_date, end_date]
+    );
+
+    const [cashRecoveryResult] = await pool.query(
+      "SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_method = 'cash' AND DATE(payment_date) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+    const [cardRecoveryResult] = await pool.query(
+      "SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_method = 'card' AND DATE(payment_date) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+    const [bankRecoveryResult] = await pool.query(
+      "SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_method = 'bank_transfer' AND DATE(payment_date) BETWEEN ? AND ?",
+      [start_date, end_date]
+    );
+
+    reportData = {
+      summary: {
+        total_sales: totalSales,
+        net_sales: netSales,
+        total_discounts: totalDiscounts,
+        sales_count: salesCount,
+        total_purchases: parseFloat(purchasesResult[0].total_purchases || 0),
+        purchases_count: purchasesResult[0].purchases_count,
+        total_expenses: parseFloat(expensesResult[0].total_expenses || 0),
+        expenses_count: expensesResult[0].expenses_count,
+        total_cost: totalCost,
+        net_profit: netSales - totalCost,
+        cash_sales: cashSales,
+        card_sales: cardSales,
+        bank_transfer_sales: bankSales,
+        credit_sales: creditSales,
+        cash_recovery: parseFloat(cashRecoveryResult[0].total || 0),
+        card_recovery: parseFloat(cardRecoveryResult[0].total || 0),
+        bank_recovery: parseFloat(bankRecoveryResult[0].total || 0)
+      },
+      purchases_by_category: purchasesByCategory || [],
+      expenses_by_category: expensesByCategory || []
+    };
+  } else if (tab === 'stock') {
+    const paramsList = [];
+    let dateFilter = '';
+    if (start_date && end_date) {
+      dateFilter = 'AND DATE(o.created_at) BETWEEN ? AND ?';
+      paramsList.push(start_date, end_date);
+    }
+    const [stockData] = await pool.query(
+      `SELECT p.id, p.name, p.category, p.stock AS current_stock, p.price AS selling_price, p.purchase_price AS cost_price,
+       COALESCE(SUM(CASE WHEN o.payment_status = 'paid' ${dateFilter} THEN oi.quantity ELSE 0 END), 0) AS quantity_sold
+       FROM products p LEFT JOIN order_items oi ON p.id = oi.product_id LEFT JOIN orders o ON oi.order_id = o.id
+       WHERE p.category != 'Services' GROUP BY p.id ORDER BY p.name ASC`,
+      paramsList
+    );
+    reportData = stockData;
+  } else if (tab === 'payment') {
+    const [paymentMethods] = await pool.query(
+      `SELECT p.method, COUNT(*) as transaction_count, COUNT(CASE WHEN p.status = 'completed' THEN 1 END) as completed_count,
+       COUNT(CASE WHEN p.status = 'pending' THEN 1 END) as pending_count, COUNT(CASE WHEN p.status = 'failed' THEN 1 END) as failed_count,
+       COALESCE(SUM(CASE WHEN p.status = 'completed' THEN p.amount ELSE 0 END), 0) as total_amount
+       FROM payments p JOIN orders o ON p.order_id = o.id WHERE DATE(o.created_at) BETWEEN ? AND ? GROUP BY p.method`,
+      [start_date, end_date]
+    );
+    reportData = { payment_methods: paymentMethods || [] };
+  } else if (tab === 'customer') {
+    const [customersData] = await pool.query(
+      `SELECT c.id, c.name, c.phone, c.vehicle_plate, COUNT(o.id) as total_orders,
+       COALESCE(SUM(o.total), 0) as total_spent, COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total ELSE 0 END), 0) as paid_amount,
+       COALESCE(SUM(CASE WHEN o.payment_status = 'pending' THEN o.total ELSE 0 END), 0) as pending_amount
+       FROM customers c LEFT JOIN orders o ON c.id = o.customer_id AND DATE(o.created_at) BETWEEN ? AND ?
+       GROUP BY c.id ORDER BY total_spent DESC`,
+      [start_date, end_date]
+    );
+    reportData = { customers: customersData || [] };
+  } else if (tab === 'supplier') {
+    const [suppliersData] = await pool.query(
+      `SELECT s.id as supplier_id, s.name as supplier_name, s.contact_person, s.phone, COUNT(DISTINCT p.id) as products_count,
+       COUNT(DISTINCT oi.order_id) as orders_involved, COALESCE(SUM(oi.quantity), 0) as items_sold,
+       COALESCE(SUM(oi.quantity * oi.price), 0) as total_revenue_from_products
+       FROM suppliers s LEFT JOIN products p ON s.id = p.supplier_id LEFT JOIN order_items oi ON p.id = oi.product_id
+       LEFT JOIN orders o ON oi.order_id = o.id AND DATE(o.created_at) BETWEEN ? AND ?
+       GROUP BY s.id ORDER BY supplier_name ASC`,
+      [start_date, end_date]
+    );
+    reportData = { suppliers: suppliersData || [] };
+  } else if (tab === 'purchases') {
+    const [purchasesData] = await pool.query(
+      `SELECT p.name as product_name, p.category, COALESCE(SUM(oi.quantity), 0) as quantity_sold,
+       COALESCE(SUM(oi.quantity * oi.price), 0) as total_amount, COUNT(DISTINCT oi.order_id) as order_count,
+       COALESCE(AVG(oi.price), 0) as average_price
+       FROM order_items oi JOIN products p ON oi.product_id = p.id JOIN orders o ON oi.order_id = o.id
+       WHERE DATE(o.created_at) BETWEEN ? AND ? GROUP BY p.id ORDER BY total_amount DESC`,
+      [start_date, end_date]
+    );
+    reportData = { items: purchasesData || [] };
+  } else if (tab === 'credit') {
+    const [credits] = await pool.query(
+      `SELECT cc.*, c.name as customer_name, c.phone as customer_phone, c.vehicle_plate, c.vehicle_type
+       FROM customer_credits cc JOIN customers c ON cc.customer_id = c.id ORDER BY cc.status ASC, cc.created_at DESC`
+    );
+    let filtered = credits;
+    if (start_date && end_date) {
+      const start = new Date(start_date + 'T00:00:00');
+      const end = new Date(end_date + 'T23:59:59');
+      filtered = credits.filter(c => {
+        const date = new Date(c.created_at);
+        return date >= start && date <= end;
+      });
+    }
+    const total_credit_granted = filtered.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
+    const total_outstanding = filtered.reduce((sum, c) => sum + parseFloat(c.remaining_amount || 0), 0);
+    reportData = {
+      credits: filtered,
+      total_credit_granted,
+      total_outstanding,
+      total_recovered: total_credit_granted - total_outstanding
+    };
+  } else if (tab === 'registers') {
+    let register;
+    if (register_id) {
+      const [rows] = await pool.query('SELECT * FROM cash_registers WHERE id = ?', [register_id]);
+      if (rows.length === 0) return res.status(404).json({ success: false, message: 'Register session not found' });
+      register = rows[0];
+    } else {
+      const [rows] = await pool.query('SELECT * FROM cash_registers WHERE status = "open" LIMIT 1');
+      if (rows.length === 0) return res.status(404).json({ success: false, message: 'No active cash register session' });
+      register = rows[0];
+    }
+    const openedAt = register.opened_at;
+    const closedAt = register.closed_at || new Date();
+
+    const [cashSalesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cash" AND status = "completed"',
+      [openedAt, closedAt]
+    );
+    const cashSales = parseFloat(cashSalesRows[0].total);
+
+    const [cashRecoveriesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_date >= ? AND payment_date <= ? AND payment_method = "cash"',
+      [openedAt, closedAt]
+    );
+    const cashRecoveries = parseFloat(cashRecoveriesRows[0].total);
+    const totalCashPayments = cashSales + cashRecoveries;
+
+    const [cardSalesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND (method = "card" OR method = "visa") AND status = "completed"',
+      [openedAt, closedAt]
+    );
+    const cardSales = parseFloat(cardSalesRows[0].total);
+
+    const [cardRecoveriesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_date >= ? AND payment_date <= ? AND payment_method = "card"',
+      [openedAt, closedAt]
+    );
+    const cardRecoveries = parseFloat(cardRecoveriesRows[0].total);
+    const totalCardPayments = cardSales + cardRecoveries;
+
+    const [chequeSalesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cheque" AND status = "completed"',
+      [openedAt, closedAt]
+    );
+    const chequeSales = parseFloat(chequeSalesRows[0].total);
+
+    const [bankSalesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "bank_transfer" AND status = "completed"',
+      [openedAt, closedAt]
+    );
+    const bankSales = parseFloat(bankSalesRows[0].total);
+
+    const [otherSalesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method IN ("apple_pay", "samsung_pay", "tap") AND status = "completed"',
+      [openedAt, closedAt]
+    );
+    const otherSales = parseFloat(otherSalesRows[0].total);
+
+    const [creditSalesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM customer_credits WHERE created_at >= ? AND created_at <= ?',
+      [openedAt, closedAt]
+    );
+    const creditSales = parseFloat(creditSalesRows[0].total);
+
+    const [creditRecoveriesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_date >= ? AND payment_date <= ?',
+      [openedAt, closedAt]
+    );
+    const creditRecoveries = parseFloat(creditRecoveriesRows[0].total);
+
+    const [totalExpensesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE created_at >= ? AND created_at <= ?',
+      [openedAt, closedAt]
+    );
+    const totalExpenses = parseFloat(totalExpensesRows[0].total);
+
+    const [cashExpensesRows] = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE created_at >= ? AND created_at <= ? AND payment_method = "cash"',
+      [openedAt, closedAt]
+    );
+    const cashExpenses = parseFloat(cashExpensesRows[0].total);
+
+    const totalSales = totalCashPayments + totalCardPayments + bankSales + chequeSales + otherSales + (creditSales - creditRecoveries);
+    const amountInCashDrawer = parseFloat(register.opening_balance) + totalCashPayments - cashExpenses;
+
+    reportData = {
+      register_id: register.id,
+      status: register.status,
+      opened_at: register.opened_at,
+      closed_at: register.closed_at,
+      opening_balance: parseFloat(register.opening_balance),
+      closing_balance: register.closing_balance ? parseFloat(register.closing_balance) : null,
+      closed_amount: register.closed_amount ? parseFloat(register.closed_amount) : null,
+      cash_payments: { total: totalCashPayments, sale: cashSales, recovery: cashRecoveries },
+      card_payments: { total: totalCardPayments, sale: cardSales, recovery: cardRecoveries },
+      cheque_payments: chequeSales,
+      bank_transfer: bankSales,
+      other_payments: otherSales,
+      credit_sales: creditSales,
+      credit_sale_recovery: creditRecoveries,
+      total_expense: totalExpenses,
+      cash_expense: cashExpenses,
+      total_sales: totalSales,
+      amount_in_cash_drawer: amountInCashDrawer,
+      notes: register.notes
+    };
+  }
+
+  if (!reportData) {
+    return res.status(404).json({ success: false, message: 'No data found for this report type' });
+  }
+
+  // 2. Setup output folder and filename
+  const reportsDir = path.join(__dirname, '..', 'uploads', 'reports');
+  if (!fs.existsSync(reportsDir)) {
+    fs.mkdirSync(reportsDir, { recursive: true });
+  }
+
+  const filename = `report-${tab}-${Date.now()}.pdf`;
+  const outputPath = path.join(reportsDir, filename);
+
+  // 3. Generate PDF file
+  await generatePDFReport(tab, reportData, params, outputPath);
+
+  // 4. Return download URL
+  res.json({
+    success: true,
+    pdfUrl: `/uploads/reports/${filename}`
   });
 });
 

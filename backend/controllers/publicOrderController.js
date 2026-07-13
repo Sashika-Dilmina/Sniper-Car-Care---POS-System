@@ -199,7 +199,7 @@ const createOrder = asyncHandler(async (req, res) => {
 
           await connection.query(
             'UPDATE orders SET total = 0.00, discount = ?, payment_status = ? WHERE id = ?',
-            [total, 'paid', orderId]
+            [total, 'free', orderId]
           );
 
           await connection.query(

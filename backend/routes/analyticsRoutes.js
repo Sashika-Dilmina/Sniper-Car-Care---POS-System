@@ -10,7 +10,8 @@ const {
   getSupplierPaymentReport,
   getPurchasesReport,
   getProfitLossReport,
-  getStockReport
+  getStockReport,
+  getReportPDF
 } = require('../controllers/analyticsController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -18,6 +19,9 @@ router.use(protect);
 
 // Dashboard is accessible to both admin and staff
 router.get('/dashboard', getDashboardAnalytics);
+
+// Report PDF sharing (accessible to all authenticated users for their respective tabs)
+router.get('/reports/pdf', getReportPDF);
 
 // All reports routes are admin only
 router.get('/reports/sales', authorize('admin'), getSalesReport);

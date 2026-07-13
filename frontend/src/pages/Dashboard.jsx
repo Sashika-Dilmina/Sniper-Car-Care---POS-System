@@ -10,8 +10,17 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [analytics, setAnalytics] = useState(null);
   const [vipAppointments, setVipAppointments] = useState([]);
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const getTodayDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [todayDate, setTodayDate] = useState(getTodayDateString());
+  const [startDate, setStartDate] = useState(getTodayDateString());
+  const [endDate, setEndDate] = useState(getTodayDateString());
   const [vipLoading, setVipLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [completedServices, setCompletedServices] = useState([]);
@@ -77,12 +86,7 @@ const Dashboard = () => {
       return;
     }
 
-    const pendingSaloon = Number(summary.pending_saloon_count) || 0;
-    const pending4x4 = Number(summary.pending_4x4_count) || 0;
-    if (pendingSaloon > 0 || pending4x4 > 0) {
-      toast.error(`Cannot close register. There are still pending/processing vehicles (${pendingSaloon} Saloon, ${pending4x4} 4x4) that must be completed first.`);
-      return;
-    }
+    // Rely on backend register check which correctly filters pending orders by the active register open date
 
     try {
       const resp = await axios.post('/api/registers/close', {
@@ -147,6 +151,16 @@ const Dashboard = () => {
     }
 
     const interval = setInterval(() => {
+      const freshToday = getTodayDateString();
+      setTodayDate((prevToday) => {
+        if (freshToday !== prevToday) {
+          setStartDate((prevStart) => (prevStart === prevToday ? freshToday : prevStart));
+          setEndDate((prevEnd) => (prevEnd === prevToday ? freshToday : prevEnd));
+          return freshToday;
+        }
+        return prevToday;
+      });
+
       fetchAnalytics(true, startDate, endDate);
       fetchVIPAppointments(true);
       fetchRegisterStatus();
@@ -156,7 +170,7 @@ const Dashboard = () => {
     }, 7000);
 
     return () => clearInterval(interval);
-  }, [isAdmin, startDate, endDate]);
+  }, [isAdmin, startDate, endDate, todayDate]);
 
   const fetchCompletedServices = async (silent = false) => {
     if (!silent) setServicesLoading(true);

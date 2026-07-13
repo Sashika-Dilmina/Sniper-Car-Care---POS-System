@@ -199,7 +199,8 @@ const processManualPayment = asyncHandler(async (req, res) => {
 
       const totalPaid = parseFloat(payments[0].total_paid || 0);
 
-      const newPaymentStatus = totalPaid >= orderTotal ? 'paid' : (totalPaid > 0 ? 'partial' : 'pending');
+      const isFreeWash = method === 'free' || orderTotal === 0;
+      const newPaymentStatus = isFreeWash ? 'free' : (totalPaid >= orderTotal ? 'paid' : (totalPaid > 0 ? 'partial' : 'pending'));
       await connection.query(
         'UPDATE orders SET payment_status = ? WHERE id = ?',
         [newPaymentStatus, order_id]

@@ -72,6 +72,7 @@ const Reports = () => {
   const [loadingRegisters, setLoadingRegisters] = useState(false);
   const [selectedRegisterReport, setSelectedRegisterReport] = useState(null);
   const [loadingRegisterReport, setLoadingRegisterReport] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const printRegisterId = searchParams.get('print_register_id');
 
   const formatRegisterDate = (dateStr) => {
@@ -434,129 +435,89 @@ const Reports = () => {
     { id: 'registers', label: 'Cash Register Sessions' },
   ];
 
-  const handleWhatsAppShare = () => {
-    let message = '';
-    
-    if (activeTab === 'daily') {
-      if (!dailyReport) {
-        toast.error('No daily summary report loaded');
-        return;
+  const handleWhatsAppShare = async () => {
+    setSharing(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('tab', activeTab);
+      
+      if (activeTab === 'daily') {
+        params.append('date', dailyDate);
+      } else if (activeTab === 'business_summary') {
+        if (!plStartDate || !plEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', plStartDate);
+        params.append('end_date', plEndDate);
+      } else if (activeTab === 'stock') {
+        if (stockStartDate && stockEndDate) {
+          params.append('start_date', stockStartDate);
+          params.append('end_date', stockEndDate);
+        }
+      } else if (activeTab === 'payment') {
+        if (!paymentStartDate || !paymentEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', paymentStartDate);
+        params.append('end_date', paymentEndDate);
+      } else if (activeTab === 'customer') {
+        if (!customerStartDate || !customerEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', customerStartDate);
+        params.append('end_date', customerEndDate);
+      } else if (activeTab === 'supplier') {
+        if (!supplierStartDate || !supplierEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', supplierStartDate);
+        params.append('end_date', supplierEndDate);
+      } else if (activeTab === 'purchases') {
+        if (!purchaseStartDate || !purchaseEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', purchaseStartDate);
+        params.append('end_date', purchaseEndDate);
+      } else if (activeTab === 'credit') {
+        if (creditStartDate && creditEndDate) {
+          params.append('start_date', creditStartDate);
+          params.append('end_date', creditEndDate);
+        }
+      } else if (activeTab === 'registers') {
+        if (!selectedRegisterReport) {
+          toast.error('No active register session report opened');
+          setSharing(false);
+          return;
+        }
+        params.append('register_id', selectedRegisterReport.register_id);
       }
-      message = `*Sniper Car Care - Daily Summary*\n` +
-        `*Date:* ${dailyDate}\n\n` +
-        `*Orders Total:* ${dailyReport.orders?.total_orders || 0}\n` +
-        `*Orders Revenue:* AED ${parseFloat(dailyReport.orders?.total_revenue || 0).toFixed(2)}\n` +
-        `*Services Completed:* ${dailyReport.services?.total_services || 0}\n` +
-        `*Services Revenue:* AED ${parseFloat(dailyReport.services?.services_revenue || 0).toFixed(2)}\n\n` +
-        `*Payment Methods Breakdown:* \n` +
-        (dailyReport.payment_methods?.map(pm => `- ${pm.method.toUpperCase()}: AED ${parseFloat(pm.total_amount).toFixed(2)} (${pm.transaction_count} sales)`).join('\n') || 'None') + `\n\n` +
-        `*Top Products Sold:* \n` +
-        (dailyReport.top_products?.map(p => `- ${p.product_name} (Qty: ${p.total_quantity_sold}) - AED ${parseFloat(p.total_revenue).toFixed(2)}`).join('\n') || 'None');
-    } else if (activeTab === 'business_summary') {
-      if (!plReport || !plReport.summary) {
-        toast.error('No profit & loss summary report loaded');
-        return;
-      }
-      const sum = plReport.summary;
-      message = `*Sniper Car Care - Profit & Loss Statement*\n` +
-        `*Period:* ${plStartDate || 'N/A'} to ${plEndDate || 'N/A'}\n\n` +
-        `*Gross Sales:* AED ${parseFloat(sum.total_sales).toFixed(2)}\n` +
-        `*Net Sales:* AED ${parseFloat(sum.net_sales).toFixed(2)}\n` +
-        `- Cash Sales: AED ${parseFloat(sum.cash_sales).toFixed(2)}\n` +
-        `- Card Sales: AED ${parseFloat(sum.card_sales).toFixed(2)}\n` +
-        `- Credit Sales: AED ${parseFloat(sum.credit_sales).toFixed(2)}\n` +
-        `- Bank Transfer: AED ${parseFloat(sum.bank_transfer_sales).toFixed(2)}\n\n` +
-        `*Credit Recoveries:* AED ${parseFloat((sum.cash_recovery || 0) + (sum.card_recovery || 0) + (sum.bank_recovery || 0)).toFixed(2)}\n` +
-        `*Total Purchases:* AED ${parseFloat(sum.total_purchases).toFixed(2)}\n` +
-        `*Total Expenses:* AED ${parseFloat(sum.total_expenses).toFixed(2)}\n\n` +
-        `*Net Profit/Loss:* AED ${parseFloat(sum.net_profit).toFixed(2)}`;
-    } else if (activeTab === 'stock') {
-      if (!stockReport) {
-        toast.error('No stock report loaded');
-        return;
-      }
-      message = `*Sniper Car Care - Stock Inventory Report*\n` +
-        `*Date:* ${new Date().toLocaleDateString()}\n\n` +
-        stockReport.map(item => `- ${item.name} (${item.category}): Stock: ${item.stock} | Unit Cost: AED ${parseFloat(item.purchase_price || 0).toFixed(2)}`).join('\n');
-    } else if (activeTab === 'payment') {
-      if (!paymentReport) {
-        toast.error('No payment report loaded');
-        return;
-      }
-      message = `*Sniper Car Care - Payment Type Report*\n` +
-        `*Period:* ${paymentStartDate || 'N/A'} to ${paymentEndDate || 'N/A'}\n\n` +
-        paymentReport.map(item => `- ${item.method.toUpperCase()}: AED ${parseFloat(item.total_amount).toFixed(2)} (${item.transaction_count} txs)`).join('\n');
-    } else if (activeTab === 'customer') {
-      if (!customerReport) {
-        toast.error('No customer report loaded');
-        return;
-      }
-      message = `*Sniper Car Care - Customer Wise Report*\n` +
-        `*Period:* ${customerStartDate || 'N/A'} to ${customerEndDate || 'N/A'}\n\n` +
-        customerReport.slice(0, 15).map(item => `- ${item.name} (${item.phone}): ${item.order_count} visits | Spent: AED ${parseFloat(item.total_spent).toFixed(2)}`).join('\n');
-    } else if (activeTab === 'supplier') {
-      if (!supplierReport) {
-        toast.error('No supplier report loaded');
-        return;
-      }
-      message = `*Sniper Car Care - Supplier Payment Report*\n` +
-        `*Period:* ${supplierStartDate || 'N/A'} to ${supplierEndDate || 'N/A'}\n\n` +
-        supplierReport.map(item => `- ${item.supplier_name}: Total Purchases: AED ${parseFloat(item.total_amount).toFixed(2)}`).join('\n');
-    } else if (activeTab === 'purchases') {
-      if (!purchaseReport) {
-        toast.error('No purchases report loaded');
-        return;
-      }
-      message = `*Sniper Car Care - Purchase of Items Report*\n` +
-        `*Period:* ${purchaseStartDate || 'N/A'} to ${purchaseEndDate || 'N/A'}\n\n` +
-        purchaseReport.map(item => `- ${item.product_name} (Qty: ${item.total_quantity}): AED ${parseFloat(item.total_amount).toFixed(2)}`).join('\n');
-    } else if (activeTab === 'credit') {
-      if (!creditReport) {
-        toast.error('No credit report loaded');
-        return;
-      }
-      message = `*Sniper Car Care - Credit Report*\n` +
-        `*Period:* ${creditStartDate || 'N/A'} to ${creditEndDate || 'N/A'}\n\n` +
-        `*Total Credit Granted:* AED ${totalCreditGranted.toFixed(2)}\n` +
-        `*Total Outstanding:* AED ${totalOutstanding.toFixed(2)}\n` +
-        `*Total Recovered:* AED ${totalRecovered.toFixed(2)}\n\n` +
-        `*Active Debtors (Top 10):*\n` +
-        creditReport.slice(0, 10).map(item => `- ${item.customer_name} (${item.customer_phone}): Outstanding AED ${parseFloat(item.remaining_amount).toFixed(2)}`).join('\n');
-    } else if (activeTab === 'registers') {
-      if (!selectedRegisterReport) {
-        toast.error('No active register session report opened');
-        return;
-      }
-      const openDate = formatRegisterDate(selectedRegisterReport.opened_at);
-      const closeDate = selectedRegisterReport.closed_at ? formatRegisterDate(selectedRegisterReport.closed_at) : 'Active Session';
-      const diff = selectedRegisterReport.closed_amount !== null
-        ? (selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer).toFixed(3)
-        : '0.000';
-        
-      message = `*Sniper Car Care - Cash Register Report*\n` +
-        `*Opened:* ${openDate}\n` +
-        `*Closed:* ${closeDate}\n` +
-        `*Status:* ${selectedRegisterReport.status.toUpperCase()}\n\n` +
-        `- Opening Balance: AED ${selectedRegisterReport.opening_balance.toFixed(3)}\n` +
-        `- Cash Sale: AED ${selectedRegisterReport.cash_payments.sale.toFixed(3)}\n` +
-        `- Card Sale: AED ${selectedRegisterReport.card_payments.sale.toFixed(3)}\n` +
-        `- Bank Sale: AED ${selectedRegisterReport.bank_transfer.toFixed(3)}\n` +
-        `- Other Sale: AED ${selectedRegisterReport.other_payments.toFixed(3)}\n` +
-        `- Credit Sale: AED ${selectedRegisterReport.credit_sales.toFixed(3)}\n` +
-        `- Credit Recovery: AED ${selectedRegisterReport.credit_sale_recovery.toFixed(3)}\n` +
-        `- Total Expense: AED ${selectedRegisterReport.total_expense.toFixed(3)}\n` +
-        `*Total Sales:* AED ${selectedRegisterReport.total_sales.toFixed(3)}\n` +
-        `*Cash In Drawer:* AED ${selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}\n` +
-        `*Closed Amount:* AED ${(selectedRegisterReport.closed_amount || 0).toFixed(3)}\n` +
-        `*Difference:* AED ${diff}\n\n` +
-        `Generated by Sniper Car Care System.`;
-    }
 
-    if (message) {
-      const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-      window.open(whatsappUrl, '_blank');
-    } else {
-      toast.error('No report data found to share.');
+      const response = await axios.get(`/api/analytics/reports/pdf?${params.toString()}`);
+      if (response.data.success && response.data.pdfUrl) {
+        const backendBaseUrl = axios.defaults.baseURL || window.location.origin;
+        const fullPdfUrl = `${backendBaseUrl}${response.data.pdfUrl}`;
+        const message = `Check out the Sniper Car Care report: ${fullPdfUrl}`;
+        const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
+        toast.success('Report PDF generated and shared to WhatsApp');
+      } else {
+        toast.error('Failed to generate report PDF');
+      }
+    } catch (error) {
+      console.error('Error sharing PDF:', error);
+      toast.error('Failed to generate and share report PDF');
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -634,9 +595,17 @@ const Reports = () => {
           <div className="flex gap-2">
             <button
               onClick={handleWhatsAppShare}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm font-semibold"
+              disabled={sharing}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm font-semibold disabled:opacity-50"
             >
-              💬 Share via WhatsApp
+              {sharing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Generating PDF...
+                </>
+              ) : (
+                <>💬 Share via WhatsApp</>
+              )}
             </button>
             <button
               onClick={handlePrint}
@@ -1230,6 +1199,10 @@ const Reports = () => {
                         <span className="text-gray-500">Bank Transfer Sales</span>
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.bank_transfer_sales || 0).toFixed(3)}</span>
                       </div>
+                      <div className="flex justify-between font-bold border-t pt-1.5 mt-2">
+                        <span className="text-gray-700">Cost of Goods / Services</span>
+                        <span className="font-mono text-red-600 font-bold">{parseFloat(plReport.summary.total_cost || 0).toFixed(3)}</span>
+                      </div>
                       <div className="flex justify-between font-extrabold border-t pt-1.5 mt-2">
                         <span className="text-gray-900">Total Profit</span>
                         <span className={`font-mono text-base ${plReport.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -1373,9 +1346,17 @@ const Reports = () => {
             <div className="flex gap-2">
               <button
                 onClick={handleWhatsAppShare}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition flex items-center gap-2 text-xs"
+                disabled={sharing}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition flex items-center gap-2 text-xs disabled:opacity-50"
               >
-                💬 Share via WhatsApp
+                {sharing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>💬 Share via WhatsApp</>
+                )}
               </button>
               <button
                 onClick={handlePrint}

@@ -351,6 +351,32 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
       serviceCompletedUpdate = ', completed_at = NULL';
     }
 
+    if (status === 'completed' && order.customer_id_ref) {
+      const [pendingServices] = await connection.query(
+        'SELECT id FROM services WHERE order_id = ? AND status != "completed"',
+        [id]
+      );
+      if (pendingServices.length > 0) {
+        const pointsToAdd = pendingServices.length * 25;
+        const [loyaltyRows] = await connection.query(
+          'SELECT points FROM loyalty WHERE customer_id = ?',
+          [order.customer_id_ref]
+        );
+        if (loyaltyRows.length > 0) {
+          await connection.query(
+            'UPDATE loyalty SET points = points + ? WHERE customer_id = ?',
+            [pointsToAdd, order.customer_id_ref]
+          );
+        } else {
+          await connection.query(
+            'INSERT INTO loyalty (customer_id, points) VALUES (?, ?)',
+            [order.customer_id_ref, pointsToAdd]
+          );
+        }
+        console.log(`[Loyalty] Awarded ${pointsToAdd} points to customer ${order.customer_id_ref} for completing ${pendingServices.length} services in order ${id}`);
+      }
+    }
+
     await connection.query(
       `UPDATE services SET status = ?${serviceStartedUpdate}${serviceCompletedUpdate} WHERE order_id = ?`,
       [serviceStatus, id]
@@ -365,7 +391,7 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
       );
       const hasCredit = creditRecords.length > 0;
 
-      if (!hasCredit && order.payment_status !== 'paid') {
+      if (!hasCredit && order.payment_status !== 'paid' && order.payment_status !== 'free') {
         const [payments] = await connection.query(
           'SELECT SUM(amount) as total_paid FROM payments WHERE order_id = ? AND status = "completed"',
           [id]

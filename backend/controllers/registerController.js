@@ -216,7 +216,9 @@ const closeRegister = asyncHandler(async (req, res) => {
     `SELECT COUNT(*) as count 
      FROM orders o
      WHERE o.status IN ('pending', 'processing') 
-       AND o.vip_booking_id IS NULL`
+       AND o.vip_booking_id IS NULL
+       AND DATE(o.created_at) = DATE(?)`,
+    [register.opened_at]
   );
   if (pendingVehicles[0].count > 0) {
     return res.status(400).json({ 
