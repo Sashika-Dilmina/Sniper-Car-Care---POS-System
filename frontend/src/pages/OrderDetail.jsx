@@ -32,10 +32,15 @@ const OrderDetail = () => {
 
   const fetchRegisterStatus = async () => {
     try {
-      const response = await axios.get('/api/registers/status');
-      setRegisterStatus(response.data.status);
+      const response = await axios.get('/api/registers/active');
+      if (response.data.success && response.data.active) {
+        setRegisterStatus('open');
+      } else {
+        setRegisterStatus('closed');
+      }
     } catch (e) {
       console.error('Failed to fetch register status:', e);
+      setRegisterStatus('closed');
     }
   };
 
