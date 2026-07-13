@@ -189,19 +189,19 @@ const Orders = () => {
             onChange={(e) => setFilter({ ...filter, date: e.target.value })}
             className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
-          {filter.date && (
+          {filter.date !== getTodayDateString() && (
             <button
-              onClick={() => setFilter({ ...filter, date: '' })}
+              onClick={() => setFilter({ ...filter, date: getTodayDateString() })}
               className="px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Clear date filter"
+              title="Reset to today"
             >
               ✕
             </button>
           )}
         </div>
-        {(filter.status || filter.payment_status || filter.service_time || filter.date) && (
+        {(filter.status || filter.payment_status || filter.service_time || filter.date !== getTodayDateString()) && (
           <button
-            onClick={() => setFilter({ status: '', payment_status: '', date: '', service_time: '' })}
+            onClick={() => setFilter({ status: '', payment_status: '', date: getTodayDateString(), service_time: '' })}
             className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors text-sm"
           >
             Clear All Filters
@@ -353,7 +353,7 @@ const Orders = () => {
                   <p className="mt-2 text-gray-600 font-medium">No orders found for this selection</p>
                   <button
                     onClick={() => {
-                      setFilter({ status: '', payment_status: '', date: '', service_time: '' });
+                      setFilter({ status: '', payment_status: '', date: getTodayDateString(), service_time: '' });
                       setActiveTab('all');
                     }}
                     className="mt-4 text-primary-600 hover:underline text-sm font-bold"
