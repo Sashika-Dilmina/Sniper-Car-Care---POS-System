@@ -6,12 +6,41 @@ import toast from 'react-hot-toast';
 const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState({ status: '', payment_status: '', date: '', service_time: '' });
-  const [activeTab, setActiveTab] = useState('all'); // 'all', 'saloon', '4x4'
+
+  const getTodayDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getInitialFilter = () => {
+    const saved = sessionStorage.getItem('orders_filter');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return { status: '', payment_status: '', date: getTodayDateString(), service_time: '' };
+  };
+
+  const getInitialActiveTab = () => {
+    const saved = sessionStorage.getItem('orders_active_tab');
+    return saved || 'all';
+  };
+
+  const [filter, setFilter] = useState(getInitialFilter());
+  const [activeTab, setActiveTab] = useState(getInitialActiveTab());
 
   useEffect(() => {
+    sessionStorage.setItem('orders_filter', JSON.stringify(filter));
     fetchOrders();
   }, [filter]);
+
+  useEffect(() => {
+    sessionStorage.setItem('orders_active_tab', activeTab);
+  }, [activeTab]);
 
   const fetchOrders = async () => {
     try {
