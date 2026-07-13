@@ -9,10 +9,12 @@ const OrderDetail = () => {
   const [loading, setLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
   const [loadingTap, setLoadingTap] = useState(false);
+  const [registerStatus, setRegisterStatus] = useState('closed');
 
 
   useEffect(() => {
     fetchOrder();
+    fetchRegisterStatus();
 
     // Check url query parameters for payment status notifications
     const params = new URLSearchParams(window.location.search);
@@ -27,6 +29,15 @@ const OrderDetail = () => {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [id]);
+
+  const fetchRegisterStatus = async () => {
+    try {
+      const response = await axios.get('/api/registers/status');
+      setRegisterStatus(response.data.status);
+    } catch (e) {
+      console.error('Failed to fetch register status:', e);
+    }
+  };
 
   const fetchOrder = async () => {
     try {
@@ -59,7 +70,7 @@ const OrderDetail = () => {
       toast.success('Order status updated');
       fetchOrder();
     } catch (error) {
-      toast.error('Failed to update status');
+      toast.error(error.response?.data?.message || 'Failed to update status');
     }
   };
 
@@ -151,7 +162,9 @@ const OrderDetail = () => {
                 {(order.status === 'processing' || order.status === 'pending') && !isProductOnly && (
                   <button
                     onClick={() => handleStatusUpdate('completed')}
-                    className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98]"
+                    disabled={registerStatus !== 'open'}
+                    className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={registerStatus !== 'open' ? "Please open the cash register first to complete orders" : ""}
                   >
                     ✓ Done / Completed
                   </button>

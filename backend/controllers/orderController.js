@@ -285,6 +285,17 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Status is required' });
   }
 
+  if (status === 'completed') {
+    const [openRegisters] = await pool.query(
+      'SELECT id FROM cash_registers WHERE status = "open" LIMIT 1'
+    );
+    if (openRegisters.length === 0) {
+      return res.status(400).json({ 
+        message: 'Cannot complete order. There is no active cash register session open. Please open the register first.' 
+      });
+    }
+  }
+
   const connection = await pool.getConnection();
   await connection.beginTransaction();
 

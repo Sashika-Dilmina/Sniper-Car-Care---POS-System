@@ -506,10 +506,31 @@ const Reports = () => {
       if (response.data.success && response.data.pdfUrl) {
         const backendBaseUrl = axios.defaults.baseURL || window.location.origin;
         const fullPdfUrl = `${backendBaseUrl}${response.data.pdfUrl}`;
+        
+        try {
+          // Fetch the PDF blob to create a File object
+          const fileResponse = await fetch(fullPdfUrl);
+          const blob = await fileResponse.blob();
+          const file = new File([blob], `report-${activeTab}-${Date.now()}.pdf`, { type: 'application/pdf' });
+          
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Sniper Car Care Report',
+              text: 'Please find the attached PDF report.'
+            });
+            toast.success('Report PDF shared successfully!');
+            return;
+          }
+        } catch (shareErr) {
+          console.warn('Native sharing failed, falling back to link:', shareErr);
+        }
+        
+        // Fallback to text link if navigator.share fails or is not supported
         const message = `Check out the Sniper Car Care report: ${fullPdfUrl}`;
         const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
-        toast.success('Report PDF generated and shared to WhatsApp');
+        toast.success('Opened PDF report link in browser.');
       } else {
         toast.error('Failed to generate report PDF');
       }
