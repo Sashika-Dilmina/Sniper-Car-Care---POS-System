@@ -95,39 +95,6 @@ const confirmPayment = asyncHandler(async (req, res) => {
             console.log(`[VIP] Auto-started service for VIP booking ${orders[0].vip_booking_id} after Stripe payment`);
           }
 
-          // If payment status becomes "paid", send Feedback SMS
-          if (newPaymentStatus === 'paid') {
-            const [orderData] = await connection.query(`
-              SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
-              FROM orders o
-              JOIN customers c ON o.customer_id = c.id
-              WHERE o.id = ?
-            `, [order_id]);
-
-            if (orderData.length > 0) {
-              const order = orderData[0];
-              const phone = formatPhoneNumber(order.phone);
-              const feedbackUrl = buildFeedbackUrl({
-                vehicleType: order.vehicle_type || 'Saloon',
-                customerId: order.customer_id,
-                plate: order.vehicle_plate,
-                orderId: order.id
-              });
-
-              if (phone) {
-                try {
-                  await sendReson8Message({
-                    to: phone,
-                    message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
-                    campaignName: 'PAYMENT_FEEDBACK'
-                  });
-                  console.log(`[SMS] Feedback SMS sent to ${phone} after payment for order ${order_id}`);
-                } catch (err) {
-                  console.error('[SMS] Feedback SMS failed:', err.message);
-                }
-              }
-            }
-          }
         }
 
         await connection.commit();
@@ -178,11 +145,25 @@ const processManualPayment = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
-    // Record payment
-    await connection.query(
-      'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
-      [order_id, amount, method, status]
+    // Check if there is an existing pending payment record
+    const [pendingPayments] = await connection.query(
+      'SELECT id FROM payments WHERE order_id = ? AND status = "pending" LIMIT 1',
+      [order_id]
     );
+
+    if (pendingPayments.length > 0 && status === 'completed') {
+      // Update the existing pending payment to completed
+      await connection.query(
+        'UPDATE payments SET amount = ?, method = ?, status = "completed" WHERE id = ?',
+        [amount, method, pendingPayments[0].id]
+      );
+    } else {
+      // Record payment
+      await connection.query(
+        'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
+        [order_id, amount, method, status]
+      );
+    }
 
     // Update order payment status
     const [orders] = await connection.query(
@@ -222,40 +203,7 @@ const processManualPayment = asyncHandler(async (req, res) => {
         console.log(`[VIP] Auto-started service for VIP booking ${orders[0].vip_booking_id} after manual payment`);
       }
 
-      // If payment status becomes "paid", send Feedback SMS
-      if (newPaymentStatus === 'paid') {
-        const [orderData] = await connection.query(`
-          SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
-          FROM orders o
-          JOIN customers c ON o.customer_id = c.id
-          WHERE o.id = ?
-        `, [order_id]);
-
-        if (orderData.length > 0) {
-          const order = orderData[0];
-          const phone = formatPhoneNumber(order.phone);
-          const feedbackUrl = buildFeedbackUrl({
-            vehicleType: order.vehicle_type || 'Saloon',
-            customerId: order.customer_id,
-            plate: order.vehicle_plate,
-            orderId: order.id
-          });
-
-          if (phone) {
-            try {
-              await sendReson8Message({
-                to: phone,
-                message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
-                campaignName: 'PAYMENT_FEEDBACK'
-              });
-              console.log(`[SMS] Feedback SMS sent to ${phone} after manual payment for order ${order_id}`);
-            } catch (err) {
-              console.error('[SMS] Feedback SMS failed:', err.message);
-            }
-          }
-        }
       }
-    }
 
     await connection.commit();
     connection.release();

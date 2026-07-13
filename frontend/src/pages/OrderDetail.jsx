@@ -159,7 +159,7 @@ const OrderDetail = () => {
                   {isProductOnly ? 'Order Placed' : (order.status === 'processing' ? 'In Progress' : order.status)}
                 </span>
 
-                {(order.status === 'processing' || order.status === 'pending') && !isProductOnly && (
+                {(order.status === 'processing' || order.status === 'pending') && (
                   <button
                     onClick={() => handleStatusUpdate('completed')}
                     disabled={registerStatus !== 'open'}
@@ -255,9 +255,19 @@ const OrderDetail = () => {
                 </p>
               </div>
             ))}
-            <div className="pt-3 border-t">
-              <div className="flex justify-between font-bold text-lg">
-                <span>Total:</span>
+            <div className="pt-3 border-t space-y-2">
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Subtotal:</span>
+                <span>AED {(parseFloat(order.total) + (parseFloat(order.discount) || 0)).toLocaleString()}</span>
+              </div>
+              {parseFloat(order.discount) > 0 && (
+                <div className="flex justify-between text-sm text-red-600 font-semibold">
+                  <span>Discount:</span>
+                  <span>- AED {parseFloat(order.discount).toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-black text-lg text-primary-600 border-t pt-2 mt-1">
+                <span>Net Total:</span>
                 <span>AED {parseFloat(order.total).toLocaleString()}</span>
               </div>
             </div>
@@ -265,7 +275,7 @@ const OrderDetail = () => {
         </div>
       </div>
 
-      {order.payment_status !== 'paid' && remainingAmount > 0 && isCashOrder && (
+      {order.payment_status !== 'paid' && remainingAmount > 0 && (
         <div className="bg-white p-6 rounded-lg shadow border-2 border-primary-500">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span className="text-2xl">💳</span> Customer Payment Required
@@ -292,6 +302,7 @@ const OrderDetail = () => {
                     <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Method</label>
                     <select id="manual_method" className="w-full p-2 border rounded-lg bg-white">
                       <option value="cash">Cash</option>
+                      <option value="card">Card</option>
                       <option value="bank_transfer">Bank Transfer</option>
                     </select>
                   </div>

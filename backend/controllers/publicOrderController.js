@@ -440,38 +440,6 @@ const confirmPayment = asyncHandler(async (req, res) => {
           }
         }
 
-        // Send Feedback SMS
-        const [orderData] = await connection.query(`
-          SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
-          FROM orders o
-          JOIN customers c ON o.customer_id = c.id
-          WHERE o.id = ?
-        `, [order_id]);
-
-        if (orderData.length > 0) {
-          const order = orderData[0];
-          const phone = formatPhoneNumber(order.phone);
-          const feedbackUrl = buildFeedbackUrl({
-            vehicleType: order.vehicle_type || 'Saloon',
-            customerId: order.customer_id,
-            plate: order.vehicle_plate,
-            orderId: order.id
-          });
-
-          if (phone) {
-            try {
-              await sendReson8Message({
-                to: phone,
-                message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
-                campaignName: 'PUBLIC_PAYMENT_FEEDBACK'
-              });
-              console.log(`[SMS] Feedback SMS sent to ${phone} after public payment for order ${order_id}`);
-            } catch (err) {
-              console.error('[SMS] Feedback SMS failed:', err.message);
-            }
-          }
-        }
-
         await connection.commit();
         connection.release();
 

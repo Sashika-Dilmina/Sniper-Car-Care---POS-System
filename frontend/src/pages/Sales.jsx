@@ -15,7 +15,7 @@ const Sales = () => {
   // POS - Products & Catalog State
   const [products, setProducts] = useState([]);
   const [catalogSearch, setCatalogSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState('Services');
   const [loadingProducts, setLoadingProducts] = useState(true);
 
   // POS - Customer State
@@ -378,7 +378,6 @@ const Sales = () => {
     const matchesSearch = product.name?.toLowerCase().includes(catalogSearch.toLowerCase()) || 
                           product.description?.toLowerCase().includes(catalogSearch.toLowerCase());
     const matchesCategory = 
-      selectedCategory === 'All' || 
       (selectedCategory === 'VIP' && (product.category === 'VIP' || product.name?.toLowerCase().includes('vip'))) ||
       (selectedCategory === 'Services' && product.category === 'Services' && !product.name?.toLowerCase().includes('vip')) ||
       (selectedCategory !== 'VIP' && selectedCategory !== 'Services' && product.category === selectedCategory);
@@ -558,7 +557,7 @@ const Sales = () => {
               {/* Category tabs and Search bar */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex bg-gray-100 p-1.5 rounded-xl gap-1 overflow-x-auto">
-                  {['All', 'Services', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
+                  {['Services', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
@@ -626,7 +625,7 @@ const Sales = () => {
               ) : (
                 <div className="text-center py-20 text-gray-400">
                   <p className="text-lg">No items match your query</p>
-                  <button onClick={() => { setSelectedCategory('All'); setCatalogSearch(''); }} className="text-primary-600 underline text-sm mt-1">
+                  <button onClick={() => { setSelectedCategory('Services'); setCatalogSearch(''); }} className="text-primary-600 underline text-sm mt-1">
                     Reset filters
                   </button>
                 </div>
