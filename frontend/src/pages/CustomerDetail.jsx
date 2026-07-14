@@ -103,16 +103,14 @@ const CustomerDetail = () => {
       </div>
 
       {/* Loyalty Status Card */}
-      <div className={`bg-gradient-to-r ${isEligibleForFree ? 'from-green-500 to-green-600' : 'from-yellow-400 to-yellow-500'} p-6 rounded-lg shadow-lg text-white`}>
+      <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 p-6 rounded-lg shadow-lg text-white">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold mb-2">
-              {isEligibleForFree ? '🎉 FREE Service Available!' : '💛 Loyalty Rewards'}
+              💛 Loyalty Rewards
             </h2>
             <p className="text-lg opacity-90">
-              {isEligibleForFree
-                ? 'Customer has earned a free service!'
-                : `${servicesCompleted} of 4 services completed`}
+              {servicesCompleted} services completed
             </p>
           </div>
           <div className="text-right">
@@ -120,43 +118,6 @@ const CustomerDetail = () => {
             <div className="text-sm opacity-90">Loyalty Points</div>
           </div>
         </div>
-
-        {!isEligibleForFree && (
-          <div className="mt-4">
-            <div className="flex justify-between text-sm mb-1">
-              <span>Progress to FREE service</span>
-              <span>{pointsToFreeService} points needed</span>
-            </div>
-            <div className="w-full bg-white bg-opacity-30 rounded-full h-3">
-              <div
-                className="bg-white h-3 rounded-full transition-all duration-500"
-                style={{ width: `${progressPercentage}%` }}
-              ></div>
-            </div>
-            <p className="text-xs mt-2 opacity-90">
-              Each service = 25 points • 4 services = 100 points = 1 FREE service
-            </p>
-          </div>
-        )}
-
-        {isEligibleForFree && (
-          <div className="mt-4 flex gap-3">
-            <button
-              className="px-6 py-2 bg-white text-green-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
-              onClick={() => {
-                toast.info('Redeem free service feature - Coming soon!');
-              }}
-            >
-              Redeem Free Service
-            </button>
-            <div className="flex items-center text-sm opacity-90">
-              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              Points will reset to 0 after redemption
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

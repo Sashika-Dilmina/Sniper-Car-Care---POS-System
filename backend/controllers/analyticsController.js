@@ -1044,8 +1044,8 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
   const freeWashTotal = parseFloat(freeWashesResult[0].total || 0);
   const freeWashCount = parseInt(freeWashesResult[0].count || 0);
 
-  const netSales = cashSales + cardSales + bankSales + creditSales;
-  const totalSales = netSales + totalDiscounts;
+  const netSales = cashSales + cardSales + bankSales + creditSales + freeWashTotal;
+  const totalSales = netSales + totalDiscounts - freeWashTotal;
 
   // 6. Query Cost of Order Items (for orders with items)
   const [itemsCostResult] = await pool.query(

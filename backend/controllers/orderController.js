@@ -318,7 +318,7 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     const [orders] = await connection.query(`
       SELECT o.*, c.name as customer_name, c.phone as customer_phone,
              c.vehicle_plate, c.vehicle_type, c.id as customer_id_ref,
-             c.emirate
+             c.province as emirate
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
       WHERE o.id = ?

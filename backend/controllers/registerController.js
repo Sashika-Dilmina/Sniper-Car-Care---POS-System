@@ -158,8 +158,8 @@ const getRegisterReport = asyncHandler(async (req, res) => {
   const cashExpenses = parseFloat(cashExpensesRows[0].total);
 
   // Calculate Total Sales
-  // Formula: Cash + Card + Bank Transfer + Cheque + Other Payments + (Credit Sales - Credit Recovery) - Sales Return (Sales Return is 0)
-  const totalSales = totalCashPayments + totalCardPayments + bankSales + chequeSales + otherSales + (creditSales - creditRecoveries);
+  // Formula: Cash + Card + Bank Transfer + Cheque + Other Payments + (Credit Sales - Credit Recovery) + Free Wash Amount - Sales Return (Sales Return is 0)
+  const totalSales = totalCashPayments + totalCardPayments + bankSales + chequeSales + otherSales + (creditSales - creditRecoveries) + freeWashAmount;
 
   // Amount in Cash Drawer
   // Formula: Opening Balance + Cash Payments - Cash Expenses
