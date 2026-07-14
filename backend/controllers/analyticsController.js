@@ -455,7 +455,6 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
     WHERE DATE(created_at) = ?
   `, [targetDate]);
 
-  // Payments by method
   const [paymentMethods] = await pool.query(`
     SELECT 
       CASE 
@@ -463,7 +462,12 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
         ELSE p.method 
       END as method,
       COUNT(*) as count,
-      COALESCE(SUM(p.amount), 0) as total_amount
+      COALESCE(SUM(
+        CASE 
+          WHEN p.method = 'free' THEN o.discount
+          ELSE p.amount 
+        END
+      ), 0) as total_amount
     FROM payments p
     JOIN orders o ON p.order_id = o.id
     WHERE DATE(o.created_at) = ? AND p.status = 'completed'
@@ -1188,7 +1192,12 @@ const getReportPDF = asyncHandler(async (req, res) => {
           ELSE p.method 
         END as method, 
         COUNT(*) as count, 
-        COALESCE(SUM(p.amount), 0) as total_amount 
+        COALESCE(SUM(
+          CASE 
+            WHEN p.method = 'free' THEN o.discount
+            ELSE p.amount 
+          END
+        ), 0) as total_amount 
        FROM payments p JOIN orders o ON p.order_id = o.id 
        WHERE DATE(o.created_at) = ? AND p.status = 'completed' 
        GROUP BY 
@@ -1331,7 +1340,13 @@ const getReportPDF = asyncHandler(async (req, res) => {
         COUNT(CASE WHEN p.status = 'completed' THEN 1 END) as completed_count,
         COUNT(CASE WHEN p.status = 'pending' THEN 1 END) as pending_count, 
         COUNT(CASE WHEN p.status = 'failed' THEN 1 END) as failed_count,
-        COALESCE(SUM(CASE WHEN p.status = 'completed' THEN p.amount ELSE 0 END), 0) as total_amount
+        COALESCE(SUM(
+          CASE 
+            WHEN p.status = 'completed' AND p.method = 'free' THEN o.discount
+            WHEN p.status = 'completed' THEN p.amount 
+            ELSE 0 
+          END
+        ), 0) as total_amount
        FROM payments p JOIN orders o ON p.order_id = o.id 
        WHERE DATE(o.created_at) BETWEEN ? AND ? 
        GROUP BY 

@@ -20,9 +20,9 @@ export const images = {
   vip: vipBanner,
   defaultService: hero,
   byServiceName: {
-    'Full Service': serviceFull,
-    'Full Body Wash with Shampoo': serviceShampoo,
-    'Only Water Body Wash': serviceWater,
+    'Full Body Service': serviceFull,
+    'Body Wash': serviceShampoo,
+    'Just Water': serviceWater,
   },
 };
 

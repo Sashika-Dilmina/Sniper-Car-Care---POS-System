@@ -1213,7 +1213,7 @@ const LandingPage = () => {
                   <img 
                     src={getServiceImage(pkg)} 
                     alt={pkg.name} 
-                    className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 ease-out"
+                    className={`w-full h-full ${isFullBody ? 'object-cover' : 'object-contain'} group-hover:scale-105 transition-transform duration-500 ease-out`}
                   />
                   <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
