@@ -31,9 +31,14 @@ const getCustomerByPlate = asyncHandler(async (req, res) => {
   const customer = customers[0];
   customer.emirate = customer.province;
   let wash_stamps = 0;
+  let free_wash_cap = 0;
 
   try {
     wash_stamps = await getWashStamps(pool, customer.id);
+    if (wash_stamps >= 5) {
+      const { calculateFreeWashCap } = require('../utils/freeWashCap');
+      free_wash_cap = await calculateFreeWashCap(pool, customer.id);
+    }
   } catch (err) {
     if (err.code !== 'ER_BAD_FIELD_ERROR') {
       throw err;
@@ -42,7 +47,7 @@ const getCustomerByPlate = asyncHandler(async (req, res) => {
 
   res.json({
     customer: { ...customer, wash_stamps },
-    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5 },
+    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5, free_wash_cap },
   });
 });
 
@@ -68,9 +73,14 @@ const getCustomerById = asyncHandler(async (req, res) => {
   const customer = customers[0];
   customer.emirate = customer.province;
   let wash_stamps = 0;
+  let free_wash_cap = 0;
 
   try {
     wash_stamps = await getWashStamps(pool, customer.id);
+    if (wash_stamps >= 5) {
+      const { calculateFreeWashCap } = require('../utils/freeWashCap');
+      free_wash_cap = await calculateFreeWashCap(pool, customer.id);
+    }
   } catch (err) {
     if (err.code !== 'ER_BAD_FIELD_ERROR') {
       throw err;
@@ -79,7 +89,7 @@ const getCustomerById = asyncHandler(async (req, res) => {
 
   res.json({
     customer: { ...customer, wash_stamps },
-    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5 },
+    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5, free_wash_cap },
   });
 });
 

@@ -93,13 +93,14 @@ const ProfilePage = () => {
                       <div key={i} className="flex flex-col items-center gap-2 relative z-10">
                         <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center transition-all ${
                           isEarned 
-                            ? 'shadow-lg shadow-red-600/50 scale-110 ring-2 ring-red-500' 
+                            ? 'shadow-lg shadow-blue-600/50 scale-110 ring-2 ring-blue-600 bg-blue-50' 
                             : 'border border-gray-700'
                         }`}>
                           <img 
                             src={isEarned ? stamp1 : stamp4} 
                             alt={`Stamp ${i+1}`} 
                             className="w-full h-full object-contain p-0.5 rounded-full transition-all duration-300" 
+                            style={{ filter: isEarned ? 'hue-rotate(25deg) saturate(2.5) brightness(0.95)' : 'none' }}
                           />
                         </div>
                         <span className="text-[10px] sm:text-xs font-bold text-gray-400 mt-1">{i + 1}</span>

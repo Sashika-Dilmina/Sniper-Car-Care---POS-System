@@ -84,7 +84,7 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
               <div
                 className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full overflow-hidden transition-all duration-300 ${
                   isFilled
-                    ? 'shadow-md ring-2 ring-red-500 scale-110'
+                    ? 'shadow-md ring-2 ring-blue-600 bg-blue-50 scale-110'
                     : 'border border-gray-300'
                 }`}
               >
@@ -92,6 +92,7 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
                   src={isFilled ? stamp1 : stamp4} 
                   alt={`Stamp ${n}`} 
                   className="w-full h-full object-contain transition-all duration-300" 
+                  style={{ filter: isFilled ? 'hue-rotate(25deg) saturate(2.5) brightness(0.95)' : 'none' }}
                 />
               </div>
               <span className="text-[10px] sm:text-xs font-bold text-gray-500 mt-1.5">{n}</span>
@@ -371,6 +372,7 @@ const LandingPage = () => {
   const [showSupportOptions, setShowSupportOptions] = useState(false);
   const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
   const [washStamps, setWashStamps] = useState(0);
+  const [freeWashCap, setFreeWashCap] = useState(0);
   const [packages, setPackages] = useState([]);
   const [dbProducts, setDbProducts] = useState([]);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -563,6 +565,7 @@ const LandingPage = () => {
               response.data.customer.wash_stamps ??
               0
           );
+          setFreeWashCap(response.data.loyalty?.free_wash_cap ?? 0);
           setBookingForm({
             name: response.data.customer.name || '',
             phone: response.data.customer.phone || '+9715',
@@ -722,8 +725,17 @@ const LandingPage = () => {
 
       // Check if eligible for a Free Wash
       const isEligibleForFreeWash = washStamps >= 5;
+      const sNameLower = service.name.toLowerCase().trim();
+      const eligibleFreeServices = [
+        'full body service',
+        'full body wash',
+        'ceramic wash',
+        'double soap'
+      ];
+      const isServiceEligible = eligibleFreeServices.some(s => sNameLower.includes(s)) && !sNameLower.includes('vip');
+      const isFreeWashApplied = isEligibleForFreeWash && isServiceEligible && servicePrice <= freeWashCap;
 
-      if (isEligibleForFreeWash) {
+      if (isFreeWashApplied) {
         // If it is a free wash, we create the order immediately (no payment needed)
         const orderData = {
           customer_id: customerInfo?.id || null,
@@ -735,7 +747,7 @@ const LandingPage = () => {
           total: servicePrice,
           source: 'customer_website_saloon',
           status: 'pending',
-          payment_status: 'paid', // Immediately paid
+          payment_status: 'free', 
           notes: form.notes || `One-Tap Booking via Website - ${service.name}`
         };
 
@@ -750,7 +762,7 @@ const LandingPage = () => {
           setWashStamps(response.data.loyalty.wash_stamps);
         }
 
-        toast.success('Service booked! You earned a FREE wash — enjoy your reward!', { duration: 5000 });
+        toast.success('Service booked! You redeemed a FREE wash!', { duration: 5000 });
         setShowFreeWashPopup(true);
         
         setShowBookingModal(false);
