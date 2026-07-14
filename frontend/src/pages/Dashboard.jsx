@@ -966,6 +966,10 @@ const Dashboard = () => {
                   <span className="text-gray-600">Cash Expenses:</span>
                   <span className="font-semibold text-red-600">- AED {registerReport.cash_expense.toFixed(2)}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Free Washes Value:</span>
+                  <span className="font-semibold text-green-600">AED {parseFloat(registerReport.free_wash_amount || 0).toFixed(2)}</span>
+                </div>
                 <div className="flex justify-between border-t pt-2 text-xs text-gray-500">
                   <span>Other Sales (Card, Bank, Tap):</span>
                   <span>AED {(registerReport.card_payments.total + registerReport.bank_transfer + registerReport.other_payments).toFixed(2)}</span>

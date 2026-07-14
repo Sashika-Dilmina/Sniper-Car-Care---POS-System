@@ -375,7 +375,7 @@ const getSalesReport = asyncHandler(async (req, res) => {
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN order_items oi ON o.id = oi.order_id
-    WHERE o.payment_status = 'paid'
+    WHERE o.payment_status IN ('paid', 'free')
   `;
   const params = [];
 
@@ -394,7 +394,10 @@ const getSalesReport = asyncHandler(async (req, res) => {
   const [orders] = await pool.query(query, params);
 
   // Calculate totals
-  const totalRevenue = orders.reduce((sum, order) => sum + parseFloat(order.total || 0), 0);
+  const totalRevenue = orders.reduce((sum, order) => {
+    const val = order.payment_status === 'free' ? parseFloat(order.discount || 0) : parseFloat(order.total || 0);
+    return sum + val;
+  }, 0);
   const totalOrders = orders.length;
 
   const report = {
@@ -436,9 +439,9 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
   const [ordersSummary] = await pool.query(`
     SELECT 
       COUNT(*) as total_orders,
-      COALESCE(SUM(total), 0) as total_revenue,
+      COALESCE(SUM(CASE WHEN payment_status = 'free' THEN discount ELSE total END), 0) as total_revenue,
       COALESCE(SUM(discount), 0) as total_discounts,
-      COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) as paid_orders,
+      COUNT(CASE WHEN payment_status IN ('paid', 'free') THEN 1 END) as paid_orders,
       COUNT(CASE WHEN payment_status = 'pending' THEN 1 END) as pending_orders
     FROM orders
     WHERE DATE(created_at) = ?
@@ -565,8 +568,8 @@ const getMonthlySummary = asyncHandler(async (req, res) => {
     SELECT 
       DATE(created_at) as date,
       COUNT(*) as orders_count,
-      COALESCE(SUM(total), 0) as daily_revenue,
-      COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) as paid_orders
+      COALESCE(SUM(CASE WHEN payment_status = 'free' THEN discount ELSE total END), 0) as daily_revenue,
+      COUNT(CASE WHEN payment_status IN ('paid', 'free') THEN 1 END) as paid_orders
     FROM orders
     WHERE YEAR(created_at) = ? AND MONTH(created_at) = ?
     GROUP BY DATE(created_at)
@@ -589,14 +592,14 @@ const getMonthlySummary = asyncHandler(async (req, res) => {
   // Monthly totals
   const [monthlyTotals] = await pool.query(`
     SELECT 
-      COALESCE(SUM(o.total), 0) as total_revenue,
+      COALESCE(SUM(CASE WHEN o.payment_status = 'free' THEN o.discount ELSE o.total END), 0) as total_revenue,
       COUNT(DISTINCT o.id) as total_orders,
       COALESCE(SUM(s.price), 0) as total_services_revenue,
       COUNT(DISTINCT s.id) as total_services,
       COUNT(DISTINCT o.customer_id) as unique_customers
     FROM orders o
     LEFT JOIN services s ON DATE(s.created_at) = DATE(o.created_at)
-    WHERE YEAR(o.created_at) = ? AND MONTH(o.created_at) = ? AND o.payment_status = 'paid'
+    WHERE YEAR(o.created_at) = ? AND MONTH(o.created_at) = ? AND o.payment_status IN ('paid', 'free')
   `, [targetYear, targetMonth]);
 
   const reportData = {
@@ -1492,7 +1495,14 @@ const getReportPDF = asyncHandler(async (req, res) => {
     );
     const cashExpenses = parseFloat(cashExpensesRows[0].total);
 
-    const totalSales = totalCashPayments + totalCardPayments + bankSales + chequeSales + otherSales + (creditSales - creditRecoveries);
+    // Query Free Washes original amount
+    const [freeWashRows] = await pool.query(
+      'SELECT COALESCE(SUM(o.discount), 0) as total FROM payments p INNER JOIN orders o ON p.order_id = o.id WHERE p.created_at >= ? AND p.created_at <= ? AND p.method = "free" AND p.status = "completed"',
+      [openedAt, closedAt]
+    );
+    const freeWashAmount = parseFloat(freeWashRows[0].total);
+
+    const totalSales = totalCashPayments + totalCardPayments + bankSales + chequeSales + otherSales + (creditSales - creditRecoveries) + freeWashAmount;
     const amountInCashDrawer = parseFloat(register.opening_balance) + totalCashPayments - cashExpenses;
 
     reportData = {
@@ -1510,6 +1520,7 @@ const getReportPDF = asyncHandler(async (req, res) => {
       other_payments: otherSales,
       credit_sales: creditSales,
       credit_sale_recovery: creditRecoveries,
+      free_wash_amount: freeWashAmount,
       total_expense: totalExpenses,
       cash_expense: cashExpenses,
       total_sales: totalSales,

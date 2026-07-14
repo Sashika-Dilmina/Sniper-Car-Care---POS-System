@@ -689,6 +689,27 @@ const LandingPage = () => {
   }, [vipBookingForm.appointment_date]);
 
   const submitBooking = async (service, form) => {
+    const isVip = service.name.toLowerCase().includes('vip') || service.category === 'VIP';
+    if (isVip) {
+      try {
+        await axios.post('/api/vip/bookings', {
+          name: form.name,
+          phone: form.phone.replace(/[^0-9]/g, ''),
+          vehicle_model: form.vehicle_plate || (vehiclePlate || ''),
+          vehicle_type: form.vehicle_type || (location.pathname.includes('4x4') ? '4x4' : 'Saloon'),
+          service_type: service.name,
+          notes: form.notes || `VIP Booking requested via Website`
+        });
+        toast.success('VIP booking request submitted! We will contact you soon with confirmation details.', { duration: 5000 });
+        setShowBookingModal(false);
+        setSelectedService(null);
+      } catch (error) {
+        console.error('VIP Booking error:', error);
+        toast.error(error.response?.data?.message || 'Failed to book VIP service. Please try again.');
+      }
+      return;
+    }
+
     try {
       // Extract price from service.price
       let servicePrice = 0;
