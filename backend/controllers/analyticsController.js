@@ -676,7 +676,12 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
         ELSE p.method 
       END as method,
       COUNT(*) as transaction_count,
-      COALESCE(SUM(p.amount), 0) as total_amount,
+      COALESCE(SUM(
+        CASE 
+          WHEN p.method = 'free' THEN o.discount 
+          ELSE p.amount 
+        END
+      ), 0) as total_amount,
       COUNT(CASE WHEN p.status = 'completed' THEN 1 END) as completed_count,
       COUNT(CASE WHEN p.status = 'pending' THEN 1 END) as pending_count,
       COUNT(CASE WHEN p.status = 'failed' THEN 1 END) as failed_count
@@ -696,7 +701,12 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
     SELECT 
       p.status,
       COUNT(*) as count,
-      COALESCE(SUM(p.amount), 0) as total_amount
+      COALESCE(SUM(
+        CASE 
+          WHEN p.method = 'free' THEN o.discount 
+          ELSE p.amount 
+        END
+      ), 0) as total_amount
     FROM payments p
     JOIN orders o ON p.order_id = o.id
     WHERE 1=1 ${dateFilter}

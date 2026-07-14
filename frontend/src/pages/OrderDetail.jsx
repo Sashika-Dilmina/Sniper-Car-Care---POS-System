@@ -11,6 +11,158 @@ const OrderDetail = () => {
   const [loadingTap, setLoadingTap] = useState(false);
   const [registerStatus, setRegisterStatus] = useState('closed');
 
+  const [vipBooking, setVipBooking] = useState(null);
+  const [employees, setEmployees] = useState([]);
+  const [showVipModal, setShowVipModal] = useState(false);
+  const [updatingVip, setUpdatingVip] = useState(false);
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [scheduleData, setScheduleData] = useState({ appointment_date: '', appointment_time: '' });
+  const [bookingUpdate, setBookingUpdate] = useState({ status: '', notes: '', staff_notes: '', assigned_staff_id: '' });
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
+  const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'confirmed': return 'bg-blue-100 text-blue-800';
+      case 'in_progress': return 'bg-purple-100 text-purple-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'cancelled': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const calculateElapsedTime = (startedAt, completedAt) => {
+    if (!startedAt) return 'Not started';
+    const start = new Date(startedAt);
+    const end = completedAt ? new Date(completedAt) : new Date();
+    const diffMs = end - start;
+    const diffMins = Math.floor(diffMs / 60000);
+    const hrs = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    return `${hrs}h ${mins}m`;
+  };
+
+  const fetchVipBooking = async (bookingId) => {
+    try {
+      const response = await axios.get(`/api/vip/bookings/${bookingId}`);
+      if (response.data.success && response.data.data) {
+        const freshBooking = response.data.data;
+        setVipBooking(freshBooking);
+        setBookingUpdate({
+          status: freshBooking.status,
+          notes: freshBooking.notes || '',
+          staff_notes: freshBooking.staff_notes || '',
+          assigned_staff_id: freshBooking.assigned_staff_id || ''
+        });
+        setScheduleData({
+          appointment_date: freshBooking.appointment_date ? freshBooking.appointment_date.split('T')[0] : '',
+          appointment_time: freshBooking.appointment_time || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching VIP booking details:', error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await axios.get('/api/employees');
+      setEmployees(response.data.employees || []);
+    } catch (error) {
+      console.error('Failed to load employees:', error);
+    }
+  };
+
+  const handleVipStatusChange = async (newStatus) => {
+    if (!order.vip_booking_id) return;
+    setUpdatingVip(true);
+    try {
+      await axios.patch(`/api/vip/bookings/${order.vip_booking_id}`, {
+        status: newStatus
+      });
+      toast.success(`Booking status changed to ${newStatus}`);
+      fetchVipBooking(order.vip_booking_id);
+      fetchOrder();
+    } catch (error) {
+      console.error('Error changing VIP booking status:', error);
+      toast.error('Failed to change booking status');
+    } finally {
+      setUpdatingVip(false);
+    }
+  };
+
+  const handleVipConfirmAndSchedule = async () => {
+    if (!scheduleData.appointment_date || !scheduleData.appointment_time) {
+      toast.error('Please select both Date and Time');
+      return;
+    }
+    setUpdatingVip(true);
+    try {
+      await axios.patch(`/api/vip/bookings/${order.vip_booking_id}`, {
+        status: 'confirmed',
+        appointment_date: scheduleData.appointment_date,
+        appointment_time: scheduleData.appointment_time,
+        staff_notes: bookingUpdate.staff_notes,
+        assigned_staff_id: bookingUpdate.assigned_staff_id || null
+      });
+      toast.success('Booking confirmed & customer scheduled!');
+      setIsRescheduling(false);
+      fetchVipBooking(order.vip_booking_id);
+      fetchOrder();
+    } catch (error) {
+      console.error('Error scheduling VIP booking:', error);
+      toast.error('Failed to schedule booking');
+    } finally {
+      setUpdatingVip(false);
+    }
+  };
+
+  const updateVipBookingDetails = async (e) => {
+    e.preventDefault();
+    setUpdatingVip(true);
+    try {
+      await axios.patch(`/api/vip/bookings/${order.vip_booking_id}`, {
+        staff_notes: bookingUpdate.staff_notes,
+        assigned_staff_id: bookingUpdate.assigned_staff_id || null
+      });
+      toast.success('Notes & assignment updated');
+      fetchVipBooking(order.vip_booking_id);
+    } catch (error) {
+      console.error('Error updating VIP booking:', error);
+      toast.error('Failed to update booking');
+    } finally {
+      setUpdatingVip(false);
+    }
+  };
+
+  const handleVipRecordManualPayment = async () => {
+    if (!order.id) return;
+    setManualPaymentLoading(true);
+    try {
+      await axios.post('/api/payments/manual', {
+        order_id: order.id,
+        amount: order.total,
+        method: selectedPaymentMethod
+      });
+      toast.success('Payment recorded successfully');
+      fetchVipBooking(order.vip_booking_id);
+      fetchOrder();
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      toast.error('Failed to record payment');
+    } finally {
+      setManualPaymentLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (order && order.vip_booking_id) {
+      fetchVipBooking(order.vip_booking_id);
+      fetchEmployees();
+    }
+  }, [order?.vip_booking_id]);
+
 
   useEffect(() => {
     fetchOrder();
@@ -164,18 +316,27 @@ const OrderDetail = () => {
                   {isProductOnly ? 'Order Placed' : (order.status === 'processing' ? 'In Progress' : order.status)}
                 </span>
 
-                {(order.status === 'processing' || order.status === 'pending') && (
+                {isVipOrder ? (
                   <button
-                    onClick={() => handleStatusUpdate('completed')}
-                    disabled={registerStatus !== 'open'}
-                    className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={registerStatus !== 'open' ? "Please open the cash register first to complete orders" : ""}
+                    onClick={() => setShowVipModal(true)}
+                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-black rounded-lg transition shadow-md active:scale-[0.98]"
                   >
-                    ✓ Done / Completed
+                    👑 Manage VIP Booking
                   </button>
+                ) : (
+                  (order.status === 'processing' || order.status === 'pending') && (
+                    <button
+                      onClick={() => handleStatusUpdate('completed')}
+                      disabled={registerStatus !== 'open'}
+                      className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={registerStatus !== 'open' ? "Please open the cash register first to complete orders" : ""}
+                    >
+                      ✓ Done / Completed
+                    </button>
+                  )
                 )}
 
-                {(order.status === 'pending' || order.status === 'processing') && (
+                {!isVipOrder && (order.status === 'pending' || order.status === 'processing') && (
                   <button
                     onClick={() => {
                       if (window.confirm('Are you sure you want to cancel this order?')) {
@@ -527,6 +688,269 @@ const OrderDetail = () => {
           <p>This is a computer generated invoice. No signature required.</p>
         </div>
       </div>
+
+      {/* VIP Booking Action Modal */}
+      {showVipModal && vipBooking && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto no-print">
+          <div className="relative w-full max-w-lg rounded-xl bg-white p-6 sm:p-8 shadow-2xl max-h-[90vh] flex flex-col my-8">
+            <button
+              onClick={() => setShowVipModal(false)}
+              className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-600 transition"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="shrink-0 border-b pb-4 mb-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Manage VIP Booking</h3>
+                  <p className="text-sm text-gray-550 font-medium">Booking ID #{vipBooking.id}</p>
+                </div>
+                <span className={`px-3 py-1.5 text-xs font-black uppercase rounded-full ${getStatusColor(vipBooking.status)}`}>
+                  {vipBooking.status}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2 space-y-5 text-sm">
+              {/* Customer and Booking Info */}
+              <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                <div>
+                  <p className="text-xs text-gray-400 font-bold uppercase">Customer</p>
+                  <p className="font-semibold text-gray-800">{vipBooking.name}</p>
+                  <p className="text-xs text-gray-500">{vipBooking.phone}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-bold uppercase">Vehicle</p>
+                  <p className="font-semibold text-gray-800 font-mono">{vipBooking.vehicle_model}</p>
+                  <p className="text-xs text-gray-500">{vipBooking.vehicle_type}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-400 font-bold uppercase">Requested VIP Service</p>
+                  <p className="font-semibold text-red-600 font-medium">{vipBooking.service_type}</p>
+                  {vipBooking.order_total && (
+                    <p className="text-xs font-semibold text-gray-600">Price: AED {parseFloat(vipBooking.order_total).toLocaleString()}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Order Synced & Payment Details */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-xs text-gray-400 font-bold uppercase">Synced POS Order</p>
+                    <p className="font-semibold text-gray-800">Order #{order.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 font-bold uppercase text-right">Payment Status</p>
+                    <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded-full ${
+                      order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {order.payment_status || 'pending'}
+                    </span>
+                  </div>
+                </div>
+                {order.payment_status === 'paid' && (
+                  <div className="text-[10px] font-bold text-gray-500 uppercase text-right mt-1">
+                    Paid via: {order.payments?.[0]?.method || 'manual'}
+                  </div>
+                )}
+                {order.payment_status !== 'paid' && (
+                  <div className="border-t pt-2 mt-1 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-gray-600 uppercase">Select Payment Method</label>
+                      <select
+                        value={selectedPaymentMethod}
+                        onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                        className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-red-500 focus:border-red-500 outline-none"
+                      >
+                        <option value="cash">💵 Cash</option>
+                        <option value="card">💳 Card</option>
+                      </select>
+                    </div>
+                    <button
+                      onClick={handleVipRecordManualPayment}
+                      disabled={manualPaymentLoading}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50"
+                    >
+                      ⚡ Record Payment (AED {parseFloat(order.total || 0).toLocaleString()})
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Appointment Scheduling section */}
+              {vipBooking.status === 'pending' || isRescheduling ? (
+                <div className="border border-yellow-200 bg-yellow-50/50 rounded-lg p-4 space-y-3">
+                  <h4 className="font-bold text-yellow-900 text-xs uppercase tracking-wider">
+                    {isRescheduling ? 'Reschedule Appointment' : 'Schedule & Confirm Appointment'}
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Appointment Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={scheduleData.appointment_date}
+                        onChange={(e) => setScheduleData({ ...scheduleData, appointment_date: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Appointment Time *</label>
+                      <select
+                        required
+                        value={scheduleData.appointment_time}
+                        onChange={(e) => setScheduleData({ ...scheduleData, appointment_time: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                      >
+                        <option value="">Select time...</option>
+                        {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleVipConfirmAndSchedule}
+                      disabled={updatingVip}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 rounded-lg transition"
+                    >
+                      {updatingVip ? 'Scheduling...' : 'Save & Confirm'}
+                    </button>
+                    {isRescheduling && (
+                      <button
+                        onClick={() => setIsRescheduling(false)}
+                        className="px-4 py-2.5 border rounded-lg text-xs hover:bg-gray-100 transition"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-lg p-4 bg-white flex justify-between items-center shadow-sm">
+                  <div>
+                    <p className="text-xs text-gray-400 font-bold uppercase">Scheduled Appointment</p>
+                    <p className="font-bold text-gray-800 mt-1">
+                      {vipBooking.appointment_date
+                        ? `${new Date(vipBooking.appointment_date).toLocaleDateString('en-GB')} at ${vipBooking.appointment_time}`
+                        : 'Not Scheduled'}
+                    </p>
+                  </div>
+                  {['confirmed', 'in_progress'].includes(vipBooking.status) && (
+                    <button
+                      onClick={() => setIsRescheduling(true)}
+                      className="text-indigo-600 hover:underline font-bold text-xs"
+                    >
+                      Reschedule
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Status Actions Flow */}
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400 font-bold uppercase">Status Actions</p>
+                {vipBooking.status === 'in_progress' && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex justify-between items-center text-purple-900 font-bold text-xs">
+                    <span>⏱️ Time Elapsed:</span>
+                    <span>{calculateElapsedTime(vipBooking.service_started_at, vipBooking.service_completed_at)}</span>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {vipBooking.status === 'confirmed' && (
+                    <button
+                      onClick={() => handleVipStatusChange('in_progress')}
+                      disabled={updatingVip}
+                      className="flex-1 min-w-[150px] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                    >
+                      ⚡ Start Service
+                    </button>
+                  )}
+                  {vipBooking.status === 'in_progress' && (
+                    <button
+                      onClick={() => handleVipStatusChange('completed')}
+                      disabled={updatingVip}
+                      className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                    >
+                      ✓ Done (Complete Service)
+                    </button>
+                  )}
+                  {['pending', 'confirmed', 'in_progress'].includes(vipBooking.status) && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to cancel this booking?')) {
+                          handleVipStatusChange('cancelled');
+                        }
+                      }}
+                      disabled={updatingVip}
+                      className="px-4 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg transition"
+                    >
+                      Cancel Booking
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes & Assignment form */}
+              <form onSubmit={updateVipBookingDetails} className="space-y-4 pt-3 border-t">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Assign Staff Member
+                  </label>
+                  <select
+                    value={bookingUpdate.assigned_staff_id}
+                    onChange={(e) => setBookingUpdate({ ...bookingUpdate, assigned_staff_id: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                  >
+                    <option value="">Unassigned</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Customer Notes (Read-Only) */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    Customer Notes
+                  </label>
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700 italic">
+                    {vipBooking.notes || 'No notes left by customer'}
+                  </div>
+                </div>
+
+                {/* Staff Notes */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    Staff Notes
+                  </label>
+                  <textarea
+                    value={bookingUpdate.staff_notes}
+                    onChange={(e) => setBookingUpdate({ ...bookingUpdate, staff_notes: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-xs resize-none"
+                    rows="3"
+                    placeholder="Add notes from staff members..."
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={updatingVip}
+                  className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg transition"
+                >
+                  Save Notes & Assignment
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
