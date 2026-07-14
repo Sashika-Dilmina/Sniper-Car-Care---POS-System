@@ -73,7 +73,7 @@ conn.on('ready', async () => {
 
     // 2. Install backend dependencies and restart Node app
     console.log('\n⚙️ Updating backend dependencies & restarting...');
-    const backendRes = await executeCommand(conn, `cd ${repoPath}/backend && npm install && pm2 restart all`);
+    const backendRes = await executeCommand(conn, `cd ${repoPath}/backend && npm install && node scripts/fix-suppliers-table.js && pm2 restart all`);
     if (backendRes.code !== 0) throw new Error('Backend update/restart failed');
 
     // 3. Build frontends locally

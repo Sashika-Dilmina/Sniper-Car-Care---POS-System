@@ -225,6 +225,12 @@ const closeRegister = asyncHandler(async (req, res) => {
      FROM orders o
      WHERE o.status IN ('pending', 'processing') 
        AND o.vip_booking_id IS NULL
+       AND NOT EXISTS (
+         SELECT 1 
+         FROM order_items oi 
+         JOIN products p ON oi.product_id = p.id 
+         WHERE oi.order_id = o.id AND (p.category = 'VIP' OR LOWER(p.name) LIKE '%vip%')
+       )
        AND DATE(o.created_at) = DATE(?)
        AND (
          EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)

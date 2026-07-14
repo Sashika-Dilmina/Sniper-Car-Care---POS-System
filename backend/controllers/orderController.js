@@ -208,17 +208,127 @@ const createOrder = asyncHandler(async (req, res) => {
       }
     }
 
+    let finalTotal = parseFloat(total);
+    let finalDiscount = parseFloat(discount || 0);
+    let freeWashRedeemed = false;
+    let freeWashDiscount = 0;
+    
+    if (customer_id) {
+      try {
+        const { getWashStamps } = require('../utils/loyaltyStamps');
+        const currentStamps = await getWashStamps(connection, customer_id);
+        
+        if (currentStamps >= 5) {
+          const { calculateFreeWashCap } = require('../utils/freeWashCap');
+          const cap = await calculateFreeWashCap(connection, customer_id);
+          
+          const eligibleFreeServices = [
+            'full body service',
+            'full body wash',
+            'ceramic wash',
+            'double soap'
+          ];
+          
+          for (let item of items) {
+            const [prodRows] = await connection.query('SELECT name, category FROM products WHERE id = ?', [item.product_id]);
+            if (prodRows.length > 0) {
+              const prodName = prodRows[0].name.toLowerCase().trim();
+              const isEligible = eligibleFreeServices.some(s => prodName.includes(s)) && !prodName.includes('vip');
+              const itemPrice = parseFloat(item.price);
+              
+              if (isEligible && itemPrice <= cap) {
+                freeWashRedeemed = true;
+                freeWashDiscount = itemPrice * parseFloat(item.quantity || 1);
+                break;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error checking free wash during POS checkout:', err);
+      }
+    }
+    
+    if (freeWashRedeemed) {
+      finalDiscount += freeWashDiscount;
+      finalTotal = Math.max(0, finalTotal - freeWashDiscount);
+    }
+
+    let hasVip = false;
+    let vipServiceName = '';
+    
+    for (let item of items) {
+      const [prodRows] = await connection.query('SELECT name, category FROM products WHERE id = ?', [item.product_id]);
+      if (prodRows.length > 0) {
+        const prod = prodRows[0];
+        if (prod.category === 'VIP' || prod.name.toLowerCase().includes('vip')) {
+          hasVip = true;
+          vipServiceName = prod.name;
+          break;
+        }
+      }
+    }
+    
+    let vipBookingId = null;
+    if (hasVip && customer_id) {
+      try {
+        const [custRows] = await connection.query('SELECT name, phone, vehicle_plate, vehicle_type FROM customers WHERE id = ?', [customer_id]);
+        if (custRows.length > 0) {
+          const cust = custRows[0];
+          const [existingVip] = await connection.query('SELECT id FROM vip_customers WHERE phone = ?', [cust.phone]);
+          let vipCustomerId;
+          if (existingVip.length > 0) {
+            vipCustomerId = existingVip[0].id;
+          } else {
+            const [insertVip] = await connection.query(
+              'INSERT INTO vip_customers (name, phone, vehicle_model, vehicle_type) VALUES (?, ?, ?, ?)',
+              [cust.name, cust.phone, cust.vehicle_plate || 'N/A', cust.vehicle_type || 'Saloon']
+            );
+            vipCustomerId = insertVip.insertId;
+          }
+          
+          const localToday = new Date();
+          const yyyy = localToday.getFullYear();
+          const mm = String(localToday.getMonth() + 1).padStart(2, '0');
+          const dd = String(localToday.getDate()).padStart(2, '0');
+          const todayDate = `${yyyy}-${mm}-${dd}`;
+          
+          const [bookingResult] = await connection.query(
+            'INSERT INTO vip_bookings (vip_customer_id, service_type, appointment_date, appointment_time, status, notes) VALUES (?, ?, ?, ?, ?, ?)',
+            [vipCustomerId, vipServiceName, todayDate, '09:00', 'pending', 'Created via POS Sells screen']
+          );
+          vipBookingId = bookingResult.insertId;
+        }
+      } catch (err) {
+        console.error('Error creating VIP booking from POS checkout:', err);
+      }
+    }
+
     const orderStatus = hasService ? 'processing' : 'completed';
     const serviceStartedAt = hasService ? new Date() : null;
     const serviceCompletedAt = hasService ? null : new Date();
+    
+    const paymentStatus = (freeWashRedeemed && finalTotal === 0) ? 'free' : 'pending';
 
     // Create order
     const [orderResult] = await connection.query(
-      'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at, service_completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [customer_id || null, total, discount || 0, orderStatus, 'pending', serviceStartedAt, serviceCompletedAt]
+      'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at, service_completed_at, vip_booking_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [customer_id || null, finalTotal, finalDiscount, orderStatus, paymentStatus, serviceStartedAt, serviceCompletedAt, vipBookingId]
     );
 
     const orderId = orderResult.insertId;
+
+    if (freeWashRedeemed) {
+      const { incrementWashStamp } = require('../utils/loyaltyStamps');
+      await incrementWashStamp(connection, customer_id);
+      
+      if (finalTotal === 0) {
+        await connection.query(
+          'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
+          [orderId]
+        );
+      }
+    }
 
     // Fetch customer vehicle type if customer_id exists
     let vehicleType = 'Saloon';
@@ -450,25 +560,54 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
         }
       }
 
-      // Handle Loyalty Stamps for Website Bookings only upon completion
-      const isWebsiteServiceBooking = 
-        order.customer_id_ref &&
-        (order.source === 'customer_website_saloon' ||
-         order.source === 'customer_website_4x4' ||
-         (order.source || '').includes('customer_website'));
-         
-      const [serviceRows] = await connection.query(
-        'SELECT id FROM services WHERE order_id = ? LIMIT 1',
-        [id]
-      );
-      const hasService = serviceRows.length > 0;
+      // Handle Loyalty Stamps for Completed Orders
+      const targetCustomerId = order.customer_id || order.customer_id_ref;
+      if (targetCustomerId && parseFloat(order.total) > 0) {
+        const [servicesList] = await connection.query(
+          'SELECT service_name FROM services WHERE order_id = ?',
+          [id]
+        );
+        const [itemsList] = await connection.query(
+          'SELECT p.name, p.category FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
+          [id]
+        );
 
-      if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
-        const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
-        if (!isExemptEmirate) {
-          const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
-          await ensureLoyaltyRow(connection, order.customer_id_ref);
-          await incrementWashStamp(connection, order.customer_id_ref);
+        const eligibleFreeServices = [
+          'full body service',
+          'full body wash',
+          'ceramic wash',
+          'double soap'
+        ];
+
+        let hasEligibleService = false;
+
+        // Check services names
+        for (let s of servicesList) {
+          const sName = s.service_name.toLowerCase().trim();
+          if (eligibleFreeServices.some(e => sName.includes(e)) || sName.includes('vip')) {
+            hasEligibleService = true;
+            break;
+          }
+        }
+
+        // Check items names
+        if (!hasEligibleService) {
+          for (let item of itemsList) {
+            const pName = item.name.toLowerCase().trim();
+            if (eligibleFreeServices.some(e => pName.includes(e)) || item.category === 'VIP' || pName.includes('vip')) {
+              hasEligibleService = true;
+              break;
+            }
+          }
+        }
+
+        if (hasEligibleService) {
+          const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
+          if (!isExemptEmirate) {
+            const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
+            await ensureLoyaltyRow(connection, targetCustomerId);
+            await incrementWashStamp(connection, targetCustomerId);
+          }
         }
       }
     }
@@ -490,7 +629,27 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
           orderId: order.id
         });
 
-        const thankYouMessage = `Thank you for choosing Sniper Car Care. We hope you loved our service! Please leave your feedback here: ${feedbackUrl}`;
+        let stampsMsg = "";
+        const targetCustId = order.customer_id || order.customer_id_ref;
+        if (targetCustId) {
+          try {
+            const { getWashStamps } = require('../utils/loyaltyStamps');
+            const currentStamps = await getWashStamps(pool, targetCustId);
+            if (currentStamps === 0) {
+              if (order.payment_status === 'free') {
+                stampsMsg = " Congrats! You earned a FREE wash for your next visit!";
+              } else {
+                stampsMsg = " You have completed 5/5 washes. Congrats! You earned a FREE wash for your next visit!";
+              }
+            } else {
+              stampsMsg = ` You have completed ${currentStamps}/5 washes. Only ${5 - currentStamps} more washes left to get your FREE wash!`;
+            }
+          } catch (err) {
+            console.error('Error fetching stamps for SMS message:', err);
+          }
+        }
+
+        const thankYouMessage = `Thank you for choosing Sniper Car Care. We hope you loved our service! Please leave your feedback here: ${feedbackUrl}${stampsMsg}`;
 
         try {
           await sendReson8Message({

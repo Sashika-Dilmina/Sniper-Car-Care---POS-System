@@ -20,6 +20,7 @@ const OrderDetail = () => {
   const [bookingUpdate, setBookingUpdate] = useState({ status: '', notes: '', staff_notes: '', assigned_staff_id: '' });
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
   const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
+  const [paymentDiscount, setPaymentDiscount] = useState(0);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -30,6 +31,13 @@ const OrderDetail = () => {
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const isAppointmentToday = (dateStr) => {
+    if (!dateStr) return false;
+    const apptDate = new Date(dateStr).toDateString();
+    const todayDate = new Date().toDateString();
+    return apptDate === todayDate;
   };
 
   const calculateElapsedTime = (startedAt, completedAt) => {
@@ -74,12 +82,13 @@ const OrderDetail = () => {
     }
   };
 
-  const handleVipStatusChange = async (newStatus) => {
+  const handleVipStatusChange = async (newStatus, paymentMethod) => {
     if (!order.vip_booking_id) return;
     setUpdatingVip(true);
     try {
       await axios.patch(`/api/vip/bookings/${order.vip_booking_id}`, {
-        status: newStatus
+        status: newStatus,
+        payment_method: paymentMethod
       });
       toast.success(`Booking status changed to ${newStatus}`);
       fetchVipBooking(order.vip_booking_id);
@@ -472,17 +481,31 @@ const OrderDetail = () => {
                       <option value="bank_transfer">Bank Transfer</option>
                     </select>
                   </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Add Discount (AED)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={remainingAmount}
+                      value={paymentDiscount}
+                      onChange={(e) => setPaymentDiscount(parseFloat(e.target.value) || 0)}
+                      className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                    />
+                  </div>
                   <button
                     onClick={async () => {
                       const method = document.getElementById('manual_method').value;
+                      const finalAmount = Math.max(0, remainingAmount - paymentDiscount);
                       try {
                         await axios.post('/api/payments/manual', {
                           order_id: order.id,
-                          amount: remainingAmount,
-                          method: method
+                          amount: finalAmount,
+                          method: method,
+                          discount: paymentDiscount
                         });
                         toast.success('Payment recorded successfully');
                         setShowPayment(false);
+                        setPaymentDiscount(0);
                         fetchOrder();
                       } catch (err) {
                         toast.error('Failed to record payment');
@@ -490,7 +513,7 @@ const OrderDetail = () => {
                     }}
                     className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700 transition"
                   >
-                    Confirm Amount: AED {remainingAmount.toLocaleString()}
+                    Confirm Amount: AED {Math.max(0, remainingAmount - paymentDiscount).toLocaleString()}
                   </button>
                   <button onClick={() => setShowPayment(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700">Cancel</button>
                 </div>
@@ -808,7 +831,7 @@ const OrderDetail = () => {
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
                       >
                         <option value="">Select time...</option>
-                        {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => (
+                        {['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'].map(t => (
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
@@ -863,23 +886,31 @@ const OrderDetail = () => {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  {vipBooking.status === 'confirmed' && (
-                    <button
-                      onClick={() => handleVipStatusChange('in_progress')}
-                      disabled={updatingVip}
-                      className="flex-1 min-w-[150px] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
-                    >
-                      ⚡ Start Service
-                    </button>
-                  )}
-                  {vipBooking.status === 'in_progress' && (
-                    <button
-                      onClick={() => handleVipStatusChange('completed')}
-                      disabled={updatingVip}
-                      className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
-                    >
-                      ✓ Done (Complete Service)
-                    </button>
+                  {!isAppointmentToday(vipBooking.appointment_date) && ['confirmed', 'in_progress'].includes(vipBooking.status) ? (
+                    <div className="w-full bg-yellow-50 border border-yellow-200 text-yellow-800 p-3 rounded-lg text-xs font-bold text-center">
+                      ⚠️ VIP service can only be started/completed on the scheduled day. Please reschedule this booking to today to proceed.
+                    </div>
+                  ) : (
+                    <>
+                      {vipBooking.status === 'confirmed' && (
+                        <button
+                          onClick={() => handleVipStatusChange('in_progress')}
+                          disabled={updatingVip}
+                          className="flex-1 min-w-[150px] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                        >
+                          ⚡ Start Service
+                        </button>
+                      )}
+                      {vipBooking.status === 'in_progress' && (
+                        <button
+                          onClick={() => handleVipStatusChange('completed', selectedPaymentMethod)}
+                          disabled={updatingVip}
+                          className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                        >
+                          ✓ Done (Complete Service)
+                        </button>
+                      )}
+                    </>
                   )}
                   {['pending', 'confirmed', 'in_progress'].includes(vipBooking.status) && (
                     <button

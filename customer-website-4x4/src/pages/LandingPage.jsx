@@ -663,7 +663,7 @@ const LandingPage = () => {
     }
   }, [vipBookingForm.emirate]);
 
-  const defaultTimeSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
+  const defaultTimeSlots = ['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'];
 
   // Fetch available time slots when date changes
   useEffect(() => {
@@ -1449,7 +1449,7 @@ const LandingPage = () => {
                     <input type="date" className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.date} onChange={e => setQuickBookForm({...quickBookForm, date: e.target.value})} min={new Date().toISOString().split('T')[0]} />
                     <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.time} onChange={e => setQuickBookForm({...quickBookForm, time: e.target.value})}>
                       <option value="">Select Time</option>
-                      {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => <option key={t} value={t}>{t}</option>)}
+                      {['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'].map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     <button 
                       className="w-full mt-1 bg-red-600 text-white text-xs font-bold py-3 rounded-lg hover:bg-red-700 shadow-md transition-colors"
@@ -1804,7 +1804,7 @@ const LandingPage = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Time</label>
                 <select className="w-full p-3.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.time} onChange={e => setQuickBookForm({...quickBookForm, time: e.target.value})}>
                   <option value="">Select Time</option>
-                  {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => <option key={t} value={t}>{t}</option>)}
+                  {['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
 

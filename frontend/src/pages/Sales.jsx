@@ -408,7 +408,7 @@ const Sales = () => {
   // Ledger stats
   const totalSalesCount = filteredLedgerOrders.length;
   const totalDiscount = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.discount || 0), 0);
-  const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
+  const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.payment_status === 'free' ? o.discount || 0 : o.total || 0), 0);
 
   const renderCatalogCard = (product) => {
     const isService = product.category === 'Services' || product.category === 'VIP';
@@ -1172,7 +1172,11 @@ const Sales = () => {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap font-extrabold text-gray-900 text-right">
-                            AED {parseFloat(order.total).toFixed(2)}
+                            {order.payment_status === 'free' ? (
+                              <span className="text-green-600 font-bold">AED {parseFloat(order.discount).toFixed(2)} (Free)</span>
+                            ) : (
+                              `AED ${parseFloat(order.total).toFixed(2)}`
+                            )}
                           </td>
                         </tr>
                       );

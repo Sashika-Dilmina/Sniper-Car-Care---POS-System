@@ -16,6 +16,34 @@ async function sendVIPCompletionNotification(booking, customer, orderId) {
     return;
   }
 
+  // Look up main customer ID by phone to check stamps
+  let stampsMsg = "";
+  try {
+    const [mainCustomer] = await db.query(
+      'SELECT id FROM customers WHERE phone = ?',
+      [customer.phone]
+    );
+    if (mainCustomer.length > 0) {
+      const { getWashStamps } = require('../utils/loyaltyStamps');
+      const currentStamps = await getWashStamps(db, mainCustomer[0].id);
+      
+      const [orderRows] = await db.query('SELECT payment_status FROM orders WHERE id = ?', [orderId]);
+      const orderPayStatus = orderRows.length > 0 ? orderRows[0].payment_status : 'pending';
+
+      if (currentStamps === 0) {
+        if (orderPayStatus === 'free') {
+          stampsMsg = " Congrats! You earned a FREE wash for your next visit!";
+        } else {
+          stampsMsg = " You have completed 5/5 washes. Congrats! You earned a FREE wash for your next visit!";
+        }
+      } else {
+        stampsMsg = ` You have completed ${currentStamps}/5 washes. Only ${5 - currentStamps} more washes left to get your FREE wash!`;
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching stamps for VIP SMS:', err);
+  }
+
   const feedbackUrl = buildFeedbackUrl({
     vehicleType: customer.vehicle_type || 'Saloon',
     customerId: null,
@@ -29,6 +57,8 @@ async function sendVIPCompletionNotification(booking, customer, orderId) {
   if (feedbackUrl) {
     message += ` Share feedback: ${feedbackUrl}`;
   }
+  
+  message += stampsMsg;
 
   await sendReson8Message({
     to: formattedPhone,
@@ -281,6 +311,29 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
     } else if (status === 'completed') {
       orderStatus = 'completed';
       additionalSets = ', service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP), service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP)';
+      
+      try {
+        const [orderRows] = await db.query(
+          'SELECT id, total, payment_status FROM orders WHERE vip_booking_id = ?',
+          [req.params.id]
+        );
+        if (orderRows.length > 0) {
+          const order = orderRows[0];
+          if (order.payment_status !== 'paid' && order.payment_status !== 'free') {
+            const payMethod = req.body.payment_method || 'cash';
+            
+            // Record payment in payments table
+            await db.query(
+              'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, "completed")',
+              [order.id, order.total, payMethod]
+            );
+            
+            additionalSets += `, payment_status = 'paid'`;
+          }
+        }
+      } catch (err) {
+        console.error('Error auto-recording payment for completed VIP booking:', err);
+      }
     } else if (status === 'cancelled') {
       orderStatus = 'cancelled';
     }
@@ -483,7 +536,11 @@ exports.getVIPCustomers = asyncHandler(async (req, res) => {
 // @route GET /api/vip-bookings/today
 // @access Private
 exports.getTodayVIPAppointments = asyncHandler(async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const localToday = new Date();
+  const yyyy = localToday.getFullYear();
+  const mm = String(localToday.getMonth() + 1).padStart(2, '0');
+  const dd = String(localToday.getDate()).padStart(2, '0');
+  const today = `${yyyy}-${mm}-${dd}`;
   
   const [appointments] = await db.query(`
     SELECT 

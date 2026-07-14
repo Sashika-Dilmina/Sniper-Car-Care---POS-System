@@ -155,7 +155,6 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
        LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
        WHERE o.status IN ('pending', 'processing') 
          AND o.vip_booking_id IS NULL
-         AND ${dateFilter.replace(/created_at/g, 'o.created_at')}
          AND (
            EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
            OR
@@ -175,9 +174,8 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
     const [pendingVipResult] = await pool.query(
       `SELECT COUNT(*) as count
        FROM orders o
-       WHERE o.status IN ('pending', 'processing') 
-         AND o.vip_booking_id IS NOT NULL 
-         AND ${dateFilter.replace(/created_at/g, 'o.created_at')}
+        WHERE o.status IN ('pending', 'processing') 
+          AND o.vip_booking_id IS NOT NULL
          AND (
            EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
            OR
@@ -283,11 +281,11 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   try {
     const [salesByDayResult] = await pool.query(`
       SELECT DATE(created_at) as date,
-             COALESCE(SUM(total), 0) as sales,
+             COALESCE(SUM(CASE WHEN payment_status = 'free' THEN discount ELSE total END), 0) as sales,
              COUNT(*) as orders
       FROM orders
       WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-        AND payment_status = 'paid'
+        AND payment_status IN ('paid', 'free')
       GROUP BY DATE(created_at)
       ORDER BY date ASC
     `);
@@ -297,7 +295,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
     salesByDay = [];
   }
 
-  // Category revenue (only paid orders)
+  // Category revenue (paid and free orders)
   let categoryRevenue = [];
   try {
     const [categoryRevenueResult] = await pool.query(`
@@ -305,7 +303,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE ${dateFilter.replace(/created_at/g, 'o.created_at')} AND o.payment_status = 'paid'
+      WHERE ${dateFilter.replace(/created_at/g, 'o.created_at')} AND o.payment_status IN ('paid', 'free')
       GROUP BY p.category
       ORDER BY revenue DESC
     `);
@@ -497,6 +495,32 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
     LIMIT 10
   `, [targetDate]);
 
+  // Free washes breakdown query (Saloon vs 4x4)
+  const [freeWashBreakdown] = await pool.query(`
+    SELECT 
+      COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') as vehicle_type,
+      COALESCE(SUM(o.discount), 0) as total_amount
+    FROM orders o
+    LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+    WHERE DATE(o.created_at) = ? AND o.payment_status = 'free' AND o.status != 'cancelled'
+    GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')
+  `, [targetDate]);
+
+  const saloonFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === 'Saloon')?.total_amount || 0;
+  const fourWheelFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === '4x4')?.total_amount || 0;
+
+  const totalSales = paymentMethods
+    .filter(pm => pm.method !== 'free')
+    .reduce((sum, pm) => sum + parseFloat(pm.total_amount), 0);
+
+  if (ordersSummary[0]) {
+    ordersSummary[0].total_sales = totalSales;
+    ordersSummary[0].saloon_free_washes_value = parseFloat(saloonFreeAmount);
+    ordersSummary[0].four_wheel_free_washes_value = parseFloat(fourWheelFreeAmount);
+  }
+
   const reportData = {
     date: targetDate,
     orders: ordersSummary[0] || {},
@@ -514,14 +538,16 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
       [''],
       ['Orders Summary'],
       ['Total Orders', reportData.orders.total_orders || 0],
-      ['Total Revenue', reportData.orders.total_revenue || 0],
+      ['Total Sales', reportData.orders.total_sales || 0],
       ['Total Discounts', reportData.orders.total_discounts || 0],
       ['Paid Orders', reportData.orders.paid_orders || 0],
       ['Pending Orders', reportData.orders.pending_orders || 0],
+      ['Saloon Free Washes Value', reportData.orders.saloon_free_washes_value || 0],
+      ['4x4 Free Washes Value', reportData.orders.four_wheel_free_washes_value || 0],
       [''],
       ['Services Summary'],
       ['Total Services', reportData.services.total_services || 0],
-      ['Services Revenue', reportData.services.services_revenue || 0],
+      ['Services Sales', reportData.services.services_revenue || 0],
       ['Completed Services', reportData.services.completed_services || 0],
       ['In Progress Services', reportData.services.in_progress_services || 0],
     ];

@@ -188,24 +188,46 @@ const createOrder = asyncHandler(async (req, res) => {
         }
 
         if (currentStamps >= 5) {
-          // 6th wash -> Free Wash!
-          loyalty = await incrementWashStamp(connection, finalCustomerId);
-          const finalPrice = 0.00;
+          const { calculateFreeWashCap } = require('../utils/freeWashCap');
+          const cap = await calculateFreeWashCap(connection, finalCustomerId);
+          
+          const sNameLower = serviceName.toLowerCase().trim();
+          const eligibleFreeServices = [
+            'full body service',
+            'full body wash',
+            'ceramic wash',
+            'double soap'
+          ];
+          const isEligibleFree = eligibleFreeServices.some(s => sNameLower.includes(s)) && !sNameLower.includes('vip');
+          const originalPrice = parseFloat(total);
 
-          await connection.query(
-            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending', orderId]
-          );
+          if (isEligibleFree && originalPrice <= cap) {
+            // 6th wash -> Free Wash!
+            loyalty = await incrementWashStamp(connection, finalCustomerId);
+            const finalPrice = 0.00;
 
-          await connection.query(
-            'UPDATE orders SET total = 0.00, discount = ?, payment_status = ? WHERE id = ?',
-            [total, 'free', orderId]
-          );
+            await connection.query(
+              'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending', orderId]
+            );
 
-          await connection.query(
-            'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
-            [orderId]
-          );
+            await connection.query(
+              'UPDATE orders SET total = 0.00, discount = ?, payment_status = ? WHERE id = ?',
+              [total, 'free', orderId]
+            );
+
+            await connection.query(
+              'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
+              [orderId]
+            );
+          } else {
+            // Price exceeds cap, or service is not eligible -> Charge normally!
+            // Do NOT increment stamps, do NOT touch stamps (remain >= 5)
+            await connection.query(
+              'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending', orderId]
+            );
+          }
         } else {
           // Paid booking, do not increment stamps yet!
           await connection.query(

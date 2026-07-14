@@ -696,15 +696,15 @@ const Reports = () => {
 
           {dailyReport && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Orders</p>
                   <p className="text-2xl font-bold">{dailyReport.orders?.total_orders || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Revenue</p>
+                  <p className="text-sm text-gray-600">Total Sales</p>
                   <p className="text-2xl font-bold text-primary-600">
-                    AED {parseFloat(dailyReport.orders?.total_revenue || 0).toLocaleString()}
+                    AED {parseFloat(dailyReport.orders?.total_sales !== undefined ? dailyReport.orders.total_sales : dailyReport.orders?.total_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
@@ -712,9 +712,21 @@ const Reports = () => {
                   <p className="text-2xl font-bold">{dailyReport.services?.total_services || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Services Revenue</p>
+                  <p className="text-sm text-gray-600">Services Sales</p>
                   <p className="text-2xl font-bold text-green-600">
                     AED {parseFloat(dailyReport.services?.services_revenue || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">Saloon Free Washes</p>
+                  <p className="text-2xl font-bold text-indigo-600">
+                    AED {parseFloat(dailyReport.orders?.saloon_free_washes_value || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">4x4 Free Washes</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    AED {parseFloat(dailyReport.orders?.four_wheel_free_washes_value || 0).toLocaleString()}
                   </p>
                 </div>
               </div>

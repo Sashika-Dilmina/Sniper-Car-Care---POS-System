@@ -135,9 +135,9 @@ const getOrderPayments = asyncHandler(async (req, res) => {
 // @route   POST /api/payments/manual
 // @access  Private
 const processManualPayment = asyncHandler(async (req, res) => {
-  const { order_id, amount, method, status = 'completed' } = req.body;
+  const { order_id, amount, method, status = 'completed', discount = 0 } = req.body;
 
-  if (!order_id || !amount || !method) {
+  if (!order_id || amount === undefined || !method) {
     return res.status(400).json({ message: 'Order ID, amount, and method are required' });
   }
 
@@ -145,6 +145,25 @@ const processManualPayment = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
+    const discountVal = parseFloat(discount || 0);
+    if (discountVal > 0) {
+      const [orderRows] = await connection.query(
+        'SELECT total, discount FROM orders WHERE id = ?',
+        [order_id]
+      );
+      if (orderRows.length > 0) {
+        const currentTotal = parseFloat(orderRows[0].total);
+        const currentDiscount = parseFloat(orderRows[0].discount || 0);
+        
+        const newTotal = Math.max(0, currentTotal - discountVal);
+        const newDiscount = currentDiscount + discountVal;
+        
+        await connection.query(
+          'UPDATE orders SET total = ?, discount = ? WHERE id = ?',
+          [newTotal, newDiscount, order_id]
+        );
+      }
+    }
     // Check if there is an existing pending payment record
     const [pendingPayments] = await connection.query(
       'SELECT id FROM payments WHERE order_id = ? AND status = "pending" LIMIT 1',

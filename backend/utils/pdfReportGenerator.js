@@ -169,13 +169,15 @@ function generatePDFReport(tab, data, params, outputPath) {
         currentY += 20;
         
         currentY = drawRow('Total Orders', (orders.total_orders || 0).toString(), currentY);
-        currentY = drawRow('Total Revenue', `AED ${parseFloat(orders.total_revenue || 0).toFixed(2)}`, currentY);
+        currentY = drawRow('Total Sales', `AED ${parseFloat(orders.total_sales !== undefined ? orders.total_sales : orders.total_revenue || 0).toFixed(2)}`, currentY);
         currentY = drawRow('Total Discounts', `AED ${parseFloat(orders.total_discounts || 0).toFixed(2)}`, currentY);
         currentY = drawRow('Paid Orders', (orders.paid_orders || 0).toString(), currentY);
         currentY = drawRow('Pending Orders', (orders.pending_orders || 0).toString(), currentY);
         currentY = drawRow('Total Services Added', (services.total_services || 0).toString(), currentY);
         currentY = drawRow('Completed Services', (services.completed_services || 0).toString(), currentY);
-        currentY = drawRow('Services Revenue', `AED ${parseFloat(services.services_revenue || 0).toFixed(2)}`, currentY);
+        currentY = drawRow('Services Sales', `AED ${parseFloat(services.services_revenue || 0).toFixed(2)}`, currentY);
+        currentY = drawRow('Saloon Free Washes', `AED ${parseFloat(orders.saloon_free_washes_value || 0).toFixed(2)}`, currentY);
+        currentY = drawRow('4x4 Free Washes', `AED ${parseFloat(orders.four_wheel_free_washes_value || 0).toFixed(2)}`, currentY);
         
         currentY += 20;
 

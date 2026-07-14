@@ -199,11 +199,12 @@ const VIPDashboard = () => {
     }
   };
 
-  const handleStatusChange = async (bookingId, newStatus) => {
+  const handleStatusChange = async (bookingId, newStatus, paymentMethod) => {
     setUpdatingBookingId(bookingId);
     try {
       await axios.patch(`/api/vip/bookings/${bookingId}`, {
-        status: newStatus
+        status: newStatus,
+        payment_method: paymentMethod
       }, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -290,6 +291,13 @@ const VIPDashboard = () => {
       'cancelled': 'bg-red-100 text-red-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const isAppointmentToday = (dateStr) => {
+    if (!dateStr) return false;
+    const apptDate = new Date(dateStr).toDateString();
+    const todayDate = new Date().toDateString();
+    return apptDate === todayDate;
   };
 
   const calculateElapsedTime = (startedAt, completedAt) => {
@@ -630,7 +638,7 @@ const VIPDashboard = () => {
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
                       >
                         <option value="">Select time...</option>
-                        {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => (
+                        {['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'].map(t => (
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
@@ -685,23 +693,31 @@ const VIPDashboard = () => {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  {selectedBooking.status === 'confirmed' && (
-                    <button
-                      onClick={() => handleStatusChange(selectedBooking.id, 'in_progress')}
-                      disabled={updatingBookingId === selectedBooking.id}
-                      className="flex-1 min-w-[150px] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
-                    >
-                      ⚡ Start Service
-                    </button>
-                  )}
-                  {selectedBooking.status === 'in_progress' && (
-                    <button
-                      onClick={() => handleStatusChange(selectedBooking.id, 'completed')}
-                      disabled={updatingBookingId === selectedBooking.id}
-                      className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
-                    >
-                      ✓ Done (Complete Service)
-                    </button>
+                  {!isAppointmentToday(selectedBooking.appointment_date) && ['confirmed', 'in_progress'].includes(selectedBooking.status) ? (
+                    <div className="w-full bg-yellow-50 border border-yellow-200 text-yellow-800 p-3 rounded-lg text-xs font-bold text-center">
+                      ⚠️ VIP service can only be started/completed on the scheduled day. Please reschedule this booking to today to proceed.
+                    </div>
+                  ) : (
+                    <>
+                      {selectedBooking.status === 'confirmed' && (
+                        <button
+                          onClick={() => handleStatusChange(selectedBooking.id, 'in_progress')}
+                          disabled={updatingBookingId === selectedBooking.id}
+                          className="flex-1 min-w-[150px] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                        >
+                          ⚡ Start Service
+                        </button>
+                      )}
+                      {selectedBooking.status === 'in_progress' && (
+                        <button
+                          onClick={() => handleStatusChange(selectedBooking.id, 'completed', selectedPaymentMethod)}
+                          disabled={updatingBookingId === selectedBooking.id}
+                          className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                        >
+                          ✓ Done (Complete Service)
+                        </button>
+                      )}
+                    </>
                   )}
                   {['pending', 'confirmed', 'in_progress'].includes(selectedBooking.status) && (
                     <button
