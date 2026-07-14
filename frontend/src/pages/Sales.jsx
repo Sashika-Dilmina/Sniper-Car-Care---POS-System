@@ -287,6 +287,12 @@ const Sales = () => {
       return;
     }
 
+    const hasServiceInCart = cart.some(item => item.category === 'Services' || item.category === 'VIP');
+    if (hasServiceInCart && !selectedCustomer) {
+      toast.error('Booking a service requires selecting a customer.');
+      return;
+    }
+
     isCheckingOutRef.current = true;
     setIsCheckingOut(true);
     try {

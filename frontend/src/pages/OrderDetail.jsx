@@ -280,7 +280,7 @@ const OrderDetail = () => {
         </div>
       </div>
 
-      {order.payment_status !== 'paid' && remainingAmount > 0 && (
+      {order.payment_status !== 'paid' && order.status !== 'cancelled' && remainingAmount > 0 && (
         <div className="bg-white p-6 rounded-lg shadow border-2 border-primary-500">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span className="text-2xl">💳</span> Customer Payment Required

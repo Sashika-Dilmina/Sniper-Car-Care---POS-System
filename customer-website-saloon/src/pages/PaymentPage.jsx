@@ -122,7 +122,7 @@ const PaymentPage = () => {
         }
     };
 
-    const handleCashSubmit = async () => {
+    const handleManualSubmit = async (method) => {
         setCashConfirming(true);
         try {
             let activeOrder = order;
@@ -132,12 +132,12 @@ const PaymentPage = () => {
             }
             await axios.post('/api/public/orders/confirm', {
                 order_id: activeOrder.id,
-                payment_method: 'cash'
+                payment_method: method
             });
-            toast.success('Booking confirmed with cash payment!');
+            toast.success(`Booking confirmed with ${method === 'card' ? 'card' : 'cash'} payment!`);
             setPaid(true);
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Failed to confirm cash booking');
+            toast.error(err.response?.data?.message || `Failed to confirm ${method} booking`);
         } finally {
             setCashConfirming(false);
         }
@@ -261,15 +261,15 @@ const PaymentPage = () => {
 
                         {paymentMethod === 'card' && (
                             <div className="space-y-4">
-                                <p className="text-xs text-gray-400 leading-relaxed text-center">
-                                    Pay securely using Credit/Debit card via Tap Payments.
-                                </p>
+                                <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-500 text-sm text-center">
+                                    ℹ️ You will pay <b>{parseFloat(order.total).toLocaleString()} AED</b> by Card on our terminal machine at the shop after the service.
+                                </div>
                                 <button
-                                    onClick={handleTapCheckout}
-                                    disabled={loadingTap}
-                                    className="w-full py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-black text-lg rounded-xl shadow-lg hover:shadow-yellow-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    onClick={() => handleManualSubmit('card')}
+                                    disabled={cashConfirming}
+                                    className="w-full py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-black text-lg rounded-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
-                                    {loadingTap ? 'Redirecting...' : <><span>💳</span> Pay with Debit/Credit Card</>}
+                                    {cashConfirming ? 'Confirming...' : <><span>💳</span> Confirm Booking & Pay by Card</>}
                                 </button>
                             </div>
                         )}
@@ -280,7 +280,7 @@ const PaymentPage = () => {
                                     ℹ️ You will pay <b>{parseFloat(order.total).toLocaleString()} AED</b> in cash at the shop after the service.
                                 </div>
                                 <button
-                                    onClick={handleCashSubmit}
+                                    onClick={() => handleManualSubmit('cash')}
                                     disabled={cashConfirming}
                                     className="w-full py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-black text-lg rounded-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
                                 >

@@ -1198,17 +1198,16 @@ const LandingPage = () => {
         
         <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-2xl mx-auto w-full px-1">
           {displayPackages.map((pkg, idx) => {
-            const isFullBody = pkg.name.toLowerCase().includes('full body') || pkg.name.toLowerCase().includes('full service') || pkg.name.toLowerCase().includes('full wash');
             return (
               <Reveal 
                 key={pkg.id || pkg.name} 
                 delay={idx * 50} 
-                className={`flex w-full min-w-0 ${isFullBody ? 'col-span-2 justify-center' : 'col-span-1'}`}
+                className="flex w-full min-w-0 col-span-1"
               >
                 <div 
                   role="button"
                   onClick={() => handleServiceClick(pkg)}
-                  className={`group relative flex flex-col rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300 ${isFullBody ? 'w-full aspect-[1.5/1]' : 'w-full aspect-square'}`}
+                  className="group relative flex flex-col rounded-xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300 w-full aspect-square"
                 >
                   <img 
                     src={getServiceImage(pkg)} 

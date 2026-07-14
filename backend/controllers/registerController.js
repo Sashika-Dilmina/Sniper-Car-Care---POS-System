@@ -122,6 +122,13 @@ const getRegisterReport = asyncHandler(async (req, res) => {
   );
   const otherSales = parseFloat(otherSalesRows[0].total);
 
+  // Query Free Washes original amount
+  const [freeWashRows] = await pool.query(
+    'SELECT COALESCE(SUM(o.discount), 0) as total FROM payments p INNER JOIN orders o ON p.order_id = o.id WHERE p.created_at >= ? AND p.created_at <= ? AND p.method = "free" AND p.status = "completed"',
+    [openedAt, closedAt]
+  );
+  const freeWashAmount = parseFloat(freeWashRows[0].total);
+
   // Query Credit Sales
   const [creditSalesRows] = await pool.query(
     'SELECT COALESCE(SUM(amount), 0) as total FROM customer_credits WHERE created_at >= ? AND created_at <= ?',
@@ -183,6 +190,7 @@ const getRegisterReport = asyncHandler(async (req, res) => {
       other_payments: otherSales,
       credit_sales: creditSales,
       credit_sale_recovery: creditRecoveries,
+      free_wash_amount: freeWashAmount,
       sale_return: 0.00,
       total_expense: totalExpenses,
       cash_expense: cashExpenses,

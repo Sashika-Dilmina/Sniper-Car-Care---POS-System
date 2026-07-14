@@ -294,8 +294,8 @@ const confirmOrder = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
-    const isCash = payment_method === 'cash';
-    const paymentStatus = isCash ? 'pending' : 'paid';
+    const isPendingPayment = payment_method === 'cash' || payment_method === 'card';
+    const paymentStatus = isPendingPayment ? 'pending' : 'paid';
 
     // Check if order contains only products
     const [items] = await connection.query(
@@ -330,12 +330,12 @@ const confirmOrder = asyncHandler(async (req, res) => {
       if (existing.length === 0) {
         await connection.query(
           'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
-          [order_id, total, payment_method || 'cash', isCash ? 'pending' : 'completed']
+          [order_id, total, payment_method || 'cash', isPendingPayment ? 'pending' : 'completed']
         );
       } else {
         await connection.query(
           'UPDATE payments SET method = ?, status = ?, amount = ? WHERE order_id = ?',
-          [payment_method || 'cash', isCash ? 'pending' : 'completed', total, order_id]
+          [payment_method || 'cash', isPendingPayment ? 'pending' : 'completed', total, order_id]
         );
       }
     }

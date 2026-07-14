@@ -1029,12 +1029,20 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
     [start_date, end_date]
   );
 
+  // Query Free Washes (sum of discount for orders with payment_status = 'free')
+  const [freeWashesResult] = await pool.query(
+    "SELECT COALESCE(SUM(discount), 0) as total, COUNT(*) as count FROM orders WHERE status != 'cancelled' AND payment_status = 'free' AND DATE(created_at) BETWEEN ? AND ?",
+    [start_date, end_date]
+  );
+
   const cashSales = parseFloat(cashSalesResult[0].total || 0);
   const cardSales = parseFloat(cardSalesResult[0].total || 0);
   const bankSales = parseFloat(bankSalesResult[0].total || 0);
   const creditSales = parseFloat(creditSalesResult[0].total || 0);
   const totalDiscounts = parseFloat(discountsResult[0].total_discounts || 0);
   const salesCount = discountsResult[0].sales_count || 0;
+  const freeWashTotal = parseFloat(freeWashesResult[0].total || 0);
+  const freeWashCount = parseInt(freeWashesResult[0].count || 0);
 
   const netSales = cashSales + cardSales + bankSales + creditSales;
   const totalSales = netSales + totalDiscounts;
@@ -1138,7 +1146,9 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
       credit_sales: creditSales,
       cash_recovery: parseFloat(cashRecoveryResult[0].total || 0),
       card_recovery: parseFloat(cardRecoveryResult[0].total || 0),
-      bank_recovery: parseFloat(bankRecoveryResult[0].total || 0)
+      bank_recovery: parseFloat(bankRecoveryResult[0].total || 0),
+      free_wash_total: freeWashTotal,
+      free_wash_count: freeWashCount
     },
     purchases_by_category: purchasesByCategory || [],
     expenses_by_category: expensesByCategory || []

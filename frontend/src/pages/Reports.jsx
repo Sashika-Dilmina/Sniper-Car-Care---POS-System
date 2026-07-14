@@ -1278,6 +1278,17 @@ const Reports = () => {
                     </div>
                   </div>
 
+                  {/* Other Activities Section */}
+                  <div className="space-y-2 pt-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Other Activities:</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Free Washes Value</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.free_wash_total || 0).toFixed(3)} ({plReport.summary.free_wash_count || 0} washes)</span>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
 
                 {/* Print Footer */}
@@ -1777,6 +1788,10 @@ const Reports = () => {
                     <span>{selectedRegisterReport.credit_sale_recovery.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
+                    <span>Free Washes Amount</span>
+                    <span>{parseFloat(selectedRegisterReport.free_wash_amount || 0).toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span>Total Expense</span>
                     <span>{selectedRegisterReport.total_expense.toFixed(3)}</span>
                   </div>
@@ -1849,6 +1864,10 @@ const Reports = () => {
             <div className="flex justify-between">
               <span>Credit Sale Recovery</span>
               <span>{selectedRegisterReport.credit_sale_recovery.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Free Washes Amount</span>
+              <span>{parseFloat(selectedRegisterReport.free_wash_amount || 0).toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
               <span>Total Expense</span>

@@ -128,6 +128,22 @@ const Services = () => {
     };
   };
 
+  const handleUploadOriginal = async () => {
+    if (!cropImageSrc) return;
+    try {
+      setUploading(true);
+      const response = await axios.post('/api/products/upload-image', { image: cropImageSrc });
+      setFormData((prev) => ({ ...prev, image_url: response.data.imageUrl }));
+      setCropImageSrc(null);
+      toast.success('Original image uploaded successfully');
+    } catch (error) {
+      console.error('Original upload failed:', error);
+      toast.error('Failed to upload original image');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -498,18 +514,27 @@ const Services = () => {
                         className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
                       />
                     </div>
-                    <div className="flex gap-2 w-full">
+                    <div className="flex gap-2 w-full flex-wrap">
                       <button
                         type="button"
                         onClick={handleCropSave}
                         disabled={uploading}
-                        className="flex-grow bg-primary-600 text-white text-xs font-bold py-1.5 rounded-lg hover:bg-primary-700 transition"
+                        className="flex-grow min-w-[120px] bg-primary-600 text-white text-xs font-bold py-1.5 rounded-lg hover:bg-primary-700 transition"
                       >
-                        {uploading ? 'Cropping & Uploading...' : 'Crop & Confirm'}
+                        {uploading ? 'Uploading...' : 'Crop & Confirm'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleUploadOriginal}
+                        disabled={uploading}
+                        className="flex-grow min-w-[120px] bg-green-600 text-white text-xs font-bold py-1.5 rounded-lg hover:bg-green-700 transition"
+                      >
+                        Upload Original
                       </button>
                       <button
                         type="button"
                         onClick={() => setCropImageSrc(null)}
+                        disabled={uploading}
                         className="px-3 bg-gray-200 text-gray-700 text-xs font-bold py-1.5 rounded-lg hover:bg-gray-300 transition"
                       >
                         Cancel

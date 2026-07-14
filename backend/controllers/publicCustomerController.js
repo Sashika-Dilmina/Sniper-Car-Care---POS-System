@@ -29,6 +29,7 @@ const getCustomerByPlate = asyncHandler(async (req, res) => {
   }
 
   const customer = customers[0];
+  customer.emirate = customer.province;
   let wash_stamps = 0;
 
   try {
@@ -65,6 +66,7 @@ const getCustomerById = asyncHandler(async (req, res) => {
   }
 
   const customer = customers[0];
+  customer.emirate = customer.province;
   let wash_stamps = 0;
 
   try {

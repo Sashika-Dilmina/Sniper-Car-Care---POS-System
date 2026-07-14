@@ -308,6 +308,8 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
       statusUpdateQuery = 'UPDATE orders SET status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) WHERE id = ?';
     } else if (status === 'completed') {
       statusUpdateQuery = 'UPDATE orders SET status = ?, service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) WHERE id = ?';
+    } else if (status === 'cancelled') {
+      statusUpdateQuery = 'UPDATE orders SET status = ?, payment_status = "cancelled" WHERE id = ?';
     }
 
     await connection.query(statusUpdateQuery, statusUpdateParams);
@@ -315,7 +317,8 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     // 2. Fetch order details to see if payment needs to be completed
     const [orders] = await connection.query(`
       SELECT o.*, c.name as customer_name, c.phone as customer_phone,
-             c.vehicle_plate, c.vehicle_type, c.id as customer_id_ref
+             c.vehicle_plate, c.vehicle_type, c.id as customer_id_ref,
+             c.emirate
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
       WHERE o.id = ?
@@ -356,6 +359,10 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
       serviceCompletedUpdate = ', completed_at = CURRENT_TIMESTAMP';
     } else if (status === 'cancelled') {
       serviceStatus = 'cancelled';
+      await connection.query(
+        'UPDATE payments SET status = "failed" WHERE order_id = ?',
+        [id]
+      );
     } else if (status === 'pending') {
       serviceStatus = 'pending';
       serviceStartedUpdate = ', started_at = NULL';
@@ -363,28 +370,31 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     }
 
     if (status === 'completed' && order.customer_id_ref) {
-      const [pendingServices] = await connection.query(
-        'SELECT id FROM services WHERE order_id = ? AND status != "completed"',
-        [id]
-      );
-      if (pendingServices.length > 0) {
-        const pointsToAdd = pendingServices.length * 25;
-        const [loyaltyRows] = await connection.query(
-          'SELECT points FROM loyalty WHERE customer_id = ?',
-          [order.customer_id_ref]
+      const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
+      if (!isExemptEmirate) {
+        const [pendingServices] = await connection.query(
+          'SELECT id FROM services WHERE order_id = ? AND status != "completed"',
+          [id]
         );
-        if (loyaltyRows.length > 0) {
-          await connection.query(
-            'UPDATE loyalty SET points = points + ? WHERE customer_id = ?',
-            [pointsToAdd, order.customer_id_ref]
+        if (pendingServices.length > 0) {
+          const pointsToAdd = pendingServices.length * 25;
+          const [loyaltyRows] = await connection.query(
+            'SELECT points FROM loyalty WHERE customer_id = ?',
+            [order.customer_id_ref]
           );
-        } else {
-          await connection.query(
-            'INSERT INTO loyalty (customer_id, points) VALUES (?, ?)',
-            [order.customer_id_ref, pointsToAdd]
-          );
+          if (loyaltyRows.length > 0) {
+            await connection.query(
+              'UPDATE loyalty SET points = points + ? WHERE customer_id = ?',
+              [pointsToAdd, order.customer_id_ref]
+            );
+          } else {
+            await connection.query(
+              'INSERT INTO loyalty (customer_id, points) VALUES (?, ?)',
+              [order.customer_id_ref, pointsToAdd]
+            );
+          }
+          console.log(`[Loyalty] Awarded ${pointsToAdd} points to customer ${order.customer_id_ref} for completing ${pendingServices.length} services in order ${id}`);
         }
-        console.log(`[Loyalty] Awarded ${pointsToAdd} points to customer ${order.customer_id_ref} for completing ${pendingServices.length} services in order ${id}`);
       }
     }
 
@@ -454,9 +464,12 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
       const hasService = serviceRows.length > 0;
 
       if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
-        const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
-        await ensureLoyaltyRow(connection, order.customer_id_ref);
-        await incrementWashStamp(connection, order.customer_id_ref);
+        const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
+        if (!isExemptEmirate) {
+          const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
+          await ensureLoyaltyRow(connection, order.customer_id_ref);
+          await incrementWashStamp(connection, order.customer_id_ref);
+        }
       }
     }
 
