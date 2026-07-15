@@ -749,11 +749,92 @@ const deleteOrder = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Generate Invoice PDF for an order
+// @route   GET /api/orders/:id/pdf
+// @access  Private
+const getOrderInvoicePDF = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  // Fetch order details
+  const [orders] = await pool.query(`
+    SELECT o.*, 
+           COALESCE(c.name, vc.name) as customer_name, 
+           COALESCE(c.phone, vc.phone) as customer_phone,
+           COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
+           COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
+           cc.status as credit_status,
+           cc.remaining_amount as credit_remaining
+    FROM orders o
+    LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+    LEFT JOIN customer_credits cc ON o.id = cc.order_id
+    WHERE o.id = ?
+  `, [id]);
+
+  if (orders.length === 0) {
+    return res.status(404).json({ message: 'Order not found' });
+  }
+
+  const order = orders[0];
+
+  // Get order items
+  const [items] = await pool.query(`
+    SELECT oi.*, p.name as product_name, p.category, p.price as unit_price
+    FROM order_items oi
+    LEFT JOIN products p ON oi.product_id = p.id
+    WHERE oi.order_id = ?
+  `, [id]);
+
+  order.items = items;
+
+  // Fallback to services if order items list is empty
+  if (items.length === 0) {
+    const [services] = await pool.query(
+      'SELECT id, service_name, price FROM services WHERE order_id = ?',
+      [id]
+    );
+    if (services.length > 0) {
+      order.items = services.map(s => ({
+        id: `svc_${s.id}`,
+        product_id: null,
+        product_name: order.payment_status === 'free' ? `${s.service_name} (Free Wash)` : s.service_name,
+        quantity: 1,
+        price: order.payment_status === 'free' ? 0.00 : s.price,
+        category: 'Services',
+        unit_price: order.payment_status === 'free' ? 0.00 : s.price
+      }));
+    }
+  }
+
+  // Setup output folder
+  const fs = require('fs');
+  const path = require('path');
+  const invoicesDir = path.join(__dirname, '..', 'uploads', 'invoices');
+  if (!fs.existsSync(invoicesDir)) {
+    fs.mkdirSync(invoicesDir, { recursive: true });
+  }
+
+  const filename = `invoice-${id}-${Date.now()}.pdf`;
+  const outputPath = path.join(invoicesDir, filename);
+
+  // Generate PDF
+  const { generateInvoicePDF } = require('../utils/pdfReportGenerator');
+  await generateInvoicePDF(order, outputPath);
+
+  // Return URL
+  res.json({
+    success: true,
+    pdfUrl: `/uploads/invoices/${filename}`
+  });
+});
+
 module.exports = {
   getOrders,
   getOrder,
   createOrder,
   updateOrderStatus,
-  deleteOrder
+  deleteOrder,
+  getOrderInvoicePDF
 };
 
