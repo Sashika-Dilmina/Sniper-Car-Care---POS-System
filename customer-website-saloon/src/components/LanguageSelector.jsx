@@ -1,26 +1,35 @@
 import { useState, useEffect } from 'react';
 
 const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 right-6' }) => {
-  const [currentLang, setCurrentLang] = useState('en');
+  const [currentLang, setCurrentLang] = useState(localStorage.getItem('user_lang') || 'en');
 
+  // Apply document direction and language layout
   useEffect(() => {
-    const getCookie = (name) => {
-      const value = `; ${document.cookie}`;
-      const parts = value.split(`; ${name}=`);
-      if (parts.length === 2) return parts.pop().split(';').shift();
-      return null;
-    };
-    
-    const transCookie = getCookie('googtrans');
-    if (transCookie && transCookie.includes('ar')) {
-      setCurrentLang('ar');
+    if (currentLang === 'ar') {
       document.documentElement.dir = 'rtl';
       document.documentElement.lang = 'ar';
     } else {
-      setCurrentLang('en');
       document.documentElement.dir = 'ltr';
       document.documentElement.lang = 'en';
     }
+  }, [currentLang]);
+
+  // Keep checking if translation needs to be triggered on mount/load
+  useEffect(() => {
+    const applyTranslation = () => {
+      const selectEl = document.querySelector('.goog-te-combo');
+      if (selectEl) {
+        const expectedVal = currentLang === 'ar' ? 'ar' : 'en';
+        if (selectEl.value !== expectedVal) {
+          selectEl.value = expectedVal;
+          selectEl.dispatchEvent(new Event('change'));
+        }
+      }
+    };
+
+    // Try applying translation immediately and periodically
+    applyTranslation();
+    const interval = setInterval(applyTranslation, 500);
 
     // Periodically enforce body top layout correction to defeat Google's top: 40px injection
     const fixGoogleLayout = () => {
@@ -43,13 +52,18 @@ const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 righ
         }
       }
     };
-    const interval = setInterval(fixGoogleLayout, 300);
-    return () => clearInterval(interval);
-  }, []);
+    const layoutInterval = setInterval(fixGoogleLayout, 300);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(layoutInterval);
+    };
+  }, [currentLang]);
 
   const toggleLanguage = () => {
     const nextLang = currentLang === 'en' ? 'ar' : 'en';
     
+    // Set googtrans cookie just in case Google Translate uses it internally
     const clearCookie = (name) => {
       document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
       document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Domain=' + window.location.hostname + ';';
@@ -76,12 +90,14 @@ const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 righ
     };
 
     clearCookie('googtrans');
-
     if (nextLang === 'ar') {
       setCookie('googtrans', '/en/ar', 365);
+    } else {
+      setCookie('googtrans', '/en/en', 365);
     }
-    
-    window.location.reload();
+
+    localStorage.setItem('user_lang', nextLang);
+    setCurrentLang(nextLang);
   };
 
   if (variant === 'floating') {
