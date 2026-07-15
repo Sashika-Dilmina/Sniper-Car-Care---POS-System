@@ -117,6 +117,18 @@ const detectPlate = asyncHandler(async (req, res) => {
       
       if (fallbackCustomers.length > 0) {
         customer = fallbackCustomers[0];
+      } else {
+        // Fallback to PlateNumber only if the code match failed (allows loose/partial plate code matching)
+        const [numberOnlyCustomers] = await pool.query(`
+          SELECT DISTINCT c.* FROM customers c
+          JOIN vehicles v ON c.id = v.CustomerId
+          WHERE v.PlateNumber = ?
+          LIMIT 1
+        `, [parsedPlateNum]);
+        
+        if (numberOnlyCustomers.length > 0) {
+          customer = numberOnlyCustomers[0];
+        }
       }
     }
   }
