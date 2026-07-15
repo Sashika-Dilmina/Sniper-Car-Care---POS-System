@@ -103,48 +103,85 @@ function formatPhoneNumber(rawPhone) {
 function parsePlateComponents(plateStr) {
   if (!plateStr) return { plateCode: '', emirate: '', plateNumber: '' };
   
-  const cleanStr = plateStr.trim().replace(/\s+/g, ' ');
+  // Clean string: uppercase, remove special chars, normalize multiple spaces to single space
+  const cleanStr = plateStr.trim().toUpperCase().replace(/\s+/g, ' ');
+  
   const emiratesList = [
-    'dubai',
-    'abu dhabi',
-    'sharjah',
-    'ajman',
-    'umm al quwain',
-    'ras al khaimah',
-    'fujairah'
+    { name: 'Abu Dhabi', keywords: ['ABUDHABI', 'ABU DHABI', 'AUH'] },
+    { name: 'Dubai', keywords: ['DUBAI', 'DXB'] },
+    { name: 'Sharjah', keywords: ['SHARJAH', 'SHJ'] },
+    { name: 'Ajman', keywords: ['AJMAN', 'AJM'] },
+    { name: 'Umm Al Quwain', keywords: ['UMMALQUWAIN', 'UMM AL QUWAIN', 'UAQ'] },
+    { name: 'Ras Al Khaimah', keywords: ['RASALKHAIMAH', 'RAS AL KHAIMAH', 'RAK'] },
+    { name: 'Fujairah', keywords: ['FUJAIRAH', 'FUJ'] }
   ];
   
   let detectedEmirate = '';
-  let remainingStr = cleanStr;
+  let tempStr = cleanStr;
   
-  for (const emirate of emiratesList) {
-    const regex = new RegExp(`\\b${emirate}\\b`, 'i');
-    if (regex.test(cleanStr)) {
-      detectedEmirate = emirate.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-      remainingStr = cleanStr.replace(regex, '').trim().replace(/\s+/g, ' ');
-      break;
+  // Find and remove Emirate name from the string
+  for (const emirateObj of emiratesList) {
+    let found = false;
+    for (const keyword of emirateObj.keywords) {
+      // 1. Try with word boundary or exact match
+      const regexSpaced = new RegExp(`\\b${keyword}\\b`, 'i');
+      if (regexSpaced.test(tempStr)) {
+        detectedEmirate = emirateObj.name;
+        tempStr = tempStr.replace(regexSpaced, '').trim();
+        found = true;
+        break;
+      }
+      // 2. Try contiguous match (no spaces)
+      const cleanTempStr = tempStr.replace(/\s+/g, '');
+      if (cleanTempStr.includes(keyword)) {
+        detectedEmirate = emirateObj.name;
+        const idx = cleanTempStr.indexOf(keyword);
+        const partBefore = cleanTempStr.substring(0, idx);
+        const partAfter = cleanTempStr.substring(idx + keyword.length);
+        tempStr = (partBefore + ' ' + partAfter).trim();
+        found = true;
+        break;
+      }
     }
+    if (found) break;
   }
   
-  const parts = remainingStr.split(' ').filter(Boolean);
+  tempStr = tempStr.replace(/\s+/g, ' ').trim();
+  
   let plateCode = '';
   let plateNumber = '';
   
-  if (parts.length >= 2) {
-    plateCode = parts[0];
-    plateNumber = parts[parts.length - 1];
-  } else if (parts.length === 1) {
-    const part = parts[0];
-    const match = part.match(/^([A-Za-z]+)?([0-9]+)$/);
-    if (match) {
-      plateCode = match[1] || '';
-      plateNumber = match[2];
-    } else {
-      plateNumber = part;
+  if (tempStr.includes(' ')) {
+    const parts = tempStr.split(' ').filter(Boolean);
+    if (parts.length >= 2) {
+      plateCode = parts[0];
+      plateNumber = parts[parts.length - 1];
+    } else if (parts.length === 1) {
+      tempStr = parts[0];
     }
   }
   
-  return { plateCode, emirate: detectedEmirate, plateNumber };
+  if (!plateNumber && tempStr) {
+    const matchLettersDigits = tempStr.match(/^([A-Z]+)([0-9]+)$/);
+    if (matchLettersDigits) {
+      plateCode = matchLettersDigits[1];
+      plateNumber = matchLettersDigits[2];
+    } else {
+      if (tempStr.length > 5) {
+        plateNumber = tempStr.slice(-5);
+        plateCode = tempStr.slice(0, -5);
+      } else {
+        plateNumber = tempStr;
+        plateCode = '';
+      }
+    }
+  }
+  
+  return { 
+    plateCode: plateCode.toUpperCase().trim(), 
+    emirate: detectedEmirate, 
+    plateNumber: plateNumber.trim() 
+  };
 }
 
 module.exports = {
