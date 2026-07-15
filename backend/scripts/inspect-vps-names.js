@@ -35,37 +35,15 @@ async function run() {
     });
     console.log('Connected to VPS database.');
     
-    // Query order names resolution
-    const [orders] = await conn.query(\`
-      SELECT o.id, o.customer_id, o.vip_booking_id, o.total, o.status,
-             c.name as main_cust_name, c.vehicle_plate as main_cust_plate,
-             vc.name as vip_cust_name, vc.vehicle_model as vip_cust_plate
-      FROM orders o
-      LEFT JOIN customers c ON o.customer_id = c.id
-      LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
-      LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
-      WHERE o.id IN (260, 261, 262, 263, 264, 265)
-    \`);
-    console.log('--- Orders Customer Resolution ---');
-    console.table(orders);
+    // Query categories and counts in products table on VPS
+    const [rows] = await conn.query('SELECT category, COUNT(*) as count FROM products GROUP BY category');
+    console.log('--- Categories and counts on VPS ---');
+    console.table(rows);
 
-    // Query main customers table
-    const [mainCusts] = await conn.query(\`
-      SELECT id, name, phone, vehicle_plate, vehicle_type 
-      FROM customers 
-      WHERE vehicle_plate IN ('B Dubai 72838', '3 Ras Al Khaimah 6282')
-    \`);
-    console.log('--- main customers table ---');
-    console.table(mainCusts);
-
-    // Query vip_customers table
-    const [vipCusts] = await conn.query(\`
-      SELECT id, name, phone, vehicle_model, vehicle_type 
-      FROM vip_customers 
-      WHERE vehicle_model IN ('B Dubai 72838', '3 Ras Al Khaimah 6282')
-    \`);
-    console.log('--- vip_customers table ---');
-    console.table(vipCusts);
+    // Query all products in products table on VPS
+    const [products] = await conn.query('SELECT id, name, price, category FROM products');
+    console.log('--- All products on VPS ---');
+    console.table(products);
 
     await conn.end();
     console.log('SUCCESS');

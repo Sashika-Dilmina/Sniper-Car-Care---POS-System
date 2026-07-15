@@ -404,7 +404,7 @@ const Purchases = () => {
                       let formCategory = formData.category;
                       if (matched.category === 'Services') {
                         formCategory = 'Service';
-                      } else if (matched.category === 'Accessories' || matched.category === 'Spare Parts' || matched.category === 'Acce') {
+                      } else if (matched.category === 'Accessories' || matched.category === 'Spare Parts' || matched.category === 'Acce' || matched.category === 'Car Freshner' || matched.category === 'Car Freshener') {
                         formCategory = 'Product';
                       }
                       
@@ -425,7 +425,7 @@ const Purchases = () => {
                   {dbProductsList
                     .filter(p => {
                       if (formData.category === 'Product') {
-                        return p.category === 'Accessories' || p.category === 'Spare Parts' || p.category === 'Acce';
+                        return p.category === 'Accessories' || p.category === 'Spare Parts' || p.category === 'Acce' || p.category === 'Car Freshner' || p.category === 'Car Freshener';
                       }
                       if (formData.category === 'Service') {
                         return p.category === 'Services';

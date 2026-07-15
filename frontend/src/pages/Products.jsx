@@ -16,7 +16,7 @@ const Products = () => {
     category: 'Car Freshner',
     price: '',
     purchase_price: '',
-    stock: '',
+    stock: 0,
     image_url: ''
   });
   const [uploading, setUploading] = useState(false);
@@ -135,7 +135,7 @@ const Products = () => {
         category: 'Car Freshner',
         price: '',
         purchase_price: '',
-        stock: '',
+        stock: 0,
         image_url: ''
       });
       fetchProducts();
@@ -273,7 +273,7 @@ const Products = () => {
                   category: 'Car Freshner',
                   price: '',
                   purchase_price: '',
-                  stock: '',
+                  stock: 0,
                   image_url: ''
                 });
                 setShowModal(true);
@@ -501,33 +501,18 @@ const Products = () => {
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Select Category
-                  </label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg font-semibold bg-white"
-                  >
-                    <option value="Car Freshner">Car Freshner</option>
-                    <option value="Acce">Acce</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stock
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select Category
+                </label>
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  className="w-full px-4 py-2 border rounded-lg font-semibold bg-white"
+                >
+                  <option value="Car Freshner">Car Freshner</option>
+                  <option value="Acce">Acce</option>
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

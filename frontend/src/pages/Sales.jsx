@@ -386,7 +386,9 @@ const Sales = () => {
     const matchesCategory = 
       (selectedCategory === 'VIP' && (product.category === 'VIP' || product.name?.toLowerCase().includes('vip'))) ||
       (selectedCategory === 'Services' && product.category === 'Services' && !product.name?.toLowerCase().includes('vip')) ||
-      (selectedCategory !== 'VIP' && selectedCategory !== 'Services' && product.category === selectedCategory);
+      (selectedCategory === 'Acce' && (product.category === 'Acce' || product.category === 'Accessories')) ||
+      (selectedCategory === 'Car Freshner' && (product.category === 'Car Freshner' || product.category === 'Car Freshener')) ||
+      (selectedCategory !== 'VIP' && selectedCategory !== 'Services' && selectedCategory !== 'Acce' && selectedCategory !== 'Car Freshner' && product.category === selectedCategory);
     return matchesSearch && matchesCategory;
   });
 
