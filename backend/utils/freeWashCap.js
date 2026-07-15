@@ -26,24 +26,62 @@ async function calculateFreeWashCap(connectionOrPool, customerId) {
          OR LOWER(service_name) LIKE '%ceramic%'
          OR LOWER(service_name) LIKE '%double soap%'
          OR LOWER(service_name) LIKE '%vip%'
-         OR LOWER(service_name) LIKE '%body wash%'
-         OR LOWER(service_name) LIKE '%just water%'
        )
      ORDER BY id DESC 
      LIMIT 5`,
     [customerId]
   );
 
-  if (rows.length < 5) {
-    if (rows.length === 0) return 20.00; // minimum saloon price
-    return Math.max(...rows.map(r => parseFloat(r.price)));
+  if (rows.length === 0) return 20.00; // minimum saloon price
+
+  // Count occurrences of each eligible category
+  const counts = {};
+  const prices = {};
+
+  for (let row of rows) {
+    const name = row.service_name.toLowerCase().trim();
+    let normalized = '';
+    if (name.includes('full body') || name.includes('full service') || name.includes('full wash')) {
+      normalized = 'full_body';
+    } else if (name.includes('double soap')) {
+      normalized = 'double_soap';
+    } else if (name.includes('ceramic')) {
+      normalized = 'ceramic';
+    } else if (name.includes('vip')) {
+      normalized = 'vip';
+    } else {
+      continue;
+    }
+    counts[normalized] = (counts[normalized] || 0) + 1;
+    prices[normalized] = parseFloat(row.price);
   }
 
-  // Sort prices descending
-  const prices = rows.map(r => parseFloat(r.price)).sort((a, b) => b - a);
-  
-  // The 3rd element in sorted descending list represents the cap
-  return prices[2];
+  // Find the service with the maximum count
+  let maxCount = 0;
+  let maxService = null;
+  for (let key in counts) {
+    if (counts[key] > maxCount) {
+      maxCount = counts[key];
+      maxService = key;
+    } else if (counts[key] === maxCount && maxService) {
+      if (prices[key] > prices[maxService]) {
+        maxService = key;
+      }
+    }
+  }
+
+  // If a service has been used 3 or more times, that is the cap
+  if (maxService && maxCount >= 3) {
+    return prices[maxService];
+  } else {
+    // If no service has count >= 3, default to the highest price among the last 5 washes
+    let highestPrice = 0;
+    for (let row of rows) {
+      const p = parseFloat(row.price);
+      if (p > highestPrice) highestPrice = p;
+    }
+    return highestPrice;
+  }
 }
 
 module.exports = { calculateFreeWashCap };

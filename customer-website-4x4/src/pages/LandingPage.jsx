@@ -730,9 +730,7 @@ const LandingPage = () => {
         'full body service',
         'full body wash',
         'ceramic wash',
-        'double soap',
-        'body wash',
-        'just water'
+        'double soap'
       ];
       const isServiceEligible = eligibleFreeServices.some(s => sNameLower.includes(s)) && !sNameLower.includes('vip');
       const isFreeWashApplied = isEligibleForFreeWash && isServiceEligible && servicePrice <= freeWashCap;

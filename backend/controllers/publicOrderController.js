@@ -209,9 +209,7 @@ const createOrder = asyncHandler(async (req, res) => {
             'full body service',
             'full body wash',
             'ceramic wash',
-            'double soap',
-            'body wash',
-            'just water'
+            'double soap'
           ];
           const isEligibleFree = eligibleFreeServices.some(s => sNameLower.includes(s)) && !sNameLower.includes('vip');
           const originalPrice = parseFloat(total);

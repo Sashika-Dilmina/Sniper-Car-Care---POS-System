@@ -245,9 +245,7 @@ const createOrder = asyncHandler(async (req, res) => {
             'full body service',
             'full body wash',
             'ceramic wash',
-            'double soap',
-            'body wash',
-            'just water'
+            'double soap'
           ];
           
           for (let item of items) {
@@ -597,9 +595,7 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
           'full body service',
           'full body wash',
           'ceramic wash',
-          'double soap',
-          'body wash',
-          'just water'
+          'double soap'
         ];
 
         let hasEligibleService = false;
