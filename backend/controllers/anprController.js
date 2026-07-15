@@ -118,22 +118,72 @@ const detectPlate = asyncHandler(async (req, res) => {
       if (fallbackCustomers.length > 0) {
         customer = fallbackCustomers[0];
       } else {
-        // Fallback to PlateNumber only if the code match failed (allows loose/partial plate code matching)
-        const [numberOnlyCustomers] = await pool.query(`
-          SELECT DISTINCT c.* FROM customers c
-          JOIN vehicles v ON c.id = v.CustomerId
-          WHERE v.PlateNumber = ?
-          LIMIT 1
+        // Check if PlateNumber is unique in database to avoid wrong matches on duplicates
+        const [countVehicles] = await pool.query(`
+          SELECT COUNT(DISTINCT CustomerId) as count FROM vehicles WHERE PlateNumber = ?
         `, [parsedPlateNum]);
         
-        if (numberOnlyCustomers.length > 0) {
-          customer = numberOnlyCustomers[0];
+        const [countCustomers] = await pool.query(`
+          SELECT COUNT(id) as count FROM customers 
+          WHERE REPLACE(vehicle_plate, ' ', '') LIKE ?
+        `, [`%${parsedPlateNum}`]);
+        
+        const totalMatches = (countVehicles[0]?.count || 0) + (countCustomers[0]?.count || 0);
+
+        if (totalMatches === 1) {
+          const [numberOnlyCustomers] = await pool.query(`
+            SELECT DISTINCT c.* FROM customers c
+            JOIN vehicles v ON c.id = v.CustomerId
+            WHERE v.PlateNumber = ?
+            LIMIT 1
+          `, [parsedPlateNum]);
+          
+          if (numberOnlyCustomers.length > 0) {
+            customer = numberOnlyCustomers[0];
+          } else {
+            const [custByPlate] = await pool.query(`
+              SELECT * FROM customers 
+              WHERE REPLACE(vehicle_plate, ' ', '') LIKE ?
+              LIMIT 1
+            `, [`%${parsedPlateNum}`]);
+            if (custByPlate.length > 0) {
+              customer = custByPlate[0];
+            }
+          }
+        } else {
+          console.log(`[ANPR] Skipped loose PlateNumber match for ${parsedPlateNum} because it matches multiple customers/vehicles.`);
         }
       }
     }
   }
 
   if (customer) {
+    // Enforce one SMS/scan per customer per 24 hours
+    const [recentCustScans] = await pool.query(`
+      SELECT id FROM anpr_logs 
+      WHERE customer_id = ? 
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) 
+      LIMIT 1
+    `, [customer.id]);
+
+    if (recentCustScans.length > 0) {
+      console.log(`[ANPR] Customer ${customer.name} already matched/scanned in the last 24 hours. Ignoring duplicate.`);
+      
+      // Save log but skip SMS
+      await pool.query(
+        'INSERT INTO anpr_logs (plate_number, camera_id, confidence, image_url, customer_id) VALUES (?, ?, ?, ?, ?)',
+        [detectedPlate, cameraId || 'HTTP_CAM', confidence, imageUrl, customer.id]
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Customer already scanned in the last 24 hours. SMS skipped.',
+        plate_number: detectedPlate,
+        customer_name: customer.name,
+        skipped: true
+      });
+    }
+
     // Update last seen
     await pool.query(
       'UPDATE customers SET last_seen = NOW() WHERE id = ?',
