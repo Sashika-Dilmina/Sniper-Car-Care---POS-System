@@ -26,6 +26,8 @@ async function calculateFreeWashCap(connectionOrPool, customerId) {
          OR LOWER(service_name) LIKE '%ceramic%'
          OR LOWER(service_name) LIKE '%double soap%'
          OR LOWER(service_name) LIKE '%vip%'
+         OR LOWER(service_name) LIKE '%body wash%'
+         OR LOWER(service_name) LIKE '%just water%'
        )
      ORDER BY id DESC 
      LIMIT 5`,

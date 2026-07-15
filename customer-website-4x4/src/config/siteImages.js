@@ -38,5 +38,7 @@ export function getServiceImage(pkg) {
     const apiBaseUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/$/, '') : (import.meta.env.PROD ? '' : `http://${hostname}:5000`);
     return `${apiBaseUrl}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
   }
-  return images.byServiceName[pkg ? pkg.name : ''] || images.defaultService;
+  const name = typeof pkg === 'string' ? pkg : (pkg ? pkg.name : '');
+  const cleanName = name.replace(/\(Free Wash\)/i, '').trim();
+  return images.byServiceName[cleanName] || images.defaultService;
 }

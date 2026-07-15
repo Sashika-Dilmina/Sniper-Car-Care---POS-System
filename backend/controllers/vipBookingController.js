@@ -314,7 +314,7 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
       
       try {
         const [orderRows] = await db.query(
-          'SELECT id, total, payment_status FROM orders WHERE vip_booking_id = ?',
+          'SELECT id, total, payment_status, customer_id FROM orders WHERE vip_booking_id = ?',
           [req.params.id]
         );
         if (orderRows.length > 0) {
@@ -330,9 +330,21 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
             
             additionalSets += `, payment_status = 'paid'`;
           }
+
+          // Trigger Loyalty Points / Stamps increment for VIP completion
+          const targetCustomerId = order.customer_id;
+          if (targetCustomerId && parseFloat(order.total) > 0) {
+            const [custRows] = await db.query('SELECT province FROM customers WHERE id = ?', [targetCustomerId]);
+            const isExemptEmirate = custRows.length > 0 && (custRows[0].province === 'Garage' || custRows[0].province === 'Sniper car care');
+            if (!isExemptEmirate) {
+              const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
+              await ensureLoyaltyRow(db, targetCustomerId);
+              await incrementWashStamp(db, targetCustomerId);
+            }
+          }
         }
       } catch (err) {
-        console.error('Error auto-recording payment for completed VIP booking:', err);
+        console.error('Error auto-recording payment or loyalty stamps for completed VIP booking:', err);
       }
     } else if (status === 'cancelled') {
       orderStatus = 'cancelled';

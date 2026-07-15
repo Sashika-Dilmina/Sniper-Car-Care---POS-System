@@ -29,11 +29,11 @@ async function incrementWashStamp(connection, customerId) {
   let stamps = Number(row.wash_stamps) || 0;
   let freeWashEarned = false;
 
-  if (stamps >= 5) {
-    stamps = 0;
-    freeWashEarned = true;
-  } else {
+  if (stamps < 5) {
     stamps += 1;
+    if (stamps === 5) {
+      freeWashEarned = true;
+    }
   }
 
   await connection.query('UPDATE loyalty SET wash_stamps = ? WHERE customer_id = ?', [
@@ -42,6 +42,13 @@ async function incrementWashStamp(connection, customerId) {
   ]);
 
   return { wash_stamps: stamps, free_wash_earned: freeWashEarned };
+}
+
+async function resetWashStamps(connection, customerId) {
+  await connection.query('UPDATE loyalty SET wash_stamps = 0 WHERE customer_id = ?', [
+    customerId,
+  ]);
+  return { wash_stamps: 0, free_wash_earned: false };
 }
 
 async function getWashStamps(connectionOrPool, customerId) {
@@ -61,5 +68,6 @@ async function getWashStamps(connectionOrPool, customerId) {
 module.exports = {
   ensureLoyaltyRow,
   incrementWashStamp,
+  resetWashStamps,
   getWashStamps,
 };

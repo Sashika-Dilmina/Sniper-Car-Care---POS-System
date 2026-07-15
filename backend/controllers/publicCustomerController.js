@@ -156,6 +156,28 @@ const getCustomerOrders = asyncHandler(async (req, res) => {
       [orderIds]
     );
     allItems = items;
+
+    // Check if any order has empty items and fetch from services instead
+    for (let order of orders) {
+      const orderItems = allItems.filter(item => item.order_id === order.id);
+      if (orderItems.length === 0) {
+        const [services] = await pool.query(
+          'SELECT id, service_name, price FROM services WHERE order_id = ?',
+          [order.id]
+        );
+        if (services.length > 0) {
+          const serviceItems = services.map(s => ({
+            id: `svc_${s.id}`,
+            order_id: order.id,
+            product_name: order.payment_status === 'free' ? `${s.service_name} (Free Wash)` : s.service_name,
+            quantity: 1,
+            price: s.price,
+            category: 'Services'
+          }));
+          allItems.push(...serviceItems);
+        }
+      }
+    }
   }
 
   const formattedOrders = orders.map(order => ({

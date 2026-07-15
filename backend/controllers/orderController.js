@@ -163,6 +163,25 @@ const getOrder = asyncHandler(async (req, res) => {
 
   order.items = items;
 
+  // If order items list is empty (e.g. website service bookings), try to populate from services
+  if (items.length === 0) {
+    const [services] = await pool.query(
+      'SELECT id, service_name, price FROM services WHERE order_id = ?',
+      [id]
+    );
+    if (services.length > 0) {
+      order.items = services.map(s => ({
+        id: `svc_${s.id}`,
+        product_id: null,
+        product_name: order.payment_status === 'free' ? `${s.service_name} (Free Wash)` : s.service_name,
+        quantity: 1,
+        price: s.price,
+        category: 'Services',
+        unit_price: s.price
+      }));
+    }
+  }
+
   // Get payments
   const [payments] = await pool.query('SELECT * FROM payments WHERE order_id = ?', [id]);
   order.payments = payments;
@@ -226,7 +245,9 @@ const createOrder = asyncHandler(async (req, res) => {
             'full body service',
             'full body wash',
             'ceramic wash',
-            'double soap'
+            'double soap',
+            'body wash',
+            'just water'
           ];
           
           for (let item of items) {
@@ -319,8 +340,8 @@ const createOrder = asyncHandler(async (req, res) => {
     const orderId = orderResult.insertId;
 
     if (freeWashRedeemed) {
-      const { incrementWashStamp } = require('../utils/loyaltyStamps');
-      await incrementWashStamp(connection, customer_id);
+      const { resetWashStamps } = require('../utils/loyaltyStamps');
+      await resetWashStamps(connection, customer_id);
       
       if (finalTotal === 0) {
         await connection.query(
@@ -576,7 +597,9 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
           'full body service',
           'full body wash',
           'ceramic wash',
-          'double soap'
+          'double soap',
+          'body wash',
+          'just water'
         ];
 
         let hasEligibleService = false;

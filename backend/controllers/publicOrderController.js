@@ -3,7 +3,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
-const { ensureLoyaltyRow, incrementWashStamp, getWashStamps } = require('../utils/loyaltyStamps');
+const { ensureLoyaltyRow, incrementWashStamp, resetWashStamps, getWashStamps } = require('../utils/loyaltyStamps');
 
 // @desc    Create order from customer website
 // @route   POST /api/public/orders
@@ -61,11 +61,20 @@ const createOrder = asyncHandler(async (req, res) => {
       }
     }
 
+    // Extract emirate from vehicle_plate if possible and store it in province column
+    let province = null;
+    if (vehicle_plate) {
+      const parts = vehicle_plate.split(' ');
+      if (parts.length > 2) {
+        province = parts.slice(1, parts.length - 1).join(' ');
+      }
+    }
+
     if (!finalCustomerId && customer_name && customer_phone && vehicle_plate) {
       try {
         const [newCustomer] = await connection.query(
-          'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type) VALUES (?, ?, ?, ?)',
-          [customer_name, customer_phone, vehicle_plate, vehicleType]
+          'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
+          [customer_name, customer_phone, vehicle_plate, vehicleType, province]
         );
         finalCustomerId = newCustomer.insertId;
         try {
@@ -91,10 +100,10 @@ const createOrder = asyncHandler(async (req, res) => {
       }
     }
 
-    // Update customer info if they already exist but name or phone changed during checkout
-    if (finalCustomerId && (customer_name || customer_phone)) {
+    // Update customer info if they already exist but name, phone or province changed during checkout
+    if (finalCustomerId && (customer_name || customer_phone || province)) {
       const [existing] = await connection.query(
-        'SELECT name, phone FROM customers WHERE id = ?',
+        'SELECT name, phone, province FROM customers WHERE id = ?',
         [finalCustomerId]
       );
       if (existing.length > 0) {
@@ -107,6 +116,10 @@ const createOrder = asyncHandler(async (req, res) => {
         if (customer_phone && existing[0].phone !== customer_phone) {
           updateFields.push('phone = ?');
           updateParams.push(customer_phone);
+        }
+        if (province && existing[0].province !== province) {
+          updateFields.push('province = ?');
+          updateParams.push(province);
         }
         if (updateFields.length > 0) {
           updateParams.push(finalCustomerId);
@@ -196,14 +209,16 @@ const createOrder = asyncHandler(async (req, res) => {
             'full body service',
             'full body wash',
             'ceramic wash',
-            'double soap'
+            'double soap',
+            'body wash',
+            'just water'
           ];
           const isEligibleFree = eligibleFreeServices.some(s => sNameLower.includes(s)) && !sNameLower.includes('vip');
           const originalPrice = parseFloat(total);
 
           if (isEligibleFree && originalPrice <= cap) {
             // 6th wash -> Free Wash!
-            loyalty = await incrementWashStamp(connection, finalCustomerId);
+            loyalty = await resetWashStamps(connection, finalCustomerId);
             const finalPrice = 0.00;
 
             await connection.query(
@@ -294,10 +309,28 @@ const getOrder = asyncHandler(async (req, res) => {
     [id]
   );
 
+  let mappedItems = items;
+  if (items.length === 0) {
+    const [services] = await pool.query(
+      'SELECT id, service_name, price FROM services WHERE order_id = ?',
+      [id]
+    );
+    if (services.length > 0) {
+      mappedItems = services.map(s => ({
+        id: `svc_${s.id}`,
+        product_name: order.payment_status === 'free' ? `${s.service_name} (Free Wash)` : s.service_name,
+        quantity: 1,
+        price: s.price,
+        category: 'Services',
+        unit_price: s.price
+      }));
+    }
+  }
+
   res.json({
     order: {
       ...order,
-      items
+      items: mappedItems
     }
   });
 });
