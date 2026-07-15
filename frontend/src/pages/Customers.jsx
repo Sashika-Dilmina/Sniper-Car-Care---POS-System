@@ -134,7 +134,7 @@ const Customers = () => {
   const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -171,7 +171,8 @@ const Customers = () => {
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     
-    if (!newCustomer.name || !newCustomer.phone || !newCustomer.emirate || !newCustomer.plate_number) {
+    const isNoVehicle = newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care';
+    if (!newCustomer.name || !newCustomer.phone || !newCustomer.emirate || (!isNoVehicle && !newCustomer.plate_number)) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -184,15 +185,21 @@ const Customers = () => {
     }
 
     try {
-      await axios.post('/api/anpr/register', {
+      const payload = {
         ...newCustomer,
-        phone: cleanPhone // send sanitized number
-      });
+        phone: cleanPhone
+      };
+      if (isNoVehicle) {
+        payload.plate_code = '';
+        payload.plate_number = `${newCustomer.emirate} - ${cleanPhone}`;
+      }
+
+      await axios.post('/api/anpr/register', payload);
       toast.success('Customer registered successfully!');
       setShowAddModal(false);
       setNewCustomer({
         name: '',
-        phone: '',
+        phone: '+9715',
         emirate: '',
         plate_code: '',
         plate_number: '',
@@ -209,7 +216,7 @@ const Customers = () => {
     setCheckinForm({
       customer_id: customer.id,
       name: customer.name || '',
-      phone: customer.phone || '',
+      phone: customer.phone || '+9715',
       vehicle_plate: customer.vehicle_plate || '',
       vehicle_type: customer.vehicle_type || 'Saloon',
       province: customer.province || 'Dubai',
@@ -331,41 +338,49 @@ const Customers = () => {
                         <option value="Umm Al Quwain">Umm Al Quwain</option>
                         <option value="Ras Al Khaimah">Ras Al Khaimah</option>
                         <option value="Fujairah">Fujairah</option>
+                        <option value="Garage">Garage</option>
+                        <option value="Sniper car care">Sniper car care</option>
                       </select>
                     </div>
 
                     {/* Plate Code Dropdown */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
-                      <SearchableSelect
-                        options={plateCodes}
-                        value={newCustomer.plate_code}
-                        onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
-                        disabled={plateCodes.length === 0}
-                      />
-                    </div>
+                    {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
+                        <SearchableSelect
+                          options={plateCodes}
+                          value={newCustomer.plate_code}
+                          onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
+                          disabled={plateCodes.length === 0}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Plate Number Input */}
-                  <div className="mt-3">
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newCustomer.plate_number}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
-                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono"
-                      placeholder="12345"
-                    />
-                  </div>
+                  {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
+                      <input
+                        type="text"
+                        required={!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care')}
+                        value={newCustomer.plate_number}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                        className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono"
+                        placeholder="12345"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Plate Preview */}
-                <VehiclePlatePreview 
-                  emirate={newCustomer.emirate} 
-                  plateCode={newCustomer.plate_code} 
-                  plateNumber={newCustomer.plate_number} 
-                />
+                {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                  <VehiclePlatePreview 
+                    emirate={newCustomer.emirate} 
+                    plateCode={newCustomer.plate_code} 
+                    plateNumber={newCustomer.plate_number} 
+                  />
+                )}
               </div>
 
               <div className="flex gap-3 pt-2">

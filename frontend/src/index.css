@@ -16,3 +16,22 @@ code {
     monospace;
 }
 
+@media print {
+  html, body, #root, .h-screen, .min-h-screen, .flex-1, main, .overflow-y-auto, .overflow-hidden {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    position: relative !important;
+  }
+  
+  aside, .no-print, button, input, select, header {
+    display: none !important;
+  }
+  
+  .ml-20, .ml-64 {
+    margin-left: 0 !important;
+  }
+}
+

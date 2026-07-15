@@ -5,7 +5,7 @@ import axios from 'axios';
 // In production, baseURL points to the backend server directly
 axios.defaults.baseURL = import.meta.env.PROD 
   ? ''
-  : 'http://localhost:5000';
+  : `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:5000`;
 axios.defaults.headers.common['Content-Type'] = 'application/json';
 
 // Get token from localStorage and set it in axios defaults

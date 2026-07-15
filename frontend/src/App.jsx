@@ -58,14 +58,7 @@ function App() {
                 </AdminRoute>
               } 
             />
-            <Route 
-              path="reports" 
-              element={
-                <AdminRoute>
-                  <Reports />
-                </AdminRoute>
-              } 
-            />
+            <Route path="reports" element={<Reports />} />
             <Route 
               path="suppliers" 
               element={
@@ -82,14 +75,7 @@ function App() {
                 </AdminRoute>
               } 
             />
-            <Route 
-              path="expenses" 
-              element={
-                <AdminRoute>
-                  <Expenses />
-                </AdminRoute>
-              } 
-            />
+            <Route path="expenses" element={<Expenses />} />
             <Route path="credits" element={<Credits />} />
             <Route path="anpr" element={<ANPR />} />
             <Route path="vip" element={<VIPDashboard />} />

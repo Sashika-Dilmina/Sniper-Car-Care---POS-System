@@ -3,7 +3,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
-const { ensureLoyaltyRow, incrementWashStamp, getWashStamps } = require('../utils/loyaltyStamps');
+const { ensureLoyaltyRow, incrementWashStamp, resetWashStamps, getWashStamps } = require('../utils/loyaltyStamps');
 
 // @desc    Create order from customer website
 // @route   POST /api/public/orders
@@ -51,16 +51,30 @@ const createOrder = asyncHandler(async (req, res) => {
         'SELECT vehicle_type FROM customers WHERE id = ?',
         [finalCustomerId]
       );
-      if (existingCustomer.length > 0) {
-        vehicleType = existingCustomer[0].vehicle_type;
+      if (existingCustomer.length > 0 && existingCustomer[0].vehicle_type) {
+        const val = existingCustomer[0].vehicle_type.toString().trim();
+        if (val === 'Saloon' || val === '4x4') {
+          vehicleType = val;
+        } else if (val.toLowerCase().includes('4x4') || val.toLowerCase().includes('4-wheel') || val.toLowerCase().includes('4wheel')) {
+          vehicleType = '4x4';
+        }
+      }
+    }
+
+    // Extract emirate from vehicle_plate if possible and store it in province column
+    let province = null;
+    if (vehicle_plate) {
+      const parts = vehicle_plate.split(' ');
+      if (parts.length > 2) {
+        province = parts.slice(1, parts.length - 1).join(' ');
       }
     }
 
     if (!finalCustomerId && customer_name && customer_phone && vehicle_plate) {
       try {
         const [newCustomer] = await connection.query(
-          'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type) VALUES (?, ?, ?, ?)',
-          [customer_name, customer_phone, vehicle_plate, vehicleType]
+          'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
+          [customer_name, customer_phone, vehicle_plate, vehicleType, province]
         );
         finalCustomerId = newCustomer.insertId;
         try {
@@ -86,10 +100,10 @@ const createOrder = asyncHandler(async (req, res) => {
       }
     }
 
-    // Update customer info if they already exist but name or phone changed during checkout
-    if (finalCustomerId && (customer_name || customer_phone)) {
+    // Update customer info if they already exist but name, phone or province changed during checkout
+    if (finalCustomerId && (customer_name || customer_phone || province)) {
       const [existing] = await connection.query(
-        'SELECT name, phone FROM customers WHERE id = ?',
+        'SELECT name, phone, province FROM customers WHERE id = ?',
         [finalCustomerId]
       );
       if (existing.length > 0) {
@@ -102,6 +116,10 @@ const createOrder = asyncHandler(async (req, res) => {
         if (customer_phone && existing[0].phone !== customer_phone) {
           updateFields.push('phone = ?');
           updateParams.push(customer_phone);
+        }
+        if (province && existing[0].province !== province) {
+          updateFields.push('province = ?');
+          updateParams.push(province);
         }
         if (updateFields.length > 0) {
           updateParams.push(finalCustomerId);
@@ -183,19 +201,44 @@ const createOrder = asyncHandler(async (req, res) => {
         }
 
         if (currentStamps >= 5) {
-          // 6th wash -> Free Wash!
-          loyalty = await incrementWashStamp(connection, finalCustomerId);
-          const finalPrice = 0.00;
+          const { calculateFreeWashCap } = require('../utils/freeWashCap');
+          const cap = await calculateFreeWashCap(connection, finalCustomerId);
+          
+          const sNameLower = serviceName.toLowerCase().trim();
+          const eligibleFreeServices = [
+            'full body service',
+            'full body wash',
+            'ceramic wash',
+            'double soap'
+          ];
+          const isEligibleFree = eligibleFreeServices.some(s => sNameLower.includes(s)) && !sNameLower.includes('vip');
+          const originalPrice = parseFloat(total);
 
-          await connection.query(
-            'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending', orderId]
-          );
+          if (isEligibleFree && originalPrice <= cap) {
+            // 6th wash -> Free Wash!
+            loyalty = await resetWashStamps(connection, finalCustomerId);
+            await connection.query(
+              'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [finalCustomerId, serviceName, vehicleType, originalPrice, notes, status || 'pending', orderId]
+            );
 
-          await connection.query(
-            'UPDATE orders SET total = 0.00, discount = ?, payment_status = ? WHERE id = ?',
-            [total, 'paid', orderId]
-          );
+            await connection.query(
+              'UPDATE orders SET total = 0.00, discount = ?, payment_status = ? WHERE id = ?',
+              [total, 'free', orderId]
+            );
+
+            await connection.query(
+              'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
+              [orderId]
+            );
+          } else {
+            // Price exceeds cap, or service is not eligible -> Charge normally!
+            // Do NOT increment stamps, do NOT touch stamps (remain >= 5)
+            await connection.query(
+              'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending', orderId]
+            );
+          }
         } else {
           // Paid booking, do not increment stamps yet!
           await connection.query(
@@ -262,10 +305,28 @@ const getOrder = asyncHandler(async (req, res) => {
     [id]
   );
 
+  let mappedItems = items;
+  if (items.length === 0) {
+    const [services] = await pool.query(
+      'SELECT id, service_name, price FROM services WHERE order_id = ?',
+      [id]
+    );
+    if (services.length > 0) {
+      mappedItems = services.map(s => ({
+        id: `svc_${s.id}`,
+        product_name: order.payment_status === 'free' ? `${s.service_name} (Free Wash)` : s.service_name,
+        quantity: 1,
+        price: order.payment_status === 'free' ? 0.00 : s.price,
+        category: 'Services',
+        unit_price: order.payment_status === 'free' ? 0.00 : s.price
+      }));
+    }
+  }
+
   res.json({
     order: {
       ...order,
-      items
+      items: mappedItems
     }
   });
 });
@@ -284,8 +345,8 @@ const confirmOrder = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
-    const isCash = payment_method === 'cash';
-    const paymentStatus = isCash ? 'pending' : 'paid';
+    const isPendingPayment = payment_method === 'cash' || payment_method === 'card';
+    const paymentStatus = isPendingPayment ? 'pending' : 'paid';
 
     // Check if order contains only products
     const [items] = await connection.query(
@@ -310,22 +371,6 @@ const confirmOrder = asyncHandler(async (req, res) => {
       );
     }
 
-    // Sync loyalty stamps for paid website bookings confirmed with Cash (only for service orders)
-    const [orderRows] = await connection.query('SELECT customer_id, source, total FROM orders WHERE id = ?', [order_id]);
-    if (orderRows.length > 0) {
-      const order = orderRows[0];
-      const isWebsiteServiceBooking = 
-        order.customer_id &&
-        (order.source === 'customer_website_saloon' ||
-         order.source === 'customer_website_4x4' ||
-         (order.source || '').includes('customer_website'));
-         
-      if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
-        await ensureLoyaltyRow(connection, order.customer_id);
-        await incrementWashStamp(connection, order.customer_id);
-      }
-    }
-
     // Fetch order total to create/update payments row
     const [orders] = await connection.query('SELECT total FROM orders WHERE id = ?', [order_id]);
     if (orders.length > 0) {
@@ -336,12 +381,12 @@ const confirmOrder = asyncHandler(async (req, res) => {
       if (existing.length === 0) {
         await connection.query(
           'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
-          [order_id, total, payment_method || 'cash', isCash ? 'pending' : 'completed']
+          [order_id, total, payment_method || 'cash', isPendingPayment ? 'pending' : 'completed']
         );
       } else {
         await connection.query(
           'UPDATE payments SET method = ?, status = ?, amount = ? WHERE order_id = ?',
-          [payment_method || 'cash', isCash ? 'pending' : 'completed', total, order_id]
+          [payment_method || 'cash', isPendingPayment ? 'pending' : 'completed', total, order_id]
         );
       }
     }
@@ -433,59 +478,16 @@ const confirmPayment = asyncHandler(async (req, res) => {
           );
         }
 
-        // Fetch order details for loyalty and VIP sync
-        const [orderRows] = await connection.query('SELECT customer_id, source, total, vip_booking_id FROM orders WHERE id = ?', [order_id]);
+        // Fetch order details for VIP sync
+        const [orderRows] = await connection.query('SELECT vip_booking_id FROM orders WHERE id = ?', [order_id]);
         if (orderRows.length > 0) {
           const order = orderRows[0];
-          const isWebsiteServiceBooking = 
-            order.customer_id &&
-            (order.source === 'customer_website_saloon' ||
-             order.source === 'customer_website_4x4' ||
-             (order.source || '').includes('customer_website'));
-             
-          if (isWebsiteServiceBooking && parseFloat(order.total) > 0 && hasService) {
-            await ensureLoyaltyRow(connection, order.customer_id);
-            await incrementWashStamp(connection, order.customer_id);
-          }
-
           // If it is a VIP booking order, update VIP booking status to 'confirmed'
           if (order.vip_booking_id) {
             await connection.query(
               'UPDATE vip_bookings SET status = "confirmed" WHERE id = ?',
               [order.vip_booking_id]
             );
-          }
-        }
-
-        // Send Feedback SMS
-        const [orderData] = await connection.query(`
-          SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
-          FROM orders o
-          JOIN customers c ON o.customer_id = c.id
-          WHERE o.id = ?
-        `, [order_id]);
-
-        if (orderData.length > 0) {
-          const order = orderData[0];
-          const phone = formatPhoneNumber(order.phone);
-          const feedbackUrl = buildFeedbackUrl({
-            vehicleType: order.vehicle_type || 'Saloon',
-            customerId: order.customer_id,
-            plate: order.vehicle_plate,
-            orderId: order.id
-          });
-
-          if (phone) {
-            try {
-              await sendReson8Message({
-                to: phone,
-                message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
-                campaignName: 'PUBLIC_PAYMENT_FEEDBACK'
-              });
-              console.log(`[SMS] Feedback SMS sent to ${phone} after public payment for order ${order_id}`);
-            } catch (err) {
-              console.error('[SMS] Feedback SMS failed:', err.message);
-            }
           }
         }
 

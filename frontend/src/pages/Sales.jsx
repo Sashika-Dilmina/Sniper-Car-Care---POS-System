@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
@@ -15,7 +15,7 @@ const Sales = () => {
   // POS - Products & Catalog State
   const [products, setProducts] = useState([]);
   const [catalogSearch, setCatalogSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState('Services');
   const [loadingProducts, setLoadingProducts] = useState(true);
 
   // POS - Customer State
@@ -29,7 +29,7 @@ const Sales = () => {
   const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
-    phone: '',
+    phone: '+9715',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -69,6 +69,7 @@ const Sales = () => {
   const [paymentMethod, setPaymentMethod] = useState('cash'); // cash, tap, card, credit (unpaid)
   const [tapSubOption, setTapSubOption] = useState('apple_pay');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const isCheckingOutRef = useRef(false);
 
   // Register check state
   const [activeRegister, setActiveRegister] = useState(null);
@@ -76,6 +77,7 @@ const Sales = () => {
 
   // Ledger - State
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [sharing, setSharing] = useState(false);
   const [ledgerOrders, setLedgerOrders] = useState([]);
   const [loadingLedger, setLoadingLedger] = useState(false);
   const [ledgerSearchQuery, setLedgerSearchQuery] = useState('');
@@ -86,6 +88,19 @@ const Sales = () => {
       setActiveSubTab('pos');
     }
   }, [user]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    const err = params.get('error');
+    if (status === 'success') {
+      toast.success('Payment completed successfully via Tap Payments!');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (status === 'failed') {
+      toast.error(`Payment failed: ${decodeURIComponent(err || 'Unknown error')}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     fetchProducts();
@@ -159,7 +174,7 @@ const Sales = () => {
 
   // Add Product/Service to Cart
   const addToCart = (product) => {
-    if (product.stock !== undefined && product.stock <= 0 && product.category !== 'Services') {
+    if (product.stock !== undefined && product.stock <= 0 && product.category !== 'Services' && product.category !== 'VIP') {
       toast.error('Item is out of stock!');
       return;
     }
@@ -168,7 +183,7 @@ const Sales = () => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
         // If not a service, check stock limits
-        if (product.category !== 'Services' && existing.quantity >= product.stock) {
+        if (product.category !== 'Services' && product.category !== 'VIP' && existing.quantity >= product.stock) {
           toast.error(`Only ${product.stock} items available in stock!`);
           return prev;
         }
@@ -189,7 +204,7 @@ const Sales = () => {
           if (newQty <= 0) return null;
           
           // Check stock limits for physical products
-          if (amount > 0 && item.category !== 'Services' && newQty > item.stock) {
+          if (amount > 0 && item.category !== 'Services' && item.category !== 'VIP' && newQty > item.stock) {
             toast.error(`Only ${item.stock} items available in stock!`);
             return item;
           }
@@ -208,7 +223,8 @@ const Sales = () => {
   // Quick Register Customer Submit
   const handleQuickRegisterSubmit = async (e) => {
     e.preventDefault();
-    if (!newCustomer.name || !newCustomer.phone || !newCustomer.plate_number) {
+    const isNoVehicle = newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care';
+    if (!newCustomer.name || !newCustomer.phone || (!isNoVehicle && !newCustomer.plate_number)) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -221,10 +237,16 @@ const Sales = () => {
     }
 
     try {
-      const response = await axios.post('/api/anpr/register', {
+      const payload = {
         ...newCustomer,
         phone: cleanPhone
-      });
+      };
+      if (isNoVehicle) {
+        payload.plate_code = '';
+        payload.plate_number = `${newCustomer.emirate} - ${cleanPhone}`;
+      }
+
+      const response = await axios.post('/api/anpr/register', payload);
       const createdCustomer = response.data.customer;
       toast.success('Customer registered successfully!');
       
@@ -236,7 +258,7 @@ const Sales = () => {
       // Reset registration form
       setNewCustomer({
         name: '',
-        phone: '',
+        phone: '+9715',
         emirate: '',
         plate_code: '',
         plate_number: '',
@@ -255,6 +277,7 @@ const Sales = () => {
 
   // Complete Order Checkout Flow
   const handleCheckout = async () => {
+    if (isCheckingOutRef.current) return;
     if (cart.length === 0) {
       toast.error('Your cart is empty!');
       return;
@@ -265,6 +288,13 @@ const Sales = () => {
       return;
     }
 
+    const hasServiceInCart = cart.some(item => item.category === 'Services' || item.category === 'VIP');
+    if (hasServiceInCart && !selectedCustomer) {
+      toast.error('Booking a service requires selecting a customer.');
+      return;
+    }
+
+    isCheckingOutRef.current = true;
     setIsCheckingOut(true);
     try {
       // 1. Create order in the backend
@@ -285,24 +315,26 @@ const Sales = () => {
       const createdOrder = orderResponse.data.order;
 
       // 2. Process payment based on method
-      if (paymentMethod === 'cash') {
+      if (paymentMethod === 'cash' || paymentMethod === 'card') {
+        const hasService = cart.some(item => item.category === 'Services' || item.category === 'VIP');
         await axios.post('/api/payments/manual', {
           order_id: createdOrder.id,
           amount: total,
-          method: 'cash'
+          method: total === 0 ? 'free' : paymentMethod,
+          status: hasService ? 'pending' : 'completed'
         });
       } else if (paymentMethod === 'tap') {
-        await axios.post('/api/payments/manual', {
+        const tapResponse = await axios.post('/api/payments/tap/create', {
           order_id: createdOrder.id,
           amount: total,
-          method: tapSubOption
+          redirect_url: window.location.origin + '/sales?status=success&order_id=' + createdOrder.id
         });
-      } else if (paymentMethod === 'card') {
-        await axios.post('/api/payments/manual', {
-          order_id: createdOrder.id,
-          amount: total,
-          method: 'card'
-        });
+        if (tapResponse.data?.transaction_url) {
+          window.location.href = tapResponse.data.transaction_url;
+          return; // Stop cart clearing since we redirect
+        } else {
+          throw new Error('Failed to retrieve Tap payment URL');
+        }
       } else if (paymentMethod === 'credit') {
         await axios.post('/api/credits', {
           customer_id: selectedCustomer.id,
@@ -324,15 +356,62 @@ const Sales = () => {
       setSelectedCustomer(null);
       setCustomerSearch('');
       setPaymentMethod('cash');
-      setCardSubOption('card');
       
       // Refresh local products (for updated stock counts)
       fetchProducts();
     } catch (error) {
       console.error(error);
-      toast.error(error.response?.data?.message || 'Failed to complete sale');
+      toast.error(error.response?.data?.message || error.message || 'Failed to complete sale');
     } finally {
+      isCheckingOutRef.current = false;
       setIsCheckingOut(false);
+    }
+  };
+
+  const handleWhatsAppShare = async () => {
+    setSharing(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('tab', 'daily');
+      params.append('date', selectedDate);
+      
+      const response = await axios.get(`/api/analytics/reports/pdf?${params.toString()}`);
+      if (response.data.success && response.data.pdfUrl) {
+        const backendBaseUrl = axios.defaults.baseURL || window.location.origin;
+        const fullPdfUrl = `${backendBaseUrl}${response.data.pdfUrl}`;
+        
+        try {
+          // Fetch the PDF blob to create a File object
+          const fileResponse = await fetch(fullPdfUrl);
+          const blob = await fileResponse.blob();
+          const file = new File([blob], `sales-ledger-${selectedDate}-${Date.now()}.pdf`, { type: 'application/pdf' });
+          
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Sniper Car Care Daily Sales Ledger',
+              text: `Sales Ledger for ${selectedDate}`
+            });
+            toast.success('Sales Ledger PDF shared successfully!');
+            return;
+          }
+        } catch (shareErr) {
+          console.warn('Native sharing failed, falling back to link:', shareErr);
+        }
+        
+        // Fallback to text link if navigator.share fails or is not supported
+        const message = `Check out the Sniper Car Care Daily Sales Ledger for ${selectedDate}: ${fullPdfUrl}`;
+        const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
+        toast.success('Opened PDF report link in browser.');
+      } else {
+        toast.error('Failed to generate sales ledger PDF');
+      }
+    } catch (error) {
+      console.error('Error sharing PDF:', error);
+      toast.error('Failed to generate and share sales ledger PDF');
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -340,7 +419,12 @@ const Sales = () => {
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name?.toLowerCase().includes(catalogSearch.toLowerCase()) || 
                           product.description?.toLowerCase().includes(catalogSearch.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
+    const matchesCategory = 
+      (selectedCategory === 'VIP' && (product.category === 'VIP' || product.name?.toLowerCase().includes('vip'))) ||
+      (selectedCategory === 'Services' && product.category === 'Services' && !product.name?.toLowerCase().includes('vip')) ||
+      (selectedCategory === 'Acce' && (product.category === 'Acce' || product.category === 'Accessories')) ||
+      (selectedCategory === 'Car Freshner' && (product.category === 'Car Freshner' || product.category === 'Car Freshener')) ||
+      (selectedCategory !== 'VIP' && selectedCategory !== 'Services' && selectedCategory !== 'Acce' && selectedCategory !== 'Car Freshner' && product.category === selectedCategory);
     return matchesSearch && matchesCategory;
   });
 
@@ -362,10 +446,10 @@ const Sales = () => {
   // Ledger stats
   const totalSalesCount = filteredLedgerOrders.length;
   const totalDiscount = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.discount || 0), 0);
-  const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
+  const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.payment_status === 'free' ? o.discount || 0 : o.total || 0), 0);
 
   const renderCatalogCard = (product) => {
-    const isService = product.category === 'Services';
+    const isService = product.category === 'Services' || product.category === 'VIP';
     const outOfStock = !isService && product.stock <= 0;
 
     return (
@@ -514,11 +598,10 @@ const Sales = () => {
           {/* LEFT COLUMN: Catalog / Product & Service List (Col Span 2) */}
           <div className="xl:col-span-2 space-y-4">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-              
               {/* Category tabs and Search bar */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex bg-gray-100 p-1.5 rounded-xl gap-1 overflow-x-auto">
-                  {['All', 'Services', 'Accessories', 'Spare Parts'].map(cat => (
+                  {['Services', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
@@ -544,9 +627,9 @@ const Sales = () => {
 
               {/* Catalog Grid */}
               {loadingProducts ? (
-                <div className="flex justify-center items-center h-64 text-gray-500">Loading catalog...</div>
+                <div className="flex justify-center items-center h-64 text-gray-550">Loading catalog...</div>
               ) : filteredProducts.length > 0 ? (
-                selectedCategory === 'Services' ? (
+                (selectedCategory === 'Services' || selectedCategory === 'VIP') ? (
                   <div className="space-y-6 max-h-[600px] overflow-y-auto pr-1">
                     {/* Saloon Services Group */}
                     <div className="space-y-3">
@@ -586,7 +669,7 @@ const Sales = () => {
               ) : (
                 <div className="text-center py-20 text-gray-400">
                   <p className="text-lg">No items match your query</p>
-                  <button onClick={() => { setSelectedCategory('All'); setCatalogSearch(''); }} className="text-primary-600 underline text-sm mt-1">
+                  <button onClick={() => { setSelectedCategory('Services'); setCatalogSearch(''); }} className="text-primary-600 underline text-sm mt-1">
                     Reset filters
                   </button>
                 </div>
@@ -722,30 +805,38 @@ const Sales = () => {
                           <option value="Umm Al Quwain">Umm Al Quwain</option>
                           <option value="Ras Al Khaimah">Ras Al Khaimah</option>
                           <option value="Fujairah">Fujairah</option>
+                          <option value="Garage">Garage</option>
+                          <option value="Sniper car care">Sniper car care</option>
                         </select>
 
-                        <SearchableSelect
-                          options={plateCodes}
-                          value={newCustomer.plate_code}
-                          onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
-                          disabled={plateCodes.length === 0}
-                        />
+                        {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                          <SearchableSelect
+                            options={plateCodes}
+                            value={newCustomer.plate_code}
+                            onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
+                            disabled={plateCodes.length === 0}
+                          />
+                        )}
                       </div>
 
-                      <input
-                        type="text"
-                        required
-                        placeholder="Plate Number (e.g. 12345) *"
-                        value={newCustomer.plate_number}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
-                        className="w-full px-3 py-1.5 border rounded-lg text-sm font-mono"
-                      />
+                      {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                        <input
+                          type="text"
+                          required={!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care')}
+                          placeholder="Plate Number (e.g. 12345) *"
+                          value={newCustomer.plate_number}
+                          onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                          className="w-full px-3 py-1.5 border rounded-lg text-sm font-mono"
+                        />
+                      )}
 
-                      <VehiclePlatePreview 
-                        emirate={newCustomer.emirate} 
-                        plateCode={newCustomer.plate_code} 
-                        plateNumber={newCustomer.plate_number} 
-                      />
+                      {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                        <VehiclePlatePreview 
+                          emirate={newCustomer.emirate} 
+                          plateCode={newCustomer.plate_code} 
+                          plateNumber={newCustomer.plate_number} 
+                        />
+                      )}
                     </div>
 
                     <div className="flex gap-2 justify-end pt-1">
@@ -841,10 +932,9 @@ const Sales = () => {
                   {/* Payment Method */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       {[
                         { key: 'cash', label: '💵 Cash' },
-                        { key: 'tap', label: '📱 Tap' },
                         { key: 'card', label: '💳 Card' },
                         { key: 'credit', label: '🏦 Credit' }
                       ].map(pm => (
@@ -866,31 +956,7 @@ const Sales = () => {
                     </div>
                   </div>
 
-                  {/* Tap Sub-payment methods */}
-                  {paymentMethod === 'tap' && (
-                    <div className="space-y-1.5 p-3 bg-gray-50 border border-gray-150 rounded-xl">
-                      <label className="block text-[11px] font-black uppercase text-gray-500">Tap Type</label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[
-                          { key: 'apple_pay', label: ' Apple Pay' },
-                          { key: 'samsung_pay', label: '📱 Samsung Pay' }
-                        ].map(sub => (
-                          <button
-                            key={sub.key}
-                            type="button"
-                            onClick={() => setTapSubOption(sub.key)}
-                            className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition-all ${
-                              tapSubOption === sub.key
-                                ? 'bg-gray-800 text-white border-gray-800 shadow-sm'
-                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
-                            }`}
-                          >
-                            {sub.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+
 
                 </div>
               )}
@@ -991,12 +1057,21 @@ const Sales = () => {
               </button>
             </div>
 
-            <button
-              onClick={() => window.print()}
-              className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-md transition flex items-center gap-2 text-sm"
-            >
-              🖨️ Print Daily Invoice
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleWhatsAppShare}
+                disabled={sharing}
+                className="px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-bold rounded-xl shadow-md transition flex items-center gap-2 text-sm"
+              >
+                {sharing ? '⏳ Generating PDF...' : '💬 Share via WhatsApp'}
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-md transition flex items-center gap-2 text-sm"
+              >
+                🖨️ Print Daily Invoice
+              </button>
+            </div>
           </div>
 
           {/* Ledger Stats Grid */}
@@ -1136,7 +1211,11 @@ const Sales = () => {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap font-extrabold text-gray-900 text-right">
-                            AED {parseFloat(order.total).toFixed(2)}
+                            {order.payment_status === 'free' ? (
+                              <span className="text-green-600 font-bold">AED {parseFloat(order.discount).toFixed(2)} (Free)</span>
+                            ) : (
+                              `AED ${parseFloat(order.total).toFixed(2)}`
+                            )}
                           </td>
                         </tr>
                       );

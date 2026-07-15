@@ -10,8 +10,19 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [analytics, setAnalytics] = useState(null);
   const [vipAppointments, setVipAppointments] = useState([]);
-  const [period, setPeriod] = useState('today');
+  const getTodayDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [todayDate, setTodayDate] = useState(getTodayDateString());
+  const [startDate, setStartDate] = useState(getTodayDateString());
+  const [endDate, setEndDate] = useState(getTodayDateString());
   const [vipLoading, setVipLoading] = useState(true);
+  const [showAllVip, setShowAllVip] = useState(false);
   const [loading, setLoading] = useState(true);
   const [completedServices, setCompletedServices] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(true);
@@ -75,6 +86,9 @@ const Dashboard = () => {
       toast.error('Please enter a valid cash drawer count.');
       return;
     }
+
+    // Rely on backend register check which correctly filters pending orders by the active register open date
+
     try {
       const resp = await axios.post('/api/registers/close', {
         closed_amount: parseFloat(closedAmountInput),
@@ -86,9 +100,7 @@ const Dashboard = () => {
         setRegisterNotes('');
         setShowCloseRegisterModal(false);
         fetchRegisterStatus();
-        if (isAdmin) {
-          navigate('/reports?tab=registers');
-        }
+        navigate(`/reports?tab=registers&print_register_id=${resp.data.register_id}`);
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to close register');
@@ -132,7 +144,7 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    fetchAnalytics(false, period);
+    fetchAnalytics(false, startDate, endDate);
     fetchVIPAppointments();
     fetchRegisterStatus();
     if (isAdmin) {
@@ -140,7 +152,17 @@ const Dashboard = () => {
     }
 
     const interval = setInterval(() => {
-      fetchAnalytics(true, period);
+      const freshToday = getTodayDateString();
+      setTodayDate((prevToday) => {
+        if (freshToday !== prevToday) {
+          setStartDate((prevStart) => (prevStart === prevToday ? freshToday : prevStart));
+          setEndDate((prevEnd) => (prevEnd === prevToday ? freshToday : prevEnd));
+          return freshToday;
+        }
+        return prevToday;
+      });
+
+      fetchAnalytics(true, startDate, endDate);
       fetchVIPAppointments(true);
       fetchRegisterStatus();
       if (isAdmin) {
@@ -149,7 +171,7 @@ const Dashboard = () => {
     }, 7000);
 
     return () => clearInterval(interval);
-  }, [isAdmin, period]);
+  }, [isAdmin, startDate, endDate, todayDate]);
 
   const fetchCompletedServices = async (silent = false) => {
     if (!silent) setServicesLoading(true);
@@ -196,10 +218,10 @@ const Dashboard = () => {
     }
   };
 
-  const fetchAnalytics = async (silent = false, currentPeriod = period) => {
+  const fetchAnalytics = async (silent = false, start = startDate, end = endDate) => {
     if (!silent) setLoading(true);
     try {
-      const response = await axios.get(`/api/analytics/dashboard?period=${currentPeriod}`);
+      const response = await axios.get(`/api/analytics/dashboard?start_date=${start}&end_date=${end}`);
       console.log('Analytics response:', response.data);
       if (response.data) {
         setAnalytics(response.data);
@@ -288,18 +310,28 @@ const Dashboard = () => {
         }
       `}} />
 
-      <div className="flex justify-between items-center no-print">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print">
         <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          className="px-4 py-2 border rounded-lg"
-        >
-          <option value="today">Today</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-        </select>
+        <div className="flex flex-wrap items-center gap-3 bg-white p-2 border rounded-xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase">From</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-1.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase">To</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-1.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Cash Register Session Widget */}
@@ -431,6 +463,15 @@ const Dashboard = () => {
           </div>
         </div>
 
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div>
+            <p className="text-gray-600 text-sm">Total VIP Pending Vehicles</p>
+            <p className="text-2xl font-bold text-purple-600">
+              {summary.pending_vip_count || 0}
+            </p>
+          </div>
+        </div>
+
         {isAdmin && (
           <div className="bg-white p-6 rounded-lg shadow">
             <div>
@@ -444,66 +485,90 @@ const Dashboard = () => {
       </div>
 
       {/* VIP Today's Appointments */}
-      {!vipLoading && vipAppointments.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">👑</span>
-              <h2 className="text-xl font-bold text-gray-900">VIP Appointments Today</h2>
+      {!vipLoading && vipAppointments.length > 0 && (() => {
+        const sortedAppointments = [...vipAppointments].sort((a, b) => {
+          const statusPriority = {
+            'in_progress': 1,
+            'confirmed': 2,
+            'pending': 3,
+            'completed': 4,
+            'cancelled': 5
+          };
+          return (statusPriority[a.status] || 99) - (statusPriority[b.status] || 99);
+        });
+        const visibleAppts = showAllVip ? sortedAppointments : sortedAppointments.slice(0, 2);
+
+        return (
+          <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">👑</span>
+                <h2 className="text-xl font-bold text-gray-900">VIP Appointments Today</h2>
+              </div>
+              <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-semibold">
+                {vipAppointments.length} appointment{vipAppointments.length > 1 ? 's' : ''}
+              </span>
             </div>
-            <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-semibold">
-              {vipAppointments.length} appointment{vipAppointments.length > 1 ? 's' : ''}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {vipAppointments.map((appt) => (
-              <div key={appt.id} className="border border-red-200 rounded-lg p-4 bg-red-50/30 hover:shadow-md transition">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-bold text-gray-900 text-lg">{appt.name}</p>
-                    <p className="text-sm text-gray-600">{appt.phone}</p>
-                  </div>
-                  <span className="text-xs font-bold text-red-600 bg-white px-2 py-1 rounded-full border border-red-200">
-                    VIP
-                  </span>
-                </div>
-                <div className="border-t border-red-100 pt-2 mt-2">
-                  <p className="text-sm"><span className="font-semibold">Vehicle:</span> {appt.vehicle_model}</p>
-                  <p className="text-sm"><span className="font-semibold">Type:</span> {appt.vehicle_type}</p>
-                  <p className="text-sm"><span className="font-semibold">Service:</span> {appt.service_type}</p>
-                  <p className="text-sm"><span className="font-semibold">Time:</span> {appt.appointment_time}</p>
-                </div>
-                <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2">
-                  <div className="flex flex-col">
-                    <span className={`px-2 py-1 text-xs rounded-full font-medium w-max ${
-                      appt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                      appt.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                      appt.status === 'completed' ? 'bg-gray-100 text-gray-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {appt.status === 'in_progress' ? 'In Progress' : 
-                       appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleAppts.map((appt) => (
+                <div key={appt.id} className="border border-red-200 rounded-lg p-4 bg-red-50/30 hover:shadow-md transition">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="font-bold text-gray-900 text-lg">{appt.name}</p>
+                      <p className="text-sm text-gray-600">{appt.phone}</p>
+                    </div>
+                    <span className="text-xs font-bold text-red-600 bg-white px-2 py-1 rounded-full border border-red-200">
+                      VIP
                     </span>
-                    {appt.status === 'in_progress' && (
-                      <span className="text-xs font-bold text-purple-700 mt-1 flex items-center gap-0.5">
-                        ⏱️ {calculateElapsedTime(appt.service_started_at, appt.service_completed_at)}
+                  </div>
+                  <div className="border-t border-red-100 pt-2 mt-2">
+                    <p className="text-sm"><span className="font-semibold">Vehicle:</span> {appt.vehicle_model}</p>
+                    <p className="text-sm"><span className="font-semibold">Type:</span> {appt.vehicle_type}</p>
+                    <p className="text-sm"><span className="font-semibold">Service:</span> {appt.service_type}</p>
+                    <p className="text-sm"><span className="font-semibold">Time:</span> {appt.appointment_time}</p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2">
+                    <div className="flex flex-col">
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium w-max ${
+                        appt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                        appt.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                        appt.status === 'completed' ? 'bg-gray-100 text-gray-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {appt.status === 'in_progress' ? 'In Progress' : 
+                         appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
                       </span>
+                      {appt.status === 'in_progress' && (
+                        <span className="text-xs font-bold text-purple-700 mt-1 flex items-center gap-0.5">
+                          ⏱️ {calculateElapsedTime(appt.service_started_at, appt.service_completed_at)}
+                        </span>
+                      )}
+                    </div>
+                    {appt.status === 'in_progress' && (
+                      <button
+                        onClick={() => handleCompleteVIPBooking(appt.id)}
+                        className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold transition shadow-sm"
+                      >
+                        Done
+                      </button>
                     )}
                   </div>
-                  {appt.status === 'in_progress' && (
-                    <button
-                      onClick={() => handleCompleteVIPBooking(appt.id)}
-                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold transition shadow-sm"
-                    >
-                      Done
-                    </button>
-                  )}
                 </div>
+              ))}
+            </div>
+            {sortedAppointments.length > 2 && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => setShowAllVip(!showAllVip)}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition"
+                >
+                  {showAllVip ? 'See Less' : 'See More'}
+                </button>
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Charts - Admin Only */}
       {isAdmin && (
@@ -926,9 +991,9 @@ const Dashboard = () => {
                   <span className="text-gray-600">Cash Expenses:</span>
                   <span className="font-semibold text-red-600">- AED {registerReport.cash_expense.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between border-t pt-2 font-bold">
-                  <span>Expected Cash in Drawer:</span>
-                  <span>AED {registerReport.amount_in_cash_drawer.toFixed(2)}</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Free Washes Value:</span>
+                  <span className="font-semibold text-green-600">AED {parseFloat(registerReport.free_wash_amount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2 text-xs text-gray-500">
                   <span>Other Sales (Card, Bank, Tap):</span>

@@ -22,11 +22,12 @@ const register = asyncHandler(async (req, res) => {
   // Hash password
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
+  const finalRole = role === 'admin' ? 'admin' : 'staff';
 
   // Create user
   const [result] = await pool.query(
     'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-    [name, email, hashedPassword, role || 'staff']
+    [name, email, hashedPassword, finalRole]
   );
 
   const [newUser] = await pool.query(

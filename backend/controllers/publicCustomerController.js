@@ -2,6 +2,84 @@ const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { getWashStamps } = require('../utils/loyaltyStamps');
 
+// Helper to resolve customer by plate with fallback matching
+async function resolveCustomerByPlate(plate) {
+  if (!plate) return null;
+
+  const cleanPlate = plate.replace(/\s+/g, '');
+  
+  // 1. Try direct exact match
+  const [customers] = await pool.query(
+    `SELECT DISTINCT c.* FROM customers c
+     LEFT JOIN vehicles v ON c.id = v.CustomerId
+     WHERE c.vehicle_plate = ?
+        OR REPLACE(c.vehicle_plate, ' ', '') = ?
+        OR v.VehicleRegistrationNumber = ?
+        OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = ?
+     LIMIT 1`,
+    [plate, cleanPlate, plate, cleanPlate]
+  );
+
+  if (customers.length > 0) {
+    return customers[0];
+  }
+
+  // 2. Try parsing and robust matching fallback
+  const { parsePlateComponents } = require('../utils/customerLinkUtils');
+  const { plateCode, emirate, plateNumber: parsedPlateNum } = parsePlateComponents(plate);
+  
+  if (parsedPlateNum) {
+    // A. Match by PlateNumber and PlateCode
+    const [fallbackCustomers] = await pool.query(
+      `SELECT DISTINCT c.* FROM customers c
+       JOIN vehicles v ON c.id = v.CustomerId
+       WHERE v.PlateNumber = ? AND (v.PlateCode = ? OR (? = '' AND (v.PlateCode = '' OR v.PlateCode IS NULL)))
+       LIMIT 1`,
+      [parsedPlateNum, plateCode, plateCode]
+    );
+    
+    if (fallbackCustomers.length > 0) {
+      return fallbackCustomers[0];
+    }
+
+    // B. Check if PlateNumber is unique in database to allow loose fallback
+    const [countVehicles] = await pool.query(
+      `SELECT COUNT(DISTINCT CustomerId) as count FROM vehicles WHERE PlateNumber = ?`,
+      [parsedPlateNum]
+    );
+    
+    const [countCustomers] = await pool.query(
+      `SELECT COUNT(id) as count FROM customers WHERE REPLACE(vehicle_plate, ' ', '') LIKE ?`,
+      [`%${parsedPlateNum}`]
+    );
+    
+    const totalMatches = (countVehicles[0]?.count || 0) + (countCustomers[0]?.count || 0);
+    
+    if (totalMatches === 1) {
+      const [numberOnlyCustomers] = await pool.query(
+        `SELECT DISTINCT c.* FROM customers c
+         JOIN vehicles v ON c.id = v.CustomerId
+         WHERE v.PlateNumber = ?
+         LIMIT 1`,
+        [parsedPlateNum]
+      );
+      if (numberOnlyCustomers.length > 0) {
+        return numberOnlyCustomers[0];
+      }
+
+      const [custByPlate] = await pool.query(
+        `SELECT * FROM customers WHERE REPLACE(vehicle_plate, ' ', '') LIKE ? LIMIT 1`,
+        [`%${parsedPlateNum}`]
+      );
+      if (custByPlate.length > 0) {
+        return custByPlate[0];
+      }
+    }
+  }
+
+  return null;
+}
+
 // @desc    Get customer by vehicle plate (public)
 // @route   GET /api/public/customer/by-plate
 // @access  Public
@@ -12,20 +90,22 @@ const getCustomerByPlate = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Vehicle plate is required' });
   }
 
-  const [customers] = await pool.query(
-    'SELECT * FROM customers WHERE vehicle_plate = ?',
-    [plate]
-  );
+  const customer = await resolveCustomerByPlate(plate);
 
-  if (customers.length === 0) {
+  if (!customer) {
     return res.status(404).json({ message: 'Customer not found' });
   }
 
-  const customer = customers[0];
+  customer.emirate = customer.province;
   let wash_stamps = 0;
+  let free_wash_cap = 0;
 
   try {
     wash_stamps = await getWashStamps(pool, customer.id);
+    if (wash_stamps >= 5) {
+      const { calculateFreeWashCap } = require('../utils/freeWashCap');
+      free_wash_cap = await calculateFreeWashCap(pool, customer.id);
+    }
   } catch (err) {
     if (err.code !== 'ER_BAD_FIELD_ERROR') {
       throw err;
@@ -34,7 +114,7 @@ const getCustomerByPlate = asyncHandler(async (req, res) => {
 
   res.json({
     customer: { ...customer, wash_stamps },
-    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5 },
+    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5, free_wash_cap },
   });
 });
 
@@ -58,10 +138,16 @@ const getCustomerById = asyncHandler(async (req, res) => {
   }
 
   const customer = customers[0];
+  customer.emirate = customer.province;
   let wash_stamps = 0;
+  let free_wash_cap = 0;
 
   try {
     wash_stamps = await getWashStamps(pool, customer.id);
+    if (wash_stamps >= 5) {
+      const { calculateFreeWashCap } = require('../utils/freeWashCap');
+      free_wash_cap = await calculateFreeWashCap(pool, customer.id);
+    }
   } catch (err) {
     if (err.code !== 'ER_BAD_FIELD_ERROR') {
       throw err;
@@ -70,7 +156,7 @@ const getCustomerById = asyncHandler(async (req, res) => {
 
   res.json({
     customer: { ...customer, wash_stamps },
-    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5 },
+    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5, free_wash_cap },
   });
 });
 
@@ -87,14 +173,11 @@ const getCustomerOrders = asyncHandler(async (req, res) => {
   let customerId = id;
 
   if (!customerId) {
-    const [customers] = await pool.query(
-      'SELECT id FROM customers WHERE vehicle_plate = ?',
-      [plate]
-    );
-    if (customers.length === 0) {
+    const customer = await resolveCustomerByPlate(plate);
+    if (!customer) {
       return res.status(404).json({ message: 'Customer not found' });
     }
-    customerId = customers[0].id;
+    customerId = customer.id;
   }
 
   // Get customer phone number to search for associated VIP bookings
@@ -130,6 +213,28 @@ const getCustomerOrders = asyncHandler(async (req, res) => {
       [orderIds]
     );
     allItems = items;
+
+    // Check if any order has empty items and fetch from services instead
+    for (let order of orders) {
+      const orderItems = allItems.filter(item => item.order_id === order.id);
+      if (orderItems.length === 0) {
+        const [services] = await pool.query(
+          'SELECT id, service_name, price FROM services WHERE order_id = ?',
+          [order.id]
+        );
+        if (services.length > 0) {
+          const serviceItems = services.map(s => ({
+            id: `svc_${s.id}`,
+            order_id: order.id,
+            product_name: order.payment_status === 'free' ? `${s.service_name} (Free Wash)` : s.service_name,
+            quantity: 1,
+            price: order.payment_status === 'free' ? 0.00 : s.price,
+            category: 'Services'
+          }));
+          allItems.push(...serviceItems);
+        }
+      }
+    }
   }
 
   const formattedOrders = orders.map(order => ({
@@ -152,10 +257,18 @@ const getCustomerNotifications = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Vehicle plate is required' });
   }
 
-  const [notifications] = await pool.query(
-    'SELECT * FROM customer_notifications WHERE vehicle_plate = ? ORDER BY created_at DESC LIMIT 50',
-    [plate]
-  );
+  const customer = await resolveCustomerByPlate(plate);
+  
+  let query = 'SELECT * FROM customer_notifications WHERE vehicle_plate = ? OR REPLACE(vehicle_plate, \' \', \'\') = ?';
+  let queryParams = [plate, plate.replace(/\s+/g, '')];
+
+  if (customer && customer.vehicle_plate) {
+    query += ' OR vehicle_plate = ? OR REPLACE(vehicle_plate, \' \', \'\') = ?';
+    queryParams.push(customer.vehicle_plate, customer.vehicle_plate.replace(/\s+/g, ''));
+  }
+
+  query += ' ORDER BY created_at DESC LIMIT 50';
+  const [notifications] = await pool.query(query, queryParams);
 
   res.json({
     success: true,
@@ -173,10 +286,19 @@ const markNotificationsAsRead = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Vehicle plate is required' });
   }
 
-  await pool.query(
-    'UPDATE customer_notifications SET is_read = 1 WHERE vehicle_plate = ? AND is_read = 0',
-    [plate]
-  );
+  const customer = await resolveCustomerByPlate(plate);
+  
+  let query = 'UPDATE customer_notifications SET is_read = 1 WHERE (vehicle_plate = ? OR REPLACE(vehicle_plate, \' \', \'\') = ?)';
+  let queryParams = [plate, plate.replace(/\s+/g, '')];
+
+  if (customer && customer.vehicle_plate) {
+    query += ' OR vehicle_plate = ? OR REPLACE(vehicle_plate, \' \', \'\') = ?';
+    queryParams.push(customer.vehicle_plate, customer.vehicle_plate.replace(/\s+/g, ''));
+  }
+
+  // Wrap existing conditions in parenthesis for proper precedence with AND is_read = 0
+  const finalQuery = `UPDATE customer_notifications SET is_read = 1 WHERE (${query.split(' WHERE ')[1]}) AND is_read = 0`;
+  await pool.query(finalQuery, queryParams);
 
   res.json({
     success: true,

@@ -11,6 +11,13 @@ const Services = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingService, setEditingService] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState(null);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -52,7 +59,7 @@ const Services = () => {
     }
   };
 
-  const handleImageUpload = async (e) => {
+  const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -62,20 +69,79 @@ const Services = () => {
     }
 
     const reader = new FileReader();
-    reader.onload = async () => {
+    reader.onload = () => {
+      setCropImageSrc(reader.result);
+      setZoomScale(1.0);
+      setPanX(0);
+      setPanY(0);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCropSave = () => {
+    if (!cropImageSrc) return;
+
+    const img = new Image();
+    img.src = cropImageSrc;
+    img.onload = async () => {
       try {
         setUploading(true);
-        const response = await axios.post('/api/products/upload-image', { image: reader.result });
+        const canvas = document.createElement('canvas');
+        canvas.width = 600;
+        canvas.height = 600;
+        const ctx = canvas.getContext('2d');
+        
+        ctx.clearRect(0, 0, 600, 600);
+        ctx.save();
+        ctx.translate(300, 300);
+        ctx.scale(zoomScale, zoomScale);
+        
+        // Translate by scaled pan offset (Preview is 200px, Canvas is 600px, so 3x factor)
+        ctx.translate(panX * 3, panY * 3);
+        
+        // Draw image covering 600x600 centered
+        const containerSize = 600;
+        const aspect = img.width / img.height;
+        let drawW, drawH;
+        if (aspect > 1) {
+          drawH = containerSize;
+          drawW = containerSize * aspect;
+        } else {
+          drawW = containerSize;
+          drawH = containerSize / aspect;
+        }
+        
+        ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+        ctx.restore();
+        
+        const croppedDataUrl = canvas.toDataURL('image/png');
+        const response = await axios.post('/api/products/upload-image', { image: croppedDataUrl });
         setFormData((prev) => ({ ...prev, image_url: response.data.imageUrl }));
-        toast.success('Image uploaded successfully');
+        setCropImageSrc(null);
+        toast.success('Image cropped & uploaded successfully');
       } catch (error) {
-        console.error('Image upload failed:', error);
-        toast.error(error.response?.data?.message || 'Failed to upload image');
+        console.error('Cropping upload failed:', error);
+        toast.error('Failed to crop and upload image');
       } finally {
         setUploading(false);
       }
     };
-    reader.readAsDataURL(file);
+  };
+
+  const handleUploadOriginal = async () => {
+    if (!cropImageSrc) return;
+    try {
+      setUploading(true);
+      const response = await axios.post('/api/products/upload-image', { image: cropImageSrc });
+      setFormData((prev) => ({ ...prev, image_url: response.data.imageUrl }));
+      setCropImageSrc(null);
+      toast.success('Original image uploaded successfully');
+    } catch (error) {
+      console.error('Original upload failed:', error);
+      toast.error('Failed to upload original image');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -246,9 +312,11 @@ const Services = () => {
                   <span className="bg-primary-600 text-white font-black px-3 py-1 rounded-full text-xs shadow-md">
                     Sell: AED {parseFloat(service.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </span>
-                  <span className="bg-gray-800 text-white font-semibold px-2 py-0.5 rounded-full text-[10px] shadow-md">
-                    Cost: AED {parseFloat(service.purchase_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </span>
+                  {user?.role === 'admin' && (
+                    <span className="bg-gray-800 text-white font-semibold px-2 py-0.5 rounded-full text-[10px] shadow-md">
+                      Cost: AED {parseFloat(service.purchase_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </span>
+                  )}
                 </div>
               </div>
               
@@ -383,62 +451,139 @@ const Services = () => {
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
-                  rows="3"
-                  placeholder="Describe what is included in this service..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                   Service Image
                 </label>
-                <div className="mt-1 flex items-center gap-4">
-                  {formData.image_url ? (
-                    <div className="relative w-20 h-20 rounded-lg overflow-hidden border">
-                      <img
-                        src={resolveImageUrl(formData.image_url)}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
+                
+                {cropImageSrc ? (
+                  <div className="border rounded-lg p-4 bg-gray-50 flex flex-col items-center gap-3">
+                    <div 
+                      className="relative w-[200px] h-[200px] rounded-lg border overflow-hidden bg-gray-200 cursor-move"
+                      style={{ touchAction: 'none' }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setIsDragging(true);
+                        setDragStart({ x: e.clientX - panX, y: e.clientY - panY });
+                      }}
+                      onMouseMove={(e) => {
+                        if (!isDragging) return;
+                        setPanX(e.clientX - dragStart.x);
+                        setPanY(e.clientY - dragStart.y);
+                      }}
+                      onMouseUp={() => setIsDragging(false)}
+                      onMouseLeave={() => setIsDragging(false)}
+                      onTouchStart={(e) => {
+                        const touch = e.touches[0];
+                        setIsDragging(true);
+                        setDragStart({ x: touch.clientX - panX, y: touch.clientY - panY });
+                      }}
+                      onTouchMove={(e) => {
+                        if (!isDragging) return;
+                        const touch = e.touches[0];
+                        setPanX(touch.clientX - dragStart.x);
+                        setPanY(touch.clientY - dragStart.y);
+                      }}
+                      onTouchEnd={() => setIsDragging(false)}
+                    >
+                      <img 
+                        src={cropImageSrc}
+                        alt="To Crop"
+                        className="absolute max-w-none pointer-events-none"
+                        style={{
+                          left: '50%',
+                          top: '50%',
+                          transform: `translate(-50%, -50%) translate(${panX}px, ${panY}px) scale(${zoomScale})`,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
                       />
+                      <div className="absolute inset-0 border-2 border-primary-500 rounded-lg pointer-events-none" />
+                    </div>
+                    <div className="w-full flex flex-col gap-1">
+                      <div className="flex justify-between text-xs font-bold text-gray-500">
+                        <span>Zoom / Size Bar: {zoomScale.toFixed(1)}x</span>
+                        <span>Drag image to pan</span>
+                      </div>
+                      <input 
+                        type="range"
+                        min="1.0"
+                        max="3.0"
+                        step="0.1"
+                        value={zoomScale}
+                        onChange={(e) => setZoomScale(parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                      />
+                    </div>
+                    <div className="flex gap-2 w-full flex-wrap">
                       <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, image_url: '' })}
-                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 shadow"
-                        title="Remove image"
+                        onClick={handleCropSave}
+                        disabled={uploading}
+                        className="flex-grow min-w-[120px] bg-primary-600 text-white text-xs font-bold py-1.5 rounded-lg hover:bg-primary-700 transition"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        {uploading ? 'Uploading...' : 'Crop & Confirm'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleUploadOriginal}
+                        disabled={uploading}
+                        className="flex-grow min-w-[120px] bg-green-600 text-white text-xs font-bold py-1.5 rounded-lg hover:bg-green-700 transition"
+                      >
+                        Upload Original
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCropImageSrc(null)}
+                        disabled={uploading}
+                        className="px-3 bg-gray-200 text-gray-700 text-xs font-bold py-1.5 rounded-lg hover:bg-gray-300 transition"
+                      >
+                        Cancel
                       </button>
                     </div>
-                  ) : (
-                    <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-500 cursor-pointer flex flex-col items-center justify-center text-gray-400 transition hover:text-primary-600 bg-gray-50">
-                      <svg className="w-6 h-6 stroke-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      <span className="text-[10px] font-semibold mt-1">Upload</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
-                  <div className="flex-grow text-xs text-gray-500">
-                    {uploading ? (
-                      <span className="text-primary-600 font-bold animate-pulse">Uploading image...</span>
-                    ) : (
-                      <span>Select an image from your device. Recommended: landscape photo (4:3 ratio).</span>
-                    )}
                   </div>
-                </div>
+                ) : (
+                  <div className="mt-1 flex items-center gap-4">
+                    {formData.image_url ? (
+                      <div className="relative w-20 h-20 rounded-lg overflow-hidden border">
+                        <img
+                          src={resolveImageUrl(formData.image_url)}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, image_url: '' })}
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 shadow"
+                          title="Remove image"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-500 cursor-pointer flex flex-col items-center justify-center text-gray-400 transition hover:text-primary-600 bg-gray-50">
+                        <svg className="w-6 h-6 stroke-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span className="text-[10px] font-semibold mt-1">Upload</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                    <div className="flex-grow text-xs text-gray-500">
+                      {uploading ? (
+                        <span className="text-primary-600 font-bold animate-pulse">Uploading image...</span>
+                      ) : (
+                        <span>Recommended image size: 600x600 px (Square / 1:1 ratio) to match existing thumbnails.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex space-x-4 pt-4 border-t">

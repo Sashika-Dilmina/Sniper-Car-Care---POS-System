@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from '../config/axios';
 import BottomNav from '../components/BottomNav';
+import stamp1 from '../assets/loyalty/stamp-1.png';
+import stamp2 from '../assets/loyalty/stamp-2.png';
+import stamp3 from '../assets/loyalty/stamp-3.png';
+import stamp4 from '../assets/loyalty/stamp-4.png';
+import stamp5 from '../assets/loyalty/stamp-5.png';
+import freeStamp from '../assets/loyalty/free-stamp.png';
+
+const stamps = [stamp1, stamp2, stamp3, stamp4, stamp5];
 
 const ProfilePage = () => {
   const [searchParams] = useSearchParams();
@@ -70,31 +78,50 @@ const ProfilePage = () => {
             </div>
 
             {/* Loyalty Stamps */}
-            {customerData.loyalty && (
+            {customerData.loyalty && 
+             customerData.customer.emirate !== 'Garage' && 
+             customerData.customer.emirate !== 'Sniper car care' && (
               <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl shadow-lg p-6 text-white overflow-hidden relative">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/20 rounded-full blur-2xl -mr-10 -mt-10"></div>
                 <h3 className="text-lg font-bold mb-1">Sniper Loyalty</h3>
                 <p className="text-sm text-gray-400 mb-6">Earn a free wash every 5 visits</p>
                 
                 <div className="flex justify-between items-center px-2">
-                  {[...Array(5)].map((_, i) => {
-                    const isEarned = i < (customerData.loyalty.wash_stamps % 5);
+                   {[...Array(5)].map((_, i) => {
+                    const isEarned = i < (customerData.loyalty.wash_stamps >= 5 ? 5 : (customerData.loyalty.wash_stamps % 5));
                     return (
                       <div key={i} className="flex flex-col items-center gap-2 relative z-10">
-                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-all ${
+                        <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center transition-all ${
                           isEarned 
-                            ? 'bg-red-600 text-white shadow-lg shadow-red-600/50 scale-110' 
-                            : 'bg-gray-800 text-gray-600 border border-gray-700'
+                            ? 'shadow-lg shadow-blue-600/50 scale-110 ring-2 ring-blue-600 bg-blue-50' 
+                            : 'border border-gray-700'
                         }`}>
-                          {isEarned ? (
-                            <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
-                          ) : (
-                            <span className="text-sm sm:text-base font-bold">{i + 1}</span>
-                          )}
+                          <img 
+                            src={isEarned ? stamp1 : stamp4} 
+                            alt={`Stamp ${i+1}`} 
+                            className="w-full h-full object-contain p-0.5 rounded-full transition-all duration-300" 
+                            style={{ filter: isEarned ? 'hue-rotate(25deg) saturate(2.5) brightness(0.95)' : 'none' }}
+                          />
                         </div>
+                        <span className="text-[10px] sm:text-xs font-bold text-gray-400 mt-1">{i + 1}</span>
                       </div>
                     );
                   })}
+                  <div className="flex flex-col items-center gap-2 relative z-10">
+                    <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center transition-all ${
+                      customerData.loyalty.free_wash_ready 
+                        ? 'shadow-lg shadow-red-600/50 scale-110 ring-2 ring-red-500 animate-pulse' 
+                        : 'border border-gray-700'
+                    }`}>
+                      <img 
+                        src={freeStamp} 
+                        alt="Free Wash" 
+                        className="w-full h-full object-contain p-1 rounded-full transition-all duration-300" 
+                        style={{ filter: customerData.loyalty.free_wash_ready ? 'none' : 'grayscale(100%) opacity(0.35)' }}
+                      />
+                    </div>
+                    <span className="text-[10px] sm:text-xs font-bold text-red-500 mt-1 uppercase tracking-wide">Free</span>
+                  </div>
                 </div>
                 
                 <div className="mt-6 text-center">

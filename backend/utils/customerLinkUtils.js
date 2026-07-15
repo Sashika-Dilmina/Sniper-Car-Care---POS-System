@@ -1,5 +1,6 @@
 function isFourByFour(vehicleType = '') {
-  const normalized = vehicleType.toLowerCase();
+  const safeType = vehicleType || '';
+  const normalized = safeType.toLowerCase();
   return normalized.includes('4x4') || normalized.includes('4-wheel') || normalized.includes('4wheel');
 }
 
@@ -20,8 +21,9 @@ function buildCustomerWebsiteUrl(vehicleType = 'Saloon', plateNumber) {
     return baseUrl;
   }
 
+  const cleanPlate = plateNumber.replace(/\s+/g, '');
   const separator = baseUrl.includes('?') ? '&' : '?';
-  return `${baseUrl}${separator}plate=${encodeURIComponent(plateNumber)}`;
+  return `${baseUrl}${separator}plate=${encodeURIComponent(cleanPlate)}`;
 }
 
 function buildFeedbackUrl({ vehicleType = 'Saloon', customerId, plate, orderId }) {
@@ -40,7 +42,7 @@ function buildFeedbackUrl({ vehicleType = 'Saloon', customerId, plate, orderId }
   const params = new URLSearchParams();
 
   if (customerId) params.append('customer_id', customerId);
-  if (plate) params.append('plate', plate);
+  if (plate) params.append('plate', plate.replace(/\s+/g, ''));
   if (orderId) params.append('order_id', orderId);
 
   return params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
@@ -61,7 +63,7 @@ function buildPaymentUrl({ vehicleType = 'Saloon', plate, orderId }) {
   const baseUrl = (isFourByFour(vehicleType) ? fourByFourBase : saloonBase) + '/payment';
 
   const params = new URLSearchParams();
-  if (plate) params.append('plate', plate);
+  if (plate) params.append('plate', plate.replace(/\s+/g, ''));
   if (orderId) params.append('order_id', orderId);
 
   return `${baseUrl}?${params.toString()}`;
@@ -84,7 +86,13 @@ function formatPhoneNumber(rawPhone) {
     return `+${digits.slice(2)}`;
   }
 
-  const defaultCode = process.env.RESON8_DEFAULT_COUNTRY_CODE || '+94';
+  const defaultCode = process.env.RESON8_DEFAULT_COUNTRY_CODE || '+971';
+  const defaultCodeDigits = defaultCode.replace(/\D/g, '');
+
+  if (digits.startsWith(defaultCodeDigits)) {
+    return `+${digits}`;
+  }
+
   if (digits.startsWith('0')) {
     return `${defaultCode}${digits.slice(1)}`;
   }
@@ -95,48 +103,105 @@ function formatPhoneNumber(rawPhone) {
 function parsePlateComponents(plateStr) {
   if (!plateStr) return { plateCode: '', emirate: '', plateNumber: '' };
   
-  const cleanStr = plateStr.trim().replace(/\s+/g, ' ');
+  // Clean string: uppercase, remove special chars, normalize multiple spaces to single space
+  const cleanStr = plateStr.trim().toUpperCase().replace(/\s+/g, ' ');
+  
   const emiratesList = [
-    'dubai',
-    'abu dhabi',
-    'sharjah',
-    'ajman',
-    'umm al quwain',
-    'ras al khaimah',
-    'fujairah'
+    { name: 'Abu Dhabi', keywords: ['ABUDHABI', 'ABU DHABI', 'AUH'] },
+    { name: 'Dubai', keywords: ['DUBAI', 'DXB'] },
+    { name: 'Sharjah', keywords: ['SHARJAH', 'SHJ'] },
+    { name: 'Ajman', keywords: ['AJMAN', 'AJM'] },
+    { name: 'Umm Al Quwain', keywords: ['UMMALQUWAIN', 'UMM AL QUWAIN', 'UAQ'] },
+    { name: 'Ras Al Khaimah', keywords: ['RASALKHAIMAH', 'RAS AL KHAIMAH', 'RAK'] },
+    { name: 'Fujairah', keywords: ['FUJAIRAH', 'FUJ'] }
   ];
   
   let detectedEmirate = '';
-  let remainingStr = cleanStr;
+  let tempStr = cleanStr;
   
-  for (const emirate of emiratesList) {
-    const regex = new RegExp(`\\b${emirate}\\b`, 'i');
-    if (regex.test(cleanStr)) {
-      detectedEmirate = emirate.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-      remainingStr = cleanStr.replace(regex, '').trim().replace(/\s+/g, ' ');
-      break;
+  // 1. Find and remove Emirate name from the string
+  for (const emirateObj of emiratesList) {
+    let found = false;
+    for (const keyword of emirateObj.keywords) {
+      // Try with word boundary or exact match
+      const regexSpaced = new RegExp(`\\b${keyword}\\b`, 'i');
+      if (regexSpaced.test(tempStr)) {
+        detectedEmirate = emirateObj.name;
+        tempStr = tempStr.replace(regexSpaced, '').trim();
+        found = true;
+        break;
+      }
+      // Try contiguous match (no spaces)
+      const cleanTempStr = tempStr.replace(/\s+/g, '');
+      if (cleanTempStr.includes(keyword)) {
+        detectedEmirate = emirateObj.name;
+        const idx = cleanTempStr.indexOf(keyword);
+        const partBefore = cleanTempStr.substring(0, idx);
+        const partAfter = cleanTempStr.substring(idx + keyword.length);
+        tempStr = (partBefore + ' ' + partAfter).trim();
+        found = true;
+        break;
+      }
     }
+    if (found) break;
   }
   
-  const parts = remainingStr.split(' ').filter(Boolean);
+  tempStr = tempStr.replace(/\s+/g, ' ').trim();
+  
   let plateCode = '';
   let plateNumber = '';
+
+  // 2. Parse remaining string to isolate Plate Number and Plate Code
+  // Split remaining string into words
+  const words = tempStr.split(' ').filter(Boolean);
   
-  if (parts.length >= 2) {
-    plateCode = parts[0];
-    plateNumber = parts[parts.length - 1];
-  } else if (parts.length === 1) {
-    const part = parts[0];
-    const match = part.match(/^([A-Za-z]+)?([0-9]+)$/);
-    if (match) {
-      plateCode = match[1] || '';
-      plateNumber = match[2];
+  if (words.length === 1) {
+    const singleWord = words[0];
+    const matchLettersDigits = singleWord.match(/^([A-Z]+)([0-9]+)$/);
+    if (matchLettersDigits) {
+      plateCode = matchLettersDigits[1];
+      plateNumber = matchLettersDigits[2];
     } else {
-      plateNumber = part;
+      if (singleWord.length > 5) {
+        plateNumber = singleWord.slice(-5);
+        plateCode = singleWord.slice(0, -5);
+      } else {
+        plateNumber = singleWord;
+        plateCode = '';
+      }
+    }
+  } else if (words.length >= 2) {
+    const numericWords = words.filter(w => /^[0-9]+$/.test(w));
+    const alphaWords = words.filter(w => /^[A-Z]+$/.test(w));
+    
+    if (numericWords.length >= 1) {
+      // Sort numeric words by length descending (longest represents plate number, shorter represents plate code)
+      numericWords.sort((a, b) => b.length - a.length);
+      
+      plateNumber = numericWords[0];
+      
+      if (numericWords.length >= 2) {
+        plateCode = numericWords[1];
+      } else if (alphaWords.length >= 1) {
+        plateCode = alphaWords[0];
+      }
     }
   }
   
-  return { plateCode, emirate: detectedEmirate, plateNumber };
+  // Heuristic: Default Emirate if not matched yet
+  if (!detectedEmirate) {
+    if (plateCode && /^[0-9]+$/.test(plateCode)) {
+      detectedEmirate = 'Abu Dhabi';
+    } else if (plateCode && /^[A-Z]+$/.test(plateCode)) {
+      detectedEmirate = 'Dubai';
+    }
+  }
+  
+  return { 
+    plateCode: plateCode.toUpperCase().trim(), 
+    emirate: detectedEmirate, 
+    plateNumber: plateNumber.trim() 
+  };
 }
 
 module.exports = {

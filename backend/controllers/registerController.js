@@ -122,6 +122,13 @@ const getRegisterReport = asyncHandler(async (req, res) => {
   );
   const otherSales = parseFloat(otherSalesRows[0].total);
 
+  // Query Free Washes original amount
+  const [freeWashRows] = await pool.query(
+    'SELECT COALESCE(SUM(o.discount), 0) as total FROM payments p INNER JOIN orders o ON p.order_id = o.id WHERE p.created_at >= ? AND p.created_at <= ? AND p.method = "free" AND p.status = "completed"',
+    [openedAt, closedAt]
+  );
+  const freeWashAmount = parseFloat(freeWashRows[0].total);
+
   // Query Credit Sales
   const [creditSalesRows] = await pool.query(
     'SELECT COALESCE(SUM(amount), 0) as total FROM customer_credits WHERE created_at >= ? AND created_at <= ?',
@@ -151,8 +158,8 @@ const getRegisterReport = asyncHandler(async (req, res) => {
   const cashExpenses = parseFloat(cashExpensesRows[0].total);
 
   // Calculate Total Sales
-  // Formula: Cash + Card + Bank Transfer + Cheque + Other Payments + (Credit Sales - Credit Recovery) - Sales Return (Sales Return is 0)
-  const totalSales = totalCashPayments + totalCardPayments + bankSales + chequeSales + otherSales + (creditSales - creditRecoveries);
+  // Formula: Cash + Card + Bank Transfer + Cheque + Other Payments + (Credit Sales - Credit Recovery) + Free Wash Amount - Sales Return (Sales Return is 0)
+  const totalSales = totalCashPayments + totalCardPayments + bankSales + chequeSales + otherSales + (creditSales - creditRecoveries) + freeWashAmount;
 
   // Amount in Cash Drawer
   // Formula: Opening Balance + Cash Payments - Cash Expenses
@@ -183,8 +190,7 @@ const getRegisterReport = asyncHandler(async (req, res) => {
       other_payments: otherSales,
       credit_sales: creditSales,
       credit_sale_recovery: creditRecoveries,
-      delivery_sales: 0.00,
-      delivery_sale_recovery: 0.00,
+      free_wash_amount: freeWashAmount,
       sale_return: 0.00,
       total_expense: totalExpenses,
       cash_expense: cashExpenses,
@@ -212,6 +218,33 @@ const closeRegister = asyncHandler(async (req, res) => {
   }
 
   const register = rows[0];
+
+  // Check for any pending or processing saloon or 4x4 vehicles (excluding VIP) on the date when the register session was opened
+  const [pendingVehicles] = await pool.query(
+    `SELECT COUNT(*) as count 
+     FROM orders o
+     WHERE o.status IN ('pending', 'processing') 
+       AND o.vip_booking_id IS NULL
+       AND NOT EXISTS (
+         SELECT 1 
+         FROM order_items oi 
+         JOIN products p ON oi.product_id = p.id 
+         WHERE oi.order_id = o.id AND (p.category = 'VIP' OR LOWER(p.name) LIKE '%vip%')
+       )
+       AND DATE(o.created_at) = DATE(?)
+       AND (
+         EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
+         OR
+         EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
+       )`,
+    [register.opened_at]
+  );
+  if (pendingVehicles[0].count > 0) {
+    return res.status(400).json({ 
+      message: `Cannot close register. There are still ${pendingVehicles[0].count} pending/processing vehicles that must be completed first.` 
+    });
+  }
+
   const openedAt = register.opened_at;
   const closedAt = new Date();
 
@@ -246,6 +279,7 @@ const closeRegister = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Register closed successfully',
+    register_id: register.id,
     closing_balance: amountInCashDrawer,
     closed_amount: parseFloat(closed_amount)
   });

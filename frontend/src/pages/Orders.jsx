@@ -6,12 +6,41 @@ import toast from 'react-hot-toast';
 const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState({ status: '', payment_status: '', date: '', service_time: '' });
-  const [activeTab, setActiveTab] = useState('all'); // 'all', 'saloon', '4x4'
+
+  const getTodayDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getInitialFilter = () => {
+    const saved = sessionStorage.getItem('orders_filter');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return { status: '', payment_status: '', date: getTodayDateString(), service_time: '' };
+  };
+
+  const getInitialActiveTab = () => {
+    const saved = sessionStorage.getItem('orders_active_tab');
+    return saved || 'all';
+  };
+
+  const [filter, setFilter] = useState(getInitialFilter());
+  const [activeTab, setActiveTab] = useState(getInitialActiveTab());
 
   useEffect(() => {
+    sessionStorage.setItem('orders_filter', JSON.stringify(filter));
     fetchOrders();
   }, [filter]);
+
+  useEffect(() => {
+    sessionStorage.setItem('orders_active_tab', activeTab);
+  }, [activeTab]);
 
   const fetchOrders = async () => {
     try {
@@ -51,7 +80,7 @@ const Orders = () => {
   };
 
   const filteredOrders = orders.filter((order) => {
-    const hasProducts = order.items && order.items.some(item => item.category === 'Accessories' || item.category === 'Spare Parts');
+    const hasProducts = order.items && order.items.some(item => item.category === 'Accessories' || item.category === 'Spare Parts' || item.category === 'Car Freshner' || item.category === 'Acce');
     if (activeTab === 'products') return hasProducts;
     if (activeTab === 'all') return true;
     
@@ -120,7 +149,7 @@ const Orders = () => {
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          Product Orders ({orders.filter(o => o.items && o.items.some(i => i.category === 'Accessories' || i.category === 'Spare Parts')).length})
+          Product Orders ({orders.filter(o => o.items && o.items.some(i => i.category === 'Accessories' || i.category === 'Spare Parts' || i.category === 'Car Freshner' || i.category === 'Acce')).length})
         </button>
       </div>
 
@@ -160,19 +189,19 @@ const Orders = () => {
             onChange={(e) => setFilter({ ...filter, date: e.target.value })}
             className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
-          {filter.date && (
+          {filter.date !== getTodayDateString() && (
             <button
-              onClick={() => setFilter({ ...filter, date: '' })}
+              onClick={() => setFilter({ ...filter, date: getTodayDateString() })}
               className="px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Clear date filter"
+              title="Reset to today"
             >
               ✕
             </button>
           )}
         </div>
-        {(filter.status || filter.payment_status || filter.service_time || filter.date) && (
+        {(filter.status || filter.payment_status || filter.service_time || filter.date !== getTodayDateString()) && (
           <button
-            onClick={() => setFilter({ status: '', payment_status: '', date: '', service_time: '' })}
+            onClick={() => setFilter({ status: '', payment_status: '', date: getTodayDateString(), service_time: '' })}
             className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors text-sm"
           >
             Clear All Filters
@@ -180,9 +209,9 @@ const Orders = () => {
         )}
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <div className="bg-white rounded-lg shadow overflow-auto max-h-[calc(100vh-260px)]">
         <table className="w-full min-w-[1200px]">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
@@ -291,7 +320,9 @@ const Orders = () => {
                           </span>
                         )
                       ) : (
-                        <span className={`px-2 py-1 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                            order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                            order.payment_status === 'free' ? 'bg-green-100 text-green-800 font-semibold uppercase' :
                             order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
                               'bg-red-100 text-red-800'
                           }`}>
@@ -322,7 +353,7 @@ const Orders = () => {
                   <p className="mt-2 text-gray-600 font-medium">No orders found for this selection</p>
                   <button
                     onClick={() => {
-                      setFilter({ status: '', payment_status: '', date: '', service_time: '' });
+                      setFilter({ status: '', payment_status: '', date: getTodayDateString(), service_time: '' });
                       setActiveTab('all');
                     }}
                     className="mt-4 text-primary-600 hover:underline text-sm font-bold"

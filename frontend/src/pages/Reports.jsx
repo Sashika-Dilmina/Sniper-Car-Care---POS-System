@@ -2,17 +2,23 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const Reports = () => {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabParam || 'daily');
+  const [activeTab, setActiveTab] = useState(user?.role === 'admin' ? (tabParam || 'daily') : 'registers');
 
   useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
+    if (user?.role === 'admin') {
+      if (tabParam) {
+        setActiveTab(tabParam);
+      }
+    } else {
+      setActiveTab('registers');
     }
-  }, [tabParam]);
+  }, [tabParam, user]);
 
   // Daily Summary State
   const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
@@ -55,11 +61,70 @@ const Reports = () => {
   const [plReport, setPlReport] = useState(null);
   const [plLoading, setPlLoading] = useState(false);
 
+  // Stock Report State
+  const [stockStartDate, setStockStartDate] = useState('');
+  const [stockEndDate, setStockEndDate] = useState('');
+  const [stockReport, setStockReport] = useState(null);
+  const [stockLoading, setStockLoading] = useState(false);
+
   // Cash Register Sessions State
   const [registers, setRegisters] = useState([]);
   const [loadingRegisters, setLoadingRegisters] = useState(false);
   const [selectedRegisterReport, setSelectedRegisterReport] = useState(null);
   const [loadingRegisterReport, setLoadingRegisterReport] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const printRegisterId = searchParams.get('print_register_id');
+
+  const formatRegisterDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    
+    const day = d.getDate();
+    let suffix = 'th';
+    if (day === 1 || day === 21 || day === 31) suffix = 'st';
+    else if (day === 2 || day === 22) suffix = 'nd';
+    else if (day === 3 || day === 23) suffix = 'rd';
+    
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    
+    let hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    
+    return `${day}${suffix} ${month}, ${year} ${hours}:${minutes} ${ampm}`;
+  };
+
+  useEffect(() => {
+    if (printRegisterId) {
+      fetchRegisterReport(printRegisterId);
+    }
+  }, [printRegisterId]);
+
+  useEffect(() => {
+    if (printRegisterId && selectedRegisterReport && selectedRegisterReport.register_id === parseInt(printRegisterId)) {
+      const handleAfterPrint = () => {
+        const newParams = new URLSearchParams(window.location.search);
+        if (newParams.has('print_register_id')) {
+          newParams.delete('print_register_id');
+          setSearchParams(newParams);
+        }
+        window.removeEventListener('afterprint', handleAfterPrint);
+      };
+
+      const timer = setTimeout(() => {
+        window.addEventListener('afterprint', handleAfterPrint);
+        window.print();
+      }, 1000);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('afterprint', handleAfterPrint);
+      };
+    }
+  }, [selectedRegisterReport, printRegisterId, setSearchParams]);
 
   const fetchRegistersList = async () => {
     setLoadingRegisters(true);
@@ -94,9 +159,13 @@ const Reports = () => {
   useEffect(() => {
     if (activeTab === 'registers') {
       fetchRegistersList();
-      setSelectedRegisterReport(null);
+      if (!printRegisterId) {
+        setSelectedRegisterReport(null);
+      }
+    } else if (activeTab === 'stock') {
+      fetchStockReport();
     }
-  }, [activeTab]);
+  }, [activeTab, printRegisterId]);
 
   // Daily Business Summary
   const fetchDailySummary = async () => {
@@ -227,6 +296,23 @@ const Reports = () => {
     }
   };
 
+  // Stock Report
+  const fetchStockReport = async () => {
+    setStockLoading(true);
+    try {
+      let url = '/api/analytics/reports/stock';
+      if (stockStartDate && stockEndDate) {
+        url += `?start_date=${stockStartDate}&end_date=${stockEndDate}`;
+      }
+      const response = await axios.get(url);
+      setStockReport(response.data.stock || []);
+    } catch (err) {
+      toast.error('Failed to generate stock report');
+    } finally {
+      setStockLoading(false);
+    }
+  };
+
   // Excel Download Functions
   const downloadDailyExcel = async () => {
     try {
@@ -335,16 +421,126 @@ const Reports = () => {
     }
   };
 
-  const tabs = [
+  const tabs = user?.role === 'admin' ? [
     { id: 'daily', label: 'Daily Business Summary' },
-    { id: 'business_summary', label: 'Business Summary Report' },
+    { id: 'business_summary', label: 'Business Summary Report (P&L)' },
+    { id: 'stock', label: 'Stock Report' },
     { id: 'payment', label: 'Payment Type Report' },
     { id: 'customer', label: 'Customer Wise Report' },
     { id: 'supplier', label: 'Supplier Payment' },
     { id: 'purchases', label: 'Purchase of Items' },
     { id: 'credit', label: 'Credit Report' },
     { id: 'registers', label: 'Cash Register Sessions' },
+  ] : [
+    { id: 'registers', label: 'Cash Register Sessions' },
   ];
+
+  const handleWhatsAppShare = async () => {
+    setSharing(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('tab', activeTab);
+      
+      if (activeTab === 'daily') {
+        params.append('date', dailyDate);
+      } else if (activeTab === 'business_summary') {
+        if (!plStartDate || !plEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', plStartDate);
+        params.append('end_date', plEndDate);
+      } else if (activeTab === 'stock') {
+        if (stockStartDate && stockEndDate) {
+          params.append('start_date', stockStartDate);
+          params.append('end_date', stockEndDate);
+        }
+      } else if (activeTab === 'payment') {
+        if (!paymentStartDate || !paymentEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', paymentStartDate);
+        params.append('end_date', paymentEndDate);
+      } else if (activeTab === 'customer') {
+        if (!customerStartDate || !customerEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', customerStartDate);
+        params.append('end_date', customerEndDate);
+      } else if (activeTab === 'supplier') {
+        if (!supplierStartDate || !supplierEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', supplierStartDate);
+        params.append('end_date', supplierEndDate);
+      } else if (activeTab === 'purchases') {
+        if (!purchaseStartDate || !purchaseEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', purchaseStartDate);
+        params.append('end_date', purchaseEndDate);
+      } else if (activeTab === 'credit') {
+        if (creditStartDate && creditEndDate) {
+          params.append('start_date', creditStartDate);
+          params.append('end_date', creditEndDate);
+        }
+      } else if (activeTab === 'registers') {
+        if (!selectedRegisterReport) {
+          toast.error('No active register session report opened');
+          setSharing(false);
+          return;
+        }
+        params.append('register_id', selectedRegisterReport.register_id);
+      }
+
+      const response = await axios.get(`/api/analytics/reports/pdf?${params.toString()}`);
+      if (response.data.success && response.data.pdfUrl) {
+        const backendBaseUrl = axios.defaults.baseURL || window.location.origin;
+        const fullPdfUrl = `${backendBaseUrl}${response.data.pdfUrl}`;
+        
+        try {
+          // Fetch the PDF blob to create a File object
+          const fileResponse = await fetch(fullPdfUrl);
+          const blob = await fileResponse.blob();
+          const file = new File([blob], `report-${activeTab}-${Date.now()}.pdf`, { type: 'application/pdf' });
+          
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Sniper Car Care Report',
+              text: 'Please find the attached PDF report.'
+            });
+            toast.success('Report PDF shared successfully!');
+            return;
+          }
+        } catch (shareErr) {
+          console.warn('Native sharing failed, falling back to link:', shareErr);
+        }
+        
+        // Fallback to text link if navigator.share fails or is not supported
+        const message = `Check out the Sniper Car Care report: ${fullPdfUrl}`;
+        const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
+        toast.success('Opened PDF report link in browser.');
+      } else {
+        toast.error('Failed to generate report PDF');
+      }
+    } catch (error) {
+      console.error('Error sharing PDF:', error);
+      toast.error('Failed to generate and share report PDF');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -352,6 +548,10 @@ const Reports = () => {
 
   const printStyle = `
     @media print {
+      @page {
+        size: auto;
+        margin: 10mm !important;
+      }
       aside, nav, .no-print, button, input, select, header {
         display: none !important;
       }
@@ -365,6 +565,12 @@ const Reports = () => {
       main {
         padding: 0 !important;
         margin: 0 !important;
+      }
+      .print-card {
+        margin: 0 !important;
+        padding: 0 !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
       }
       .print-full-width {
         width: 100% !important;
@@ -402,17 +608,37 @@ const Reports = () => {
   return (
     <div className="space-y-6">
       <style>{printStyle}</style>
-      <div className="flex justify-between items-center no-print">
-        <h1 className="text-3xl font-bold text-gray-800">Reports</h1>
-        <button
-          onClick={handlePrint}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm font-semibold"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-          </svg>
-          Print Report
-        </button>
+      
+      {/* Screen layout content (Hidden during printing) */}
+      <div className="space-y-6 no-print">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-800">Reports</h1>
+          <div className="flex gap-2">
+            <button
+              onClick={handleWhatsAppShare}
+              disabled={sharing}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm font-semibold disabled:opacity-50"
+            >
+              {sharing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Generating PDF...
+                </>
+              ) : (
+                <>💬 Share via WhatsApp</>
+              )}
+            </button>
+            <button
+              onClick={handlePrint}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm font-semibold"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Report
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -470,15 +696,15 @@ const Reports = () => {
 
           {dailyReport && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Orders</p>
                   <p className="text-2xl font-bold">{dailyReport.orders?.total_orders || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Revenue</p>
+                  <p className="text-sm text-gray-600">Total Sales</p>
                   <p className="text-2xl font-bold text-primary-600">
-                    AED {parseFloat(dailyReport.orders?.total_revenue || 0).toLocaleString()}
+                    AED {parseFloat(dailyReport.orders?.total_sales !== undefined ? dailyReport.orders.total_sales : dailyReport.orders?.total_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
@@ -486,9 +712,21 @@ const Reports = () => {
                   <p className="text-2xl font-bold">{dailyReport.services?.total_services || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Services Revenue</p>
+                  <p className="text-sm text-gray-600">Services Sales</p>
                   <p className="text-2xl font-bold text-green-600">
                     AED {parseFloat(dailyReport.services?.services_revenue || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">Saloon Free Washes</p>
+                  <p className="text-2xl font-bold text-indigo-600">
+                    AED {parseFloat(dailyReport.orders?.saloon_free_washes_value || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">4x4 Free Washes</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    AED {parseFloat(dailyReport.orders?.four_wheel_free_washes_value || 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -948,83 +1186,151 @@ const Reports = () => {
 
           {plReport && plReport.summary && (
             <div className="space-y-6">
-              {/* Financial Metrics Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Sales Revenue</span>
-                  <h3 className="text-3xl font-black text-blue-600 mt-2">
-                    AED {plReport.summary.total_sales.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </h3>
-                  <span className="text-xs text-gray-400 mt-4">{plReport.summary.sales_count} sales transactions</span>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Purchases</span>
-                  <h3 className="text-3xl font-black text-orange-600 mt-2">
-                    AED {plReport.summary.total_purchases.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </h3>
-                  <span className="text-xs text-gray-400 mt-4">{plReport.summary.purchases_count} purchase orders</span>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-                  <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Expenses</span>
-                  <h3 className="text-3xl font-black text-red-500 mt-2">
-                    AED {plReport.summary.total_expenses.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </h3>
-                  <span className="text-xs text-gray-400 mt-4">{plReport.summary.expenses_count} expense entries</span>
-                </div>
-                <div className={`p-6 rounded-2xl shadow-sm border flex flex-col justify-between ${
-                  plReport.summary.net_profit >= 0 
-                    ? 'bg-green-50/50 border-green-200 text-green-900' 
-                    : 'bg-red-50/50 border-red-200 text-red-900'
-                }`}>
-                  <span className="text-sm font-bold uppercase tracking-wider text-gray-500">Net Profit / Loss</span>
-                  <h3 className={`text-3xl font-black mt-2 ${
-                    plReport.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    AED {plReport.summary.net_profit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </h3>
-                  <span className="text-xs font-semibold mt-4">
-                    {plReport.summary.net_profit >= 0 ? '🟢 Profit generated' : '🔴 Net loss in period'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Secondary Details (Credits Summary) */}
-              <div className="bg-gray-50 p-4 rounded-xl border flex justify-between items-center text-sm">
-                <div>
-                  <h4 className="font-bold text-gray-800">Outstanding Customer Credit Ledger</h4>
-                  <p className="text-xs text-gray-500 mt-0.5">Total credit currently active (not yet paid by customers)</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-black text-red-600">
-                    AED {plReport.summary.outstanding_credit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              {/* Restructured Business Summary Printable Template Sheet */}
+              <div className="max-w-3xl mx-auto bg-white p-8 border rounded-2xl shadow-sm space-y-6 text-black print-full-width">
+                {/* Header */}
+                <div className="text-center space-y-1 border-b pb-6">
+                  <h2 className="text-2xl font-black uppercase tracking-wide">Business Summary Report</h2>
+                  <p className="text-sm font-bold text-gray-600">Business Location: Main Branch</p>
+                  <p className="text-xs text-gray-500 font-mono">
+                    Date Range: {plStartDate ? plStartDate.split('-').reverse().join('-') : ''} TO {plEndDate ? plEndDate.split('-').reverse().join('-') : ''}
                   </p>
-                  <p className="text-xs font-bold text-gray-400">{plReport.summary.outstanding_credit_count} active credits</p>
+                </div>
+
+                {/* Report Body */}
+                <div className="space-y-6 text-sm">
+                  
+                  {/* Sales Details Section */}
+                  <div className="space-y-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Sales Details :</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Total Sales</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.total_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Sales Return</span>
+                        <span className="font-mono text-gray-900">0.000</span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t border-b py-1 my-1">
+                        <span className="text-gray-900">Net Sales</span>
+                        <span className="font-mono text-indigo-700 font-extrabold">{parseFloat(plReport.summary.net_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">Cash Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.cash_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">Card Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.card_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">Credit Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.credit_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">Bank Transfer Sales</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.bank_transfer_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t pt-1.5 mt-2">
+                        <span className="text-gray-700">Cost of Goods / Services</span>
+                        <span className="font-mono text-red-600 font-bold">{parseFloat(plReport.summary.total_cost || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between font-extrabold border-t pt-1.5 mt-2">
+                        <span className="text-gray-900">Total Profit</span>
+                        <span className={`font-mono text-base ${plReport.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {parseFloat(plReport.summary.net_profit || 0).toFixed(3)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Credit Recovery Section */}
+                  <div className="space-y-2 pt-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Credit Recovery :</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Cash Recovery</span>
+                        <span className="font-mono text-gray-900 font-semibold">{parseFloat(plReport.summary.cash_recovery || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Card Recovery</span>
+                        <span className="font-mono text-gray-900 font-semibold">{parseFloat(plReport.summary.card_recovery || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Bank Transfer</span>
+                        <span className="font-mono text-gray-900 font-semibold">{parseFloat(plReport.summary.bank_recovery || 0).toFixed(3)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Purchase Details Section */}
+                  <div className="space-y-2 pt-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Purchase Details:</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Total Purchase</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.total_purchases || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Purchase Return</span>
+                        <span className="font-mono text-gray-900">0.000</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expense Details Section */}
+                  <div className="space-y-2 pt-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Expense Details:</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Total Expense</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.total_expenses || 0).toFixed(3)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Other Activities Section */}
+                  <div className="space-y-2 pt-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Other Activities:</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Free Washes Value</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.free_wash_total || 0).toFixed(3)} ({plReport.summary.free_wash_count || 0} washes)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Print Footer */}
+                <div className="hidden print:block pt-12 text-center text-[10px] text-gray-400 border-t border-dashed">
+                  Thank you for choosing Sniper Car Care POS System.
                 </div>
               </div>
 
-              {/* Categorized breakdown sections */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-                
+              {/* Categorized breakdowns displayed on screen only */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 no-print border-t">
                 {/* Purchases by Category */}
                 <div className="space-y-3">
-                  <h3 className="text-lg font-black text-gray-800 border-b pb-2">📦 Purchases by Category</h3>
+                  <h3 className="text-sm font-extrabold text-gray-800 border-b pb-2 uppercase tracking-wide">📦 Purchases by Category</h3>
                   {plReport.purchases_by_category && plReport.purchases_by_category.length > 0 ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left">
+                      <table className="w-full text-left text-xs">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Category</th>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Count</th>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Cost</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500">Category</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500 text-center">Count</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500 text-right">Total Cost</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y">
+                        <tbody className="divide-y text-xs">
                           {plReport.purchases_by_category.map((cat, idx) => (
                             <tr key={idx} className="hover:bg-gray-50/50">
-                              <td className="px-4 py-2 text-sm font-semibold text-gray-700 capitalize">{cat.category}</td>
-                              <td className="px-4 py-2 text-sm text-center font-mono text-gray-600">{cat.count}</td>
-                              <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
-                                AED {parseFloat(cat.total).toFixed(2)}
+                              <td className="px-4 py-2 font-semibold text-gray-700 capitalize">{cat.category}</td>
+                              <td className="px-4 py-2 text-center font-mono text-gray-600">{cat.count}</td>
+                              <td className="px-4 py-2 font-bold text-right text-gray-900">
+                                AED {parseFloat(cat.total).toFixed(3)}
                               </td>
                             </tr>
                           ))}
@@ -1040,24 +1346,24 @@ const Reports = () => {
 
                 {/* Expenses by Category */}
                 <div className="space-y-3">
-                  <h3 className="text-lg font-black text-gray-800 border-b pb-2">💸 Expenses by Category</h3>
+                  <h3 className="text-sm font-extrabold text-gray-800 border-b pb-2 uppercase tracking-wide">💸 Expenses by Category</h3>
                   {plReport.expenses_by_category && plReport.expenses_by_category.length > 0 ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left">
+                      <table className="w-full text-left text-xs">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Category</th>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Count</th>
-                            <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Cost</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500">Category</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500 text-center">Count</th>
+                            <th className="px-4 py-2 text-[10px] font-bold uppercase text-gray-500 text-right">Total Cost</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y">
+                        <tbody className="divide-y text-xs">
                           {plReport.expenses_by_category.map((cat, idx) => (
                             <tr key={idx} className="hover:bg-gray-50/50">
-                              <td className="px-4 py-2 text-sm font-semibold text-gray-700 capitalize">{cat.category}</td>
-                              <td className="px-4 py-2 text-sm text-center font-mono text-gray-600">{cat.count}</td>
-                              <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
-                                AED {parseFloat(cat.total).toFixed(2)}
+                              <td className="px-4 py-2 font-semibold text-gray-700 capitalize">{cat.category}</td>
+                              <td className="px-4 py-2 text-center font-mono text-gray-600">{cat.count}</td>
+                              <td className="px-4 py-2 font-bold text-right text-gray-900">
+                                AED {parseFloat(cat.total).toFixed(3)}
                               </td>
                             </tr>
                           ))}
@@ -1070,7 +1376,169 @@ const Reports = () => {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
+      {/* Stock Report */}
+      {activeTab === 'stock' && (
+        <div className="bg-white p-6 rounded-lg shadow space-y-6">
+          <div className="flex justify-between items-center border-b pb-4 no-print">
+            <h2 className="text-xl font-bold text-gray-800">Stock Inventory Report</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={handleWhatsAppShare}
+                disabled={sharing}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition flex items-center gap-2 text-xs disabled:opacity-50"
+              >
+                {sharing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>💬 Share via WhatsApp</>
+                )}
+              </button>
+              <button
+                onClick={handlePrint}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition flex items-center gap-2 text-xs"
+              >
+                🖨️ Print Stock Report
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-end bg-gray-50 p-4 rounded-xl border no-print">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date (for sales count)</label>
+              <input
+                type="date"
+                value={stockStartDate}
+                onChange={(e) => setStockStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg bg-white"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date (for sales count)</label>
+              <input
+                type="date"
+                value={stockEndDate}
+                onChange={(e) => setStockEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg bg-white"
+              />
+            </div>
+            <button
+              onClick={fetchStockReport}
+              disabled={stockLoading}
+              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-bold"
+            >
+              {stockLoading ? 'Generating...' : 'Generate Report'}
+            </button>
+          </div>
+
+          {stockReport && (
+            <div className="space-y-6 print-full-width">
+              {/* Report Header for printing */}
+              <div className="hidden print:block text-center border-b pb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <h2 className="text-base font-bold text-gray-650">Stock Inventory & Sales Report</h2>
+                <p className="text-xs text-gray-450 mt-1">
+                  Sales Period: {stockStartDate && stockEndDate ? `${stockStartDate} to ${stockEndDate}` : 'All Time'}
+                </p>
+                <p className="text-xs text-gray-450">Generated At: {new Date().toLocaleString()}</p>
+              </div>
+
+              {/* Summary Metrics */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl text-center">
+                  <span className="text-xs text-gray-500 uppercase font-black">Total Stock Items</span>
+                  <p className="text-2xl font-black text-blue-700 mt-1">
+                    {stockReport.reduce((sum, item) => sum + parseInt(item.current_stock || 0), 0)}
+                  </p>
+                </div>
+                <div className="bg-red-50/50 border border-red-100 p-4 rounded-xl text-center">
+                  <span className="text-xs text-gray-500 uppercase font-black">Out of Stock Items</span>
+                  <p className="text-2xl font-black text-red-700 mt-1">
+                    {stockReport.filter(item => parseInt(item.current_stock || 0) === 0).length}
+                  </p>
+                </div>
+                <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl text-center">
+                  <span className="text-xs text-gray-500 uppercase font-black">Low Stock Items (≤5)</span>
+                  <p className="text-2xl font-black text-amber-700 mt-1">
+                    {stockReport.filter(item => parseInt(item.current_stock || 0) <= 5 && parseInt(item.current_stock || 0) > 0).length}
+                  </p>
+                </div>
+                <div className="bg-green-50/50 border border-green-100 p-4 rounded-xl text-center">
+                  <span className="text-xs text-gray-500 uppercase font-black">Total Units Sold (Period)</span>
+                  <p className="text-2xl font-black text-green-700 mt-1">
+                    {stockReport.reduce((sum, item) => sum + parseInt(item.quantity_sold || 0), 0)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Table of Details */}
+              <div className="overflow-x-auto border rounded-xl shadow-sm bg-white">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 border-b font-bold text-gray-700">
+                      <th className="p-3">Product ID</th>
+                      <th className="p-3">Product Name</th>
+                      <th className="p-3">Category</th>
+                      <th className="p-3 text-right">Cost Price (AED)</th>
+                      <th className="p-3 text-right">Selling Price (AED)</th>
+                      <th className="p-3 text-right">Qty Sold</th>
+                      <th className="p-3 text-right">Qty Remaining (Stock)</th>
+                      <th className="p-3 text-center">Status</th>
+                      <th className="p-3 text-right">Shortage Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {stockReport.length > 0 ? (
+                      stockReport.map((item) => (
+                        <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="p-3 font-mono text-gray-500">#{item.id}</td>
+                          <td className="p-3 font-bold text-gray-800">{item.name}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-slate-100 text-slate-700">
+                              {item.category}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right font-mono text-gray-650">
+                            {parseFloat(item.cost_price || 0).toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right font-mono text-gray-900 font-semibold">
+                            {parseFloat(item.selling_price || 0).toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right font-semibold text-green-600">{item.quantity_sold}</td>
+                          <td className={`p-3 text-right font-extrabold ${parseInt(item.current_stock || 0) === 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                            {item.current_stock}
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
+                              item.stock_status === 'Out of Stock' ? 'bg-red-100 text-red-800' :
+                              item.stock_status === 'Low Stock' ? 'bg-amber-100 text-amber-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {item.stock_status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right font-bold text-red-650">
+                            {item.quantity_short > 0 ? `${item.quantity_short} units` : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="9" className="p-6 text-center text-gray-400">
+                          No stock items registered in the database.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -1277,136 +1745,169 @@ const Reports = () => {
                 >
                   ← Back to Sessions
                 </button>
-                <button
-                  onClick={handlePrint}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
-                >
-                  🖨️ Print Statement
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleWhatsAppShare}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+                  >
+                    💬 Share via WhatsApp
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+                  >
+                    🖨️ Print Statement
+                  </button>
+                </div>
               </div>
-
+              
               {/* Printable Cash Register Report Card */}
-              <div className="print-full-width p-6 border rounded-2xl bg-gray-50/10 space-y-6 text-black">
-                <div className="text-center border-b pb-4">
-                  <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
-                  <p className="text-sm text-gray-650 font-bold">Daily Cash Register Statement</p>
-                  <p className="text-xs text-gray-450 mt-1">Session ID: #{selectedRegisterReport.register_id}</p>
+              <div className="print-full-width mx-auto max-w-3xl p-6 border rounded-2xl bg-white space-y-4 text-black font-mono text-[14px] shadow-sm">
+                <div className="text-center pb-3 border-b border-dashed border-gray-400">
+                  <h2 className="text-sm font-bold uppercase tracking-wider">Register Details</h2>
+                  <p className="text-[10px] text-gray-600 mt-1">
+                    ({formatRegisterDate(selectedRegisterReport.opened_at)} - {selectedRegisterReport.closed_at ? formatRegisterDate(selectedRegisterReport.closed_at) : 'Active Session'})
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div className="text-left">
-                    <p><span className="font-bold text-gray-700">Opened At:</span> {new Date(selectedRegisterReport.opened_at).toLocaleString()}</p>
-                    <p><span className="font-bold text-gray-700">Closed At:</span> {selectedRegisterReport.closed_at ? new Date(selectedRegisterReport.closed_at).toLocaleString() : 'Active Session'}</p>
+                <div className="space-y-2 pt-2">
+                  <div className="flex justify-between">
+                    <span>Opening Balance</span>
+                    <span className="font-semibold">{selectedRegisterReport.opening_balance.toFixed(3)}</span>
                   </div>
-                  <div className="text-right">
-                    <p><span className="font-bold text-gray-700">Status:</span> {selectedRegisterReport.status.toUpperCase()}</p>
+                  <div className="flex justify-between">
+                    <span>Cash Sale</span>
+                    <span>{selectedRegisterReport.cash_payments.sale.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Card Sale</span>
+                    <span>{selectedRegisterReport.card_payments.sale.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Bank Sale</span>
+                    <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Other Sale</span>
+                    <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Credit Sale</span>
+                    <span>{selectedRegisterReport.credit_sales.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Credit Sale Recovery</span>
+                    <span>{selectedRegisterReport.credit_sale_recovery.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Free Washes Amount</span>
+                    <span>{parseFloat(selectedRegisterReport.free_wash_amount || 0).toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Expense</span>
+                    <span>{selectedRegisterReport.total_expense.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t border-dashed pt-1.5 mt-1">
+                    <span>Total Sales</span>
+                    <span>{selectedRegisterReport.total_sales.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Cash In Drawer</span>
+                    <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Difference Amount</span>
+                    <span>
+                      {(selectedRegisterReport.closed_amount !== null
+                        ? selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer
+                        : 0.00
+                      ).toFixed(3)}
+                    </span>
                   </div>
                 </div>
-
-                <table className="w-full text-xs border-collapse mt-4 text-left">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300 bg-gray-100 font-bold">
-                      <th className="p-2">Transaction Type</th>
-                      <th className="text-right p-2">Details</th>
-                      <th className="text-right p-2">Total Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    <tr>
-                      <td className="p-2 font-bold">Starting Cash Balance</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Opening Balance</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.opening_balance.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Cash Sales (POS checkouts)</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">AED {selectedRegisterReport.cash_payments.sale.toFixed(2)}</td>
-                      <td className="p-2 text-right">AED {selectedRegisterReport.cash_payments.sale.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Cash Credit Recoveries</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">AED {selectedRegisterReport.cash_payments.recovery.toFixed(2)}</td>
-                      <td className="p-2 text-right">AED {selectedRegisterReport.cash_payments.recovery.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Cash Expenses</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">-AED {selectedRegisterReport.cash_expense.toFixed(2)}</td>
-                      <td className="p-2 text-right text-red-650">-AED {selectedRegisterReport.cash_expense.toFixed(2)}</td>
-                    </tr>
-                    <tr className="bg-gray-50 font-bold">
-                      <td className="p-2">Expected Cash in Drawer</td>
-                      <td className="p-2 text-right text-gray-555 font-normal">Calculated Cash</td>
-                      <td className="p-2 text-right">AED {selectedRegisterReport.amount_in_cash_drawer.toFixed(2)}</td>
-                    </tr>
-                    {selectedRegisterReport.closed_amount !== null && (
-                      <>
-                        <tr className="font-bold border-t-2">
-                          <td className="p-2">Actual Cash Drawer Count</td>
-                          <td className="p-2 text-right text-gray-550 font-normal">Counted Cash</td>
-                          <td className="p-2 text-right text-blue-700">AED {selectedRegisterReport.closed_amount.toFixed(2)}</td>
-                        </tr>
-                        <tr className="font-bold">
-                          <td className="p-2">Cash Discrepancy (Over/Short)</td>
-                          <td className="p-2 text-right text-gray-555 font-normal">Drawer Variance</td>
-                          <td className={`p-2 text-right ${selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            AED {(selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer).toFixed(2)}
-                          </td>
-                        </tr>
-                      </>
-                    )}
-                    <tr className="border-t-2 bg-gray-150">
-                      <td colSpan="3" className="p-1 font-bold text-[10px] uppercase text-gray-500 text-left">Non-Cash Transactions Summary</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Card Payments (Sales + Recoveries)</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Sale: {selectedRegisterReport.card_payments.sale.toFixed(2)} / Rec: {selectedRegisterReport.card_payments.recovery.toFixed(2)}</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.card_payments.total.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Tap Payments (Apple Pay / Samsung Pay)</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Mobile contactless</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.other_payments.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Bank Transfer Sales</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Bank payments</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.bank_transfer.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2">Cheque Payments</td>
-                      <td className="p-2 text-right text-gray-555 font-normal font-normal">Cheque transactions</td>
-                      <td className="p-2 text-right font-semibold">AED {selectedRegisterReport.cheque_payments.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-bold text-gray-600">Credit Sales (Unpaid)</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">To credit balances</td>
-                      <td className="p-2 text-right text-gray-600 font-semibold">AED {selectedRegisterReport.credit_sales.toFixed(2)}</td>
-                    </tr>
-                    <tr className="font-bold bg-gray-100 border-t-2 text-sm">
-                      <td className="p-2">Total Net Sales Revenue</td>
-                      <td className="p-2 text-right text-gray-550 font-normal">Grand Total</td>
-                      <td className="p-2 text-right">AED {selectedRegisterReport.total_sales.toFixed(2)}</td>
-                    </tr>
-                  </tbody>
-                </table>
 
                 {selectedRegisterReport.notes && (
-                  <div className="mt-4 p-3 border rounded bg-yellow-50 text-xs text-left">
-                    <p className="font-bold text-gray-700">Register Notes:</p>
-                    <p className="text-gray-600 mt-1">{selectedRegisterReport.notes}</p>
+                  <div className="border-t border-dashed pt-2 mt-2 text-[10px] text-gray-600">
+                    <p className="font-bold">Notes:</p>
+                    <p>{selectedRegisterReport.notes}</p>
                   </div>
                 )}
-
-                <div className="mt-12 grid grid-cols-2 gap-8 text-center text-xs">
-                  <div className="border-t pt-2">
-                    <p>Staff Member Signature</p>
-                    <p className="text-gray-400 mt-4">(...................................................)</p>
-                  </div>
-                  <div className="border-t pt-2">
-                    <p>Manager Signature</p>
-                    <p className="text-gray-400 mt-4">(...................................................)</p>
-                  </div>
-                </div>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Printable Cash Register Report Card (Only visible when printing) */}
+      {selectedRegisterReport && (
+        <div className="hidden print:block print-card mx-auto max-w-3xl p-6 border rounded-2xl bg-white space-y-4 text-black font-mono text-[14px] shadow-sm">
+          <div className="text-center pb-3 border-b border-dashed border-gray-400">
+            <h2 className="text-sm font-bold uppercase tracking-wider">Register Details</h2>
+            <p className="text-[10px] text-gray-655 mt-1">
+              ({formatRegisterDate(selectedRegisterReport.opened_at)} - {selectedRegisterReport.closed_at ? formatRegisterDate(selectedRegisterReport.closed_at) : 'Active Session'})
+            </p>
+          </div>
+
+          <div className="space-y-2 pt-2">
+            <div className="flex justify-between">
+              <span>Opening Balance</span>
+              <span className="font-semibold">{selectedRegisterReport.opening_balance.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Cash Sale</span>
+              <span>{selectedRegisterReport.cash_payments.sale.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Card Sale</span>
+              <span>{selectedRegisterReport.card_payments.sale.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Bank Sale</span>
+              <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Other Sale</span>
+              <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Credit Sale</span>
+              <span>{selectedRegisterReport.credit_sales.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Credit Sale Recovery</span>
+              <span>{selectedRegisterReport.credit_sale_recovery.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Free Washes Amount</span>
+              <span>{parseFloat(selectedRegisterReport.free_wash_amount || 0).toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Total Expense</span>
+              <span>{selectedRegisterReport.total_expense.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold border-t border-dashed pt-1.5 mt-1">
+              <span>Total Sales</span>
+              <span>{selectedRegisterReport.total_sales.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Cash In Drawer</span>
+              <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Difference Amount</span>
+              <span>
+                {(selectedRegisterReport.closed_amount !== null
+                  ? selectedRegisterReport.closed_amount - selectedRegisterReport.amount_in_cash_drawer
+                  : 0.00
+                ).toFixed(3)}
+              </span>
+            </div>
+          </div>
+
+          {selectedRegisterReport.notes && (
+            <div className="border-t border-dashed pt-2 mt-2 text-[10px] text-gray-600">
+              <p className="font-bold">Notes:</p>
+              <p>{selectedRegisterReport.notes}</p>
             </div>
           )}
         </div>
