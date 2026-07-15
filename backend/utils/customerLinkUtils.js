@@ -119,11 +119,11 @@ function parsePlateComponents(plateStr) {
   let detectedEmirate = '';
   let tempStr = cleanStr;
   
-  // Find and remove Emirate name from the string
+  // 1. Find and remove Emirate name from the string
   for (const emirateObj of emiratesList) {
     let found = false;
     for (const keyword of emirateObj.keywords) {
-      // 1. Try with word boundary or exact match
+      // Try with word boundary or exact match
       const regexSpaced = new RegExp(`\\b${keyword}\\b`, 'i');
       if (regexSpaced.test(tempStr)) {
         detectedEmirate = emirateObj.name;
@@ -131,7 +131,7 @@ function parsePlateComponents(plateStr) {
         found = true;
         break;
       }
-      // 2. Try contiguous match (no spaces)
+      // Try contiguous match (no spaces)
       const cleanTempStr = tempStr.replace(/\s+/g, '');
       if (cleanTempStr.includes(keyword)) {
         detectedEmirate = emirateObj.name;
@@ -150,30 +150,50 @@ function parsePlateComponents(plateStr) {
   
   let plateCode = '';
   let plateNumber = '';
+
+  // 2. Parse remaining string to isolate Plate Number and Plate Code
+  // Split remaining string into words
+  const words = tempStr.split(' ').filter(Boolean);
   
-  if (tempStr.includes(' ')) {
-    const parts = tempStr.split(' ').filter(Boolean);
-    if (parts.length >= 2) {
-      plateCode = parts[0];
-      plateNumber = parts[parts.length - 1];
-    } else if (parts.length === 1) {
-      tempStr = parts[0];
-    }
-  }
-  
-  if (!plateNumber && tempStr) {
-    const matchLettersDigits = tempStr.match(/^([A-Z]+)([0-9]+)$/);
+  if (words.length === 1) {
+    const singleWord = words[0];
+    const matchLettersDigits = singleWord.match(/^([A-Z]+)([0-9]+)$/);
     if (matchLettersDigits) {
       plateCode = matchLettersDigits[1];
       plateNumber = matchLettersDigits[2];
     } else {
-      if (tempStr.length > 5) {
-        plateNumber = tempStr.slice(-5);
-        plateCode = tempStr.slice(0, -5);
+      if (singleWord.length > 5) {
+        plateNumber = singleWord.slice(-5);
+        plateCode = singleWord.slice(0, -5);
       } else {
-        plateNumber = tempStr;
+        plateNumber = singleWord;
         plateCode = '';
       }
+    }
+  } else if (words.length >= 2) {
+    const numericWords = words.filter(w => /^[0-9]+$/.test(w));
+    const alphaWords = words.filter(w => /^[A-Z]+$/.test(w));
+    
+    if (numericWords.length >= 1) {
+      // Sort numeric words by length descending (longest represents plate number, shorter represents plate code)
+      numericWords.sort((a, b) => b.length - a.length);
+      
+      plateNumber = numericWords[0];
+      
+      if (numericWords.length >= 2) {
+        plateCode = numericWords[1];
+      } else if (alphaWords.length >= 1) {
+        plateCode = alphaWords[0];
+      }
+    }
+  }
+  
+  // Heuristic: Default Emirate if not matched yet
+  if (!detectedEmirate) {
+    if (plateCode && /^[0-9]+$/.test(plateCode)) {
+      detectedEmirate = 'Abu Dhabi';
+    } else if (plateCode && /^[A-Z]+$/.test(plateCode)) {
+      detectedEmirate = 'Dubai';
     }
   }
   
