@@ -25,9 +25,9 @@ async function inspect() {
     console.table(customers);
 
     const [vehicles] = await pool.query(`
-      SELECT id, CustomerId, PlateNumber, PlateCode, Emirate 
+      SELECT VehicleId, CustomerId, PlateNumber, PlateCode, Emirate 
       FROM vehicles 
-      ORDER BY id DESC LIMIT 15
+      ORDER BY VehicleId DESC LIMIT 15
     `);
     
     console.log('\n🚗 Recent Vehicles in Database:');
