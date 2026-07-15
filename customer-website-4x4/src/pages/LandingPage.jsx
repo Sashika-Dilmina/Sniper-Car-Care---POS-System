@@ -1042,7 +1042,7 @@ const LandingPage = () => {
         name: customerInfo.name || 'Existing Customer',
         phone: customerInfo.phone || '',
         vehicle_plate: vehiclePlate || customerInfo.vehicle_plate || '',
-        notes: `Quick Book via Plate Link: ${vehiclePlate}`
+        notes: `One-Tap Booking via Website - ${service.name} (Quick Book via Plate Link: ${vehiclePlate})`
       };
 
       // Show a loading toast for immediate feedback
@@ -1944,9 +1944,9 @@ const LandingPage = () => {
       {showFreeWashPopup && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-3xl p-8 max-w-md w-full text-center border-4 border-white shadow-2xl relative animate-scaleUp">
-            <div className="text-6xl mb-4 animate-bounce">🎁</div>
-            <h2 className="text-3xl font-black text-white italic tracking-wide mb-2 uppercase">FREE WASH EARNED!</h2>
-            <p className="text-white font-bold text-lg mb-6">Congratulations! You completed 5 washes. Your 6th service is 100% FREE!</p>
+            <div className="text-6xl mb-4 animate-bounce">🎉</div>
+            <h2 className="text-3xl font-black text-white italic tracking-wide mb-2 uppercase">FREE WASH REDEEMED!</h2>
+            <p className="text-white font-bold text-lg mb-6">Your free wash booking has been successfully created! We look forward to serving you.</p>
             <button
               onClick={() => setShowFreeWashPopup(false)}
               className="w-full py-4 bg-white text-yellow-600 font-black rounded-xl hover:bg-gray-150 transition-all text-lg shadow-md uppercase tracking-wider"
