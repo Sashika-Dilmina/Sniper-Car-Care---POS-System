@@ -64,40 +64,60 @@ async function extractPlate(filePath) {
       let extractedFromOverlay = overlayMatch[1].toUpperCase();
       
       // If the camera couldn't read the plate, it outputs "unknown" or "unknoun"
-      if (extractedFromOverlay === 'UNKNOWN' || extractedFromOverlay === 'UNKNOUN') {
-        console.warn(`[OCR] Camera AI could not detect plate (Read as UNKNOWN). Skipping.`);
-        return null;
+      if (extractedFromOverlay !== 'UNKNOWN' && extractedFromOverlay !== 'UNKNOUN') {
+        console.log(`[OCR] 🎯 Successfully extracted plate from Camera AI Overlay: ${extractedFromOverlay}`);
+        return extractedFromOverlay;
+      } else {
+        console.warn(`[OCR] Camera AI Overlay reports UNKNOWN. Falling back to raw text extraction...`);
       }
-      
-      console.log(`[OCR] 🎯 Successfully extracted plate from Camera AI Overlay: ${extractedFromOverlay}`);
-      return extractedFromOverlay;
     }
 
     if (confidence < (process.env.OCR_CONFIDENCE_THRESHOLD || 60)) {
         console.warn(`[OCR] Confidence too low (${confidence}% < ${process.env.OCR_CONFIDENCE_THRESHOLD || 60}%)`);
-        // We still try to clean it up and see if it looks like a plate
     }
 
-    // Clean up the text - keep only alphanumeric and remove whitespace
-    // Plates usually have letters and numbers
-    let plateNumber = text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    // Smart Overlay Boilerplate Filtering:
+    // Cameras overlay IP, date, camera name, and labels which confuse Tesseract.
+    // We clean the text by stripping these known noise patterns.
+    let cleanText = text.toUpperCase();
+    cleanText = cleanText.replace(/(?:CAMERA|CAM)\s*\d+/g, '');
     
-    // Basic validation
-    if (plateNumber.length < 3) {
-      console.warn(`[OCR] Extracted plate too short: ${plateNumber}`);
+    const words = cleanText.split(/[\s\n\r]+/).map(w => w.trim()).filter(Boolean);
+    const filteredWords = words.filter(word => {
+      // 1. Filter IP address
+      if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(word)) return false;
+      // 2. Filter date/time (e.g. 2026-07-15, 15:56:49)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(word) || /^\d{2}:\d{2}:\d{2}$/.test(word) || /^\d{2}:\d{2}$/.test(word)) return false;
+      // 3. Filter other timestamps
+      if (/^\d{8,14}$/.test(word)) return false;
+      // 4. Filter camera labels
+      const noise = [
+        'PLATE', 'NO', 'NO.', 'UNKNOWN', 'UNKNONN', 'VEHICLE', 'COLOR', 
+        'TYPE', 'CAMERA', 'DEVICE', 'CAM', 'DETECTION', 'PICTURE', 'OVERLAY'
+      ];
+      if (noise.includes(word) || noise.some(n => word.includes(n))) return false;
+      return true;
+    });
+
+    let cleanedPlate = filteredWords.join(' ').replace(/[^A-Z0-9\s]/g, '').trim();
+    cleanedPlate = cleanedPlate.replace(/\s+/g, ' '); // normalize spaces
+
+    console.log(`[OCR] Cleaned OCR Candidate: "${cleanedPlate}"`);
+
+    // A valid plate candidate should have at least the plate number (digits)
+    const digitsCount = (cleanedPlate.match(/\d/g) || []).length;
+    if (digitsCount < 3) {
+      console.warn(`[OCR] Cleaned candidate does not look like a plate (less than 3 digits): ${cleanedPlate}`);
       return null;
     }
 
-    if (plateNumber.length > 20) {
-      console.warn(`[OCR] Extracted plate too long (likely noise): ${plateNumber.substring(0, 30)}...`);
+    if (cleanedPlate.length > 30) {
+      console.warn(`[OCR] Cleaned candidate too long (noise): ${cleanedPlate.substring(0, 30)}...`);
       return null;
     }
 
-    // Common OCR mistakes (e.g., '0' for 'O', '1' for 'I') could be handled here if needed
-    // But for now, we returning the cleaned string
-    
-    console.log(`[OCR] Final Plate: ${plateNumber}`);
-    return plateNumber;
+    console.log(`[OCR] Final Plate: ${cleanedPlate}`);
+    return cleanedPlate;
   } catch (error) {
     console.error('[OCR] Error during processing:', error);
     return null;
