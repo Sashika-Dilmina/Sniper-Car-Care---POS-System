@@ -6,11 +6,13 @@ import PaymentPage from './pages/PaymentPage';
 import HistoryPage from './pages/HistoryPage';
 import ProfilePage from './pages/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
+import LanguageSelector from './components/LanguageSelector';
 
 function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" />
+      <LanguageSelector variant="floating" />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />

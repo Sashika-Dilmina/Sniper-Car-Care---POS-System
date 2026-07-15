@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useState, useEffect, useRef } from 'react';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
+import LanguageSelector from './LanguageSelector';
 
 const Layout = () => {
   const { user, logout } = useAuth();
@@ -233,6 +234,7 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <LanguageSelector variant="floating" />
       {/* Sidebar */}
       <aside className={`fixed left-0 top-0 h-screen bg-white shadow-lg z-50 transition-all duration-300 flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} no-print`}>
         <div className="p-6 border-b flex items-center justify-between flex-shrink-0">
