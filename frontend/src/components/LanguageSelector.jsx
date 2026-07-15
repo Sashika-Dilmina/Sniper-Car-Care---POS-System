@@ -68,52 +68,65 @@ const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 righ
       document.body.appendChild(div);
     }
 
-    window.googleTranslateElementInit = () => {
-      new window.google.translate.TranslateElement({
-        pageLanguage: 'en',
-        includedLanguages: 'en,ar',
-        autoDisplay: false
-      }, 'google_translate_element');
-    };
+    // Only initialize translation if the Arabic cookie is present
+    if (transCookie === '/en/ar') {
+      window.googleTranslateElementInit = () => {
+        new window.google.translate.TranslateElement({
+          pageLanguage: 'en',
+          includedLanguages: 'en,ar',
+          autoDisplay: false
+        }, 'google_translate_element');
+      };
 
-    const scriptId = 'google-translate-script';
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.type = 'text/javascript';
-      script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
-      document.body.appendChild(script);
-    }
+      const scriptId = 'google-translate-script';
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.type = 'text/javascript';
+        script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+        document.body.appendChild(script);
+      }
 
-    // Enforce body top layout correction to defeat Google's top: 40px injection
-    const fixGoogleLayout = () => {
-      if (document.body && document.body.style.top !== '0px') {
-        document.body.style.top = '0px';
-      }
-      if (document.body && document.body.style.position !== 'static') {
-        document.body.style.position = 'static';
-      }
-      const frames = document.getElementsByClassName('goog-te-banner-frame');
-      for (let i = 0; i < frames.length; i++) {
-        frames[i].style.display = 'none';
-        frames[i].style.visibility = 'hidden';
-      }
-      const iframes = document.getElementsByTagName('iframe');
-      for (let i = 0; i < iframes.length; i++) {
-        if (iframes[i].className.includes('goog-te-banner-frame') || iframes[i].id.includes('goog-te-banner-frame')) {
-          iframes[i].style.display = 'none';
-          iframes[i].style.visibility = 'hidden';
+      // Enforce body top layout correction to defeat Google's top: 40px injection
+      const fixGoogleLayout = () => {
+        if (document.body && document.body.style.top !== '0px') {
+          document.body.style.top = '0px';
         }
-      }
-    };
-    const interval = setInterval(fixGoogleLayout, 300);
-    return () => clearInterval(interval);
+        if (document.body && document.body.style.position !== 'static') {
+          document.body.style.position = 'static';
+        }
+        const frames = document.getElementsByClassName('goog-te-banner-frame');
+        for (let i = 0; i < frames.length; i++) {
+          frames[i].style.display = 'none';
+          frames[i].style.visibility = 'hidden';
+        }
+        const iframes = document.getElementsByTagName('iframe');
+        for (let i = 0; i < iframes.length; i++) {
+          if (iframes[i].className.includes('goog-te-banner-frame') || iframes[i].id.includes('goog-te-banner-frame')) {
+            iframes[i].style.display = 'none';
+            iframes[i].style.visibility = 'hidden';
+          }
+        }
+      };
+      const interval = setInterval(fixGoogleLayout, 300);
+      return () => clearInterval(interval);
+    }
   }, []);
 
   const toggleLanguage = () => {
     const nextLang = currentLang === 'en' ? 'ar' : 'en';
-    const cookieValue = nextLang === 'ar' ? '/en/ar' : '/en/en';
     
+    // Clear cookies across all domains
+    const clearCookie = (name) => {
+      document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Domain=' + window.location.hostname + ';';
+      const hostParts = window.location.hostname.split('.');
+      if (hostParts.length > 1) {
+        const domain = hostParts.slice(-2).join('.');
+        document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Domain=.' + domain + ';';
+      }
+    };
+
     // Set cookie
     const setCookie = (name, value, days) => {
       let expires = "";
@@ -123,7 +136,6 @@ const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 righ
         expires = "; expires=" + date.toUTCString();
       }
       document.cookie = name + "=" + (value || "") + expires + "; path=/;";
-      
       const hostParts = window.location.hostname.split('.');
       if (hostParts.length > 1) {
         const domain = hostParts.slice(-2).join('.');
@@ -131,7 +143,12 @@ const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 righ
       }
     };
 
-    setCookie('googtrans', cookieValue, 365);
+    clearCookie('googtrans');
+
+    if (nextLang === 'ar') {
+      setCookie('googtrans', '/en/ar', 365);
+    }
+    
     window.location.reload();
   };
 
