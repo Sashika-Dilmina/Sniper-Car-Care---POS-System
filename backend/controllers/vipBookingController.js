@@ -207,14 +207,35 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
       }
     }
 
-    // Check if customer exists in the main customers table by phone
+    // Check if customer exists in the main customers table by phone or vehicle plate
     const { formatPhoneNumber } = require('../utils/customerLinkUtils');
     const formattedPhone = formatPhoneNumber(req.body.phone || phone);
     const [mainCustomer] = await db.query(
-      'SELECT id FROM customers WHERE phone = ? OR phone = ?',
-      [formattedPhone, phone]
+      'SELECT id FROM customers WHERE phone = ? OR phone = ? OR vehicle_plate = ?',
+      [formattedPhone, phone, vehicle_model]
     );
-    const mainCustomerId = mainCustomer.length > 0 ? mainCustomer[0].id : null;
+    
+    let mainCustomerId = null;
+    if (mainCustomer.length > 0) {
+      mainCustomerId = mainCustomer[0].id;
+    } else {
+      // Create new customer in main customers table
+      let province = null;
+      if (vehicle_model) {
+        const parts = vehicle_model.split(' ');
+        if (parts.length > 2) {
+          province = parts.slice(1, parts.length - 1).join(' ');
+        }
+      }
+      const [newMainCust] = await db.query(
+        'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
+        [name, formattedPhone || phone, vehicle_model, vehicle_type, province]
+      );
+      mainCustomerId = newMainCust.insertId;
+      
+      const { ensureLoyaltyRow } = require('../utils/loyaltyStamps');
+      await ensureLoyaltyRow(db, mainCustomerId);
+    }
 
     // Create corresponding order in the orders table
     const [orderResult] = await db.query(
@@ -339,15 +360,37 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
 
           // Trigger Loyalty Points / Stamps increment for VIP completion
           let targetCustomerId = order.customer_id;
-          if (!targetCustomerId && order.vip_phone) {
-            const { formatPhoneNumber } = require('../utils/customerLinkUtils');
-            const formattedPhone = formatPhoneNumber(order.vip_phone);
-            const [mainCust] = await db.query(
-              'SELECT id FROM customers WHERE phone = ? OR phone = ?',
-              [formattedPhone, order.vip_phone]
+          if (!targetCustomerId) {
+            // Find VIP booking details to link/create customer
+            const [bookingDetail] = await db.query(
+              'SELECT vb.service_type, vc.name, vc.phone, vc.vehicle_model, vc.vehicle_type FROM vip_bookings vb JOIN vip_customers vc ON vb.vip_customer_id = vc.id WHERE vb.id = ?',
+              [req.params.id]
             );
-            if (mainCust.length > 0) {
-              targetCustomerId = mainCust[0].id;
+            if (bookingDetail.length > 0) {
+              const bd = bookingDetail[0];
+              const { formatPhoneNumber } = require('../utils/customerLinkUtils');
+              const formattedPhone = formatPhoneNumber(bd.phone);
+              const [mainCust] = await db.query(
+                'SELECT id FROM customers WHERE phone = ? OR phone = ? OR vehicle_plate = ?',
+                [formattedPhone, bd.phone, bd.vehicle_model]
+              );
+              if (mainCust.length > 0) {
+                targetCustomerId = mainCust[0].id;
+              } else {
+                // Create customer in main customers table
+                let province = null;
+                if (bd.vehicle_model) {
+                  const parts = bd.vehicle_model.split(' ');
+                  if (parts.length > 2) {
+                    province = parts.slice(1, parts.length - 1).join(' ');
+                  }
+                }
+                const [newMainCust] = await db.query(
+                  'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
+                  [bd.name, formattedPhone || bd.phone, bd.vehicle_model, bd.vehicle_type, province]
+                );
+                targetCustomerId = newMainCust.insertId;
+              }
               // Link the customer to the order
               await db.query('UPDATE orders SET customer_id = ? WHERE id = ?', [targetCustomerId, order.id]);
             }
