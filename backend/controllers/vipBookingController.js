@@ -207,15 +207,27 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
       }
     }
 
-    // Check if customer exists in the main customers table by phone or vehicle plate
+    // Check if customer exists in the main customers table: prioritize vehicle plate first, then phone
     const { formatPhoneNumber } = require('../utils/customerLinkUtils');
     const formattedPhone = formatPhoneNumber(req.body.phone || phone);
-    const [mainCustomer] = await db.query(
-      'SELECT id FROM customers WHERE phone = ? OR phone = ? OR vehicle_plate = ?',
-      [formattedPhone, phone, vehicle_model]
-    );
     
     let mainCustomerId = null;
+    let mainCustomer = [];
+    
+    if (vehicle_model) {
+      [mainCustomer] = await db.query(
+        'SELECT id FROM customers WHERE vehicle_plate = ?',
+        [vehicle_model]
+      );
+    }
+    
+    if (mainCustomer.length === 0 && (formattedPhone || phone)) {
+      [mainCustomer] = await db.query(
+        'SELECT id FROM customers WHERE phone = ? OR phone = ?',
+        [formattedPhone, phone]
+      );
+    }
+    
     if (mainCustomer.length > 0) {
       mainCustomerId = mainCustomer[0].id;
     } else {
@@ -370,10 +382,22 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
               const bd = bookingDetail[0];
               const { formatPhoneNumber } = require('../utils/customerLinkUtils');
               const formattedPhone = formatPhoneNumber(bd.phone);
-              const [mainCust] = await db.query(
-                'SELECT id FROM customers WHERE phone = ? OR phone = ? OR vehicle_plate = ?',
-                [formattedPhone, bd.phone, bd.vehicle_model]
-              );
+              
+              let mainCust = [];
+              if (bd.vehicle_model) {
+                [mainCust] = await db.query(
+                  'SELECT id FROM customers WHERE vehicle_plate = ?',
+                  [bd.vehicle_model]
+                );
+              }
+              
+              if (mainCust.length === 0 && (formattedPhone || bd.phone)) {
+                [mainCust] = await db.query(
+                  'SELECT id FROM customers WHERE phone = ? OR phone = ?',
+                  [formattedPhone, bd.phone]
+                );
+              }
+              
               if (mainCust.length > 0) {
                 targetCustomerId = mainCust[0].id;
               } else {
