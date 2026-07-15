@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const LanguageSelector = ({ variant = 'floating' }) => {
+const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 right-6' }) => {
   const [currentLang, setCurrentLang] = useState('en');
 
   useEffect(() => {
@@ -31,12 +31,15 @@ const LanguageSelector = ({ variant = 'floating' }) => {
       style.innerHTML = `
         body {
           top: 0px !important;
+          position: static !important;
         }
-        .goog-te-banner-frame.skiptranslate, 
+        .goog-te-banner-frame,
+        .goog-te-banner-frame.skiptranslate,
+        iframe.goog-te-banner-frame,
+        iframe.goog-te-banner-frame.skiptranslate,
         .goog-te-gadget-simple, 
         .goog-te-balloon-frame,
         .goog-te-banner,
-        iframe.goog-te-banner-frame,
         iframe.goog-te-menu-frame,
         .goog-te-menu-value {
           display: none !important;
@@ -81,6 +84,30 @@ const LanguageSelector = ({ variant = 'floating' }) => {
       script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
       document.body.appendChild(script);
     }
+
+    // Enforce body top layout correction to defeat Google's top: 40px injection
+    const fixGoogleLayout = () => {
+      if (document.body && document.body.style.top !== '0px') {
+        document.body.style.top = '0px';
+      }
+      if (document.body && document.body.style.position !== 'static') {
+        document.body.style.position = 'static';
+      }
+      const frames = document.getElementsByClassName('goog-te-banner-frame');
+      for (let i = 0; i < frames.length; i++) {
+        frames[i].style.display = 'none';
+        frames[i].style.visibility = 'hidden';
+      }
+      const iframes = document.getElementsByTagName('iframe');
+      for (let i = 0; i < iframes.length; i++) {
+        if (iframes[i].className.includes('goog-te-banner-frame') || iframes[i].id.includes('goog-te-banner-frame')) {
+          iframes[i].style.display = 'none';
+          iframes[i].style.visibility = 'hidden';
+        }
+      }
+    };
+    const interval = setInterval(fixGoogleLayout, 300);
+    return () => clearInterval(interval);
   }, []);
 
   const toggleLanguage = () => {
@@ -112,7 +139,7 @@ const LanguageSelector = ({ variant = 'floating' }) => {
     return (
       <button
         onClick={toggleLanguage}
-        className="fixed bottom-6 right-6 z-[9999] flex items-center gap-2 px-4 py-2.5 bg-white text-gray-800 font-bold rounded-full shadow-lg border border-gray-200 hover:scale-105 transition-all duration-200 text-sm no-print"
+        className={`fixed ${positionClass} z-[9999] flex items-center gap-2 px-4 py-2.5 bg-white text-gray-800 font-bold rounded-full shadow-lg border border-gray-200 hover:scale-105 transition-all duration-200 text-sm no-print`}
         style={{ direction: 'ltr' }}
       >
         <span>🌐</span>

@@ -12,7 +12,7 @@ function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" />
-      <LanguageSelector variant="floating" />
+      <LanguageSelector variant="floating" positionClass="bottom-24 right-4" />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />
