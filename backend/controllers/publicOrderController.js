@@ -217,11 +217,9 @@ const createOrder = asyncHandler(async (req, res) => {
           if (isEligibleFree && originalPrice <= cap) {
             // 6th wash -> Free Wash!
             loyalty = await resetWashStamps(connection, finalCustomerId);
-            const finalPrice = 0.00;
-
             await connection.query(
               'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-              [finalCustomerId, serviceName, vehicleType, finalPrice, notes, status || 'pending', orderId]
+              [finalCustomerId, serviceName, vehicleType, originalPrice, notes, status || 'pending', orderId]
             );
 
             await connection.query(
@@ -318,9 +316,9 @@ const getOrder = asyncHandler(async (req, res) => {
         id: `svc_${s.id}`,
         product_name: order.payment_status === 'free' ? `${s.service_name} (Free Wash)` : s.service_name,
         quantity: 1,
-        price: s.price,
+        price: order.payment_status === 'free' ? 0.00 : s.price,
         category: 'Services',
-        unit_price: s.price
+        unit_price: order.payment_status === 'free' ? 0.00 : s.price
       }));
     }
   }

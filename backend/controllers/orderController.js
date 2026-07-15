@@ -175,9 +175,9 @@ const getOrder = asyncHandler(async (req, res) => {
         product_id: null,
         product_name: order.payment_status === 'free' ? `${s.service_name} (Free Wash)` : s.service_name,
         quantity: 1,
-        price: s.price,
+        price: order.payment_status === 'free' ? 0.00 : s.price,
         category: 'Services',
-        unit_price: s.price
+        unit_price: order.payment_status === 'free' ? 0.00 : s.price
       }));
     }
   }

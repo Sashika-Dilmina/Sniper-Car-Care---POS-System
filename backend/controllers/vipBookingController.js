@@ -207,10 +207,12 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
       }
     }
 
-    // Check if customer exists in the main customers table by phone (to link customer_id)
+    // Check if customer exists in the main customers table by phone
+    const { formatPhoneNumber } = require('../utils/customerLinkUtils');
+    const formattedPhone = formatPhoneNumber(req.body.phone || phone);
     const [mainCustomer] = await db.query(
-      'SELECT id FROM customers WHERE phone = ?',
-      [phone]
+      'SELECT id FROM customers WHERE phone = ? OR phone = ?',
+      [formattedPhone, phone]
     );
     const mainCustomerId = mainCustomer.length > 0 ? mainCustomer[0].id : null;
 
@@ -314,7 +316,11 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
       
       try {
         const [orderRows] = await db.query(
-          'SELECT id, total, payment_status, customer_id FROM orders WHERE vip_booking_id = ?',
+          `SELECT o.id, o.total, o.payment_status, o.customer_id, vc.phone as vip_phone 
+           FROM orders o
+           JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+           JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+           WHERE o.vip_booking_id = ?`,
           [req.params.id]
         );
         if (orderRows.length > 0) {
@@ -332,7 +338,21 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
           }
 
           // Trigger Loyalty Points / Stamps increment for VIP completion
-          const targetCustomerId = order.customer_id;
+          let targetCustomerId = order.customer_id;
+          if (!targetCustomerId && order.vip_phone) {
+            const { formatPhoneNumber } = require('../utils/customerLinkUtils');
+            const formattedPhone = formatPhoneNumber(order.vip_phone);
+            const [mainCust] = await db.query(
+              'SELECT id FROM customers WHERE phone = ? OR phone = ?',
+              [formattedPhone, order.vip_phone]
+            );
+            if (mainCust.length > 0) {
+              targetCustomerId = mainCust[0].id;
+              // Link the customer to the order
+              await db.query('UPDATE orders SET customer_id = ? WHERE id = ?', [targetCustomerId, order.id]);
+            }
+          }
+
           if (targetCustomerId && parseFloat(order.total) > 0) {
             const [custRows] = await db.query('SELECT province FROM customers WHERE id = ?', [targetCustomerId]);
             const isExemptEmirate = custRows.length > 0 && (custRows[0].province === 'Garage' || custRows[0].province === 'Sniper car care');
