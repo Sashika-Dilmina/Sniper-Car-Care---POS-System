@@ -4,6 +4,33 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script type="text/javascript">
+      (function() {
+        var userLang = localStorage.getItem('user_lang');
+        if (!userLang) {
+          userLang = 'ar';
+          localStorage.setItem('user_lang', 'ar');
+        }
+        var cookieVal = userLang === 'ar' ? '/en/ar' : '/en/en';
+        var setCookie = function(name, value) {
+          var expires = "; expires=" + new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
+          document.cookie = name + "=" + value + expires + "; path=/;";
+          var hostParts = window.location.hostname.split('.');
+          if (hostParts.length > 1) {
+            var domain = hostParts.slice(-2).join('.');
+            document.cookie = name + "=" + value + expires + "; path=/; domain=." + domain + ";";
+          }
+        };
+        setCookie('googtrans', cookieVal);
+        if (userLang === 'ar') {
+          document.documentElement.dir = 'rtl';
+          document.documentElement.lang = 'ar';
+        } else {
+          document.documentElement.dir = 'ltr';
+          document.documentElement.lang = 'en';
+        }
+      })();
+    </script>
     <title>Sniper Car Care - Products</title>
     <style>
       iframe.skiptranslate,
