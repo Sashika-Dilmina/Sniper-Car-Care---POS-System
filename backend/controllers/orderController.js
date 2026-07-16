@@ -668,7 +668,7 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
           }
         }
 
-        const thankYouMessage = `شكراً لاختياركم سنايبر للعناية بالسيارات. نأمل أن تكون خدمتنا قد نالت إعجابكم! يرجى ترك تقييمكم هنا: ${feedbackUrl}${stampsMsg}`;
+        const thankYouMessage = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nغسيلك المجاني صار أقرب \nتقييمك يساعدنا نقدم خدمة أفضل\n${feedbackUrl}${stampsMsg}`;
 
         try {
           await sendReson8Message({

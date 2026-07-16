@@ -269,15 +269,14 @@ async function sendServiceCompletionNotification(service, customer, isFreeServic
     plate: customer.vehicle_plate,
   });
 
-  const firstName = customer.name ? customer.name.split(' ')[0] : 'أهلاً بك';
-  let message = `مرحباً ${firstName}، تم إكمال خدمة ${service.service_name} الخاصة بك. شكراً لاختياركم سنايبر للعناية بالسيارات.`;
+  let message = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nغسيلك المجاني صار أقرب \nتقييمك يساعدنا نقدم خدمة أفضل\n`;
 
   if (feedbackUrl) {
-    message += ` شاركنا تقييمك: ${feedbackUrl}`;
+    message += ` ${feedbackUrl}`;
   }
 
   if (isFreeServiceEligible) {
-    message += ' 🎉 أنت الآن مؤهل للحصول على خدمة مجانية — اطلب من فريقنا تفعيلها!';
+    message += '\n🎉 أنت الآن مؤهل للحصول على خدمة مجانية — اطلب من فريقنا تفعيلها!';
   }
 
   await sendReson8Message({

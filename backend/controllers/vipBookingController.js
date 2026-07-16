@@ -51,11 +51,10 @@ async function sendVIPCompletionNotification(booking, customer, orderId) {
     orderId: orderId,
   });
 
-  const firstName = customer.name ? customer.name.split(' ')[0] : 'أهلاً بك';
-  let message = `مرحباً ${firstName}، تم إكمال خدمة الـ VIP ${booking.service_type} الخاصة بك. شكراً لاختياركم سنايبر للعناية بالسيارات.`;
+  let message = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nغسيلك المجاني صار أقرب \nتقييمك يساعدنا نقدم خدمة أفضل\n`;
 
   if (feedbackUrl) {
-    message += ` شاركنا تقييمك: ${feedbackUrl}`;
+    message += ` ${feedbackUrl}`;
   }
   
   message += stampsMsg;
@@ -358,17 +357,6 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
         );
         if (orderRows.length > 0) {
           const order = orderRows[0];
-          if (order.payment_status !== 'paid' && order.payment_status !== 'free') {
-            const payMethod = req.body.payment_method || 'cash';
-            
-            // Record payment in payments table
-            await db.query(
-              'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, "completed")',
-              [order.id, order.total, payMethod]
-            );
-            
-            additionalSets += `, payment_status = 'paid'`;
-          }
 
           // Trigger Loyalty Points / Stamps increment for VIP completion
           let targetCustomerId = order.customer_id;

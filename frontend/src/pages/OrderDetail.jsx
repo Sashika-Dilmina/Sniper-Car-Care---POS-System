@@ -19,8 +19,6 @@ const OrderDetail = () => {
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [scheduleData, setScheduleData] = useState({ appointment_date: '', appointment_time: '' });
   const [bookingUpdate, setBookingUpdate] = useState({ status: '', notes: '', staff_notes: '', assigned_staff_id: '' });
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
-  const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
   const [paymentDiscount, setPaymentDiscount] = useState(0);
 
   const getStatusColor = (status) => {
@@ -146,25 +144,7 @@ const OrderDetail = () => {
     }
   };
 
-  const handleVipRecordManualPayment = async () => {
-    if (!order.id) return;
-    setManualPaymentLoading(true);
-    try {
-      await axios.post('/api/payments/manual', {
-        order_id: order.id,
-        amount: order.total,
-        method: selectedPaymentMethod
-      });
-      toast.success('Payment recorded successfully');
-      fetchVipBooking(order.vip_booking_id);
-      fetchOrder();
-    } catch (error) {
-      console.error('Error recording payment:', error);
-      toast.error('Failed to record payment');
-    } finally {
-      setManualPaymentLoading(false);
-    }
-  };
+
 
   useEffect(() => {
     if (order && order.vip_booking_id) {
@@ -812,28 +792,6 @@ const OrderDetail = () => {
                     Paid via: {order.payments?.[0]?.method || 'manual'}
                   </div>
                 )}
-                {order.payment_status !== 'paid' && (
-                  <div className="border-t pt-2 mt-1 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs font-bold text-gray-600 uppercase">Select Payment Method</label>
-                      <select
-                        value={selectedPaymentMethod}
-                        onChange={(e) => setSelectedPaymentMethod(e.target.value)}
-                        className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-red-500 focus:border-red-500 outline-none"
-                      >
-                        <option value="cash">💵 Cash</option>
-                        <option value="card">💳 Card</option>
-                      </select>
-                    </div>
-                    <button
-                      onClick={handleVipRecordManualPayment}
-                      disabled={manualPaymentLoading}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50"
-                    >
-                      ⚡ Record Payment (AED {parseFloat(order.total || 0).toLocaleString()})
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Appointment Scheduling section */}
@@ -935,7 +893,7 @@ const OrderDetail = () => {
                       )}
                       {vipBooking.status === 'in_progress' && (
                         <button
-                          onClick={() => handleVipStatusChange('completed', selectedPaymentMethod)}
+                          onClick={() => handleVipStatusChange('completed')}
                           disabled={updatingVip}
                           className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
                         >

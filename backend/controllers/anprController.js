@@ -365,12 +365,7 @@ async function sendProductPageSMS(customer, plateNumber, vehicleTypeOverride) {
 
   const portalUrl = buildCustomerWebsiteUrl(targetVehicleType, plateNumber || customer.vehicle_plate);
 
-  const firstName = customer.name ? customer.name.split(' ')[0] : 'أهلاً بك';
-  const message = [
-    `مرحباً ${firstName}!`,
-    'اختر خدمتك بلمسة واحدة:',
-    portalUrl,
-  ].join(' ');
+  const message = `يامرحبابك \nإختر خدمتك وخلنا نهتم بسيارتك بأسرع وقت\n${portalUrl}`;
 
   const metadata = {
     type: 'welcome',
