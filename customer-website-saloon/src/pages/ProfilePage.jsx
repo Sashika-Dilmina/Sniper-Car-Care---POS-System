@@ -71,7 +71,7 @@ const ProfilePage = () => {
                 <span className="px-3 py-1.5 bg-gray-100 rounded-lg text-sm font-semibold text-gray-700 tracking-wider">
                   {customerData.customer.vehicle_plate}
                 </span>
-                <span className="px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-sm font-semibold">
+                <span className="px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-sm font-semibold notranslate" translate="no">
                   {customerData.customer.vehicle_type || 'Vehicle'}
                 </span>
               </div>

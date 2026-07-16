@@ -6,23 +6,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sniper Car Care - ANPR POS System</title>
     <style>
-      iframe.goog-te-banner-frame,
+      iframe.skiptranslate,
+      .skiptranslate,
+      iframe[class*="goog"],
+      iframe[id*="goog"],
       .goog-te-banner-frame,
       .goog-te-banner,
+      .goog-te-gadget-simple, 
+      .goog-te-balloon-frame,
+      iframe.goog-te-menu-frame,
+      .goog-te-menu-value,
       #goog-gt-tt,
       .goog-te-spinner-pos,
       #google_translate_element {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0px !important;
+        width: 0px !important;
       }
-      body {
+      html, body {
         top: 0px !important;
         position: static !important;
+        margin-top: 0px !important;
+        padding-top: 0px !important;
       }
     </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="google_translate_element" style="display:none"></div>
+    <script type="text/javascript">
+      window.googleTranslateElementInit = function() {
+        new google.translate.TranslateElement({
+          pageLanguage: 'en',
+          includedLanguages: 'en,ar',
+          autoDisplay: false
+        }, 'google_translate_element');
+      };
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

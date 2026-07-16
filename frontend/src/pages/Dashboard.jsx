@@ -429,7 +429,7 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow">
           <div>
-            <p className="text-gray-600 text-sm">Total Saloon Vehicle Orders</p>
+            <p className="text-gray-600 text-sm notranslate" translate="no">Total Saloon Vehicle Orders</p>
             <p className="text-2xl font-bold text-gray-800">
               {summary.saloon_orders || 0}
             </p>
@@ -447,7 +447,7 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow">
           <div>
-            <p className="text-gray-600 text-sm">Pending Saloon Vehicles</p>
+            <p className="text-gray-600 text-sm notranslate" translate="no">Pending Saloon Vehicles</p>
             <p className="text-2xl font-bold text-orange-600">
               {summary.pending_saloon_count || 0}
             </p>

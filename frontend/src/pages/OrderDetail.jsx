@@ -10,6 +10,7 @@ const OrderDetail = () => {
   const [showPayment, setShowPayment] = useState(false);
   const [loadingTap, setLoadingTap] = useState(false);
   const [registerStatus, setRegisterStatus] = useState('closed');
+  const [sharing, setSharing] = useState(false);
 
   const [vipBooking, setVipBooking] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -216,18 +217,48 @@ const OrderDetail = () => {
     }
   };
 
-  const handleWhatsAppShare = () => {
+  const handleWhatsAppShare = async () => {
     if (!order) return;
-    const itemsList = order.items?.map(item => `- ${item.product_name} (Qty: ${item.quantity}) - AED ${parseFloat(item.price).toFixed(2)}`).join('\n') || '';
-    const message = `*Sniper Car Care - Order Receipt*\n` +
-      `*Order ID:* #${order.id}\n` +
-      `*Customer:* ${order.customer_name || 'Walk-in'}\n` +
-      `*Plate:* ${order.vehicle_plate || 'N/A'}\n` +
-      `*Items:* \n${itemsList}\n` +
-      `*Total Amount:* AED ${parseFloat(order.total).toFixed(2)}\n\n` +
-      `Thank you for choosing Sniper Car Care!`;
-    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+    setSharing(true);
+    try {
+      const response = await axios.get(`/api/orders/${id}/pdf`);
+      if (response.data.success && response.data.pdfUrl) {
+        const backendBaseUrl = axios.defaults.baseURL || window.location.origin;
+        const fullPdfUrl = `${backendBaseUrl}${response.data.pdfUrl}`;
+        
+        try {
+          // Fetch the PDF blob to create a File object
+          const fileResponse = await fetch(fullPdfUrl);
+          const blob = await fileResponse.blob();
+          const file = new File([blob], `invoice-${order.id}-${Date.now()}.pdf`, { type: 'application/pdf' });
+          
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: `Sniper Car Care Invoice #${order.id}`,
+              text: `Please find the invoice for Order #${order.id} attached.`
+            });
+            toast.success('Invoice PDF shared successfully!');
+            return;
+          }
+        } catch (shareErr) {
+          console.warn('Native sharing failed, falling back to link:', shareErr);
+        }
+        
+        // Fallback to text link if navigator.share fails or is not supported
+        const message = `Check out your Sniper Car Care Invoice #${order.id}: ${fullPdfUrl}`;
+        const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
+        toast.success('Opened PDF invoice link in browser.');
+      } else {
+        toast.error('Failed to generate invoice PDF');
+      }
+    } catch (error) {
+      console.error('Error sharing PDF:', error);
+      toast.error('Failed to generate and share invoice PDF');
+    } finally {
+      setSharing(false);
+    }
   };
 
   const handleStatusUpdate = async (status) => {
@@ -282,9 +313,10 @@ const OrderDetail = () => {
           <div className="flex items-center gap-2 no-print">
             <button
               onClick={handleWhatsAppShare}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+              disabled={sharing}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
             >
-              💬 Share via WhatsApp
+              {sharing ? '⏳ Generating PDF...' : '💬 Share via WhatsApp'}
             </button>
             <button
               onClick={() => window.print()}
