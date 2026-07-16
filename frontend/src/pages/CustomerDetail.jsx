@@ -138,7 +138,7 @@ const CustomerDetail = () => {
             </div>
             <div>
               <p className="text-sm text-gray-600">Vehicle Type</p>
-              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full">
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full notranslate" translate="no">
                 {customer.vehicle_type}
               </span>
             </div>
@@ -256,7 +256,8 @@ const CustomerDetail = () => {
                     <select
                       value={checkinForm.vehicle_type}
                       onChange={(e) => setCheckinForm({ ...checkinForm, vehicle_type: e.target.value })}
-                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none notranslate"
+                      translate="no"
                     >
                       <option value="Saloon">Saloon</option>
                       <option value="4x4">4x4</option>

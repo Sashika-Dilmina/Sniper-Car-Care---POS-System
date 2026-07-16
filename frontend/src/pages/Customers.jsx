@@ -310,7 +310,8 @@ const Customers = () => {
                   <select
                     value={newCustomer.vehicle_type}
                     onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_type: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none notranslate"
+                    translate="no"
                   >
                     <option value="Saloon">Saloon</option>
                     <option value="4x4">4x4</option>
@@ -454,7 +455,8 @@ const Customers = () => {
                     <select
                       value={checkinForm.vehicle_type}
                       onChange={(e) => setCheckinForm({ ...checkinForm, vehicle_type: e.target.value })}
-                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none notranslate"
+                      translate="no"
                     >
                       <option value="Saloon">Saloon</option>
                       <option value="4x4">4x4</option>
@@ -547,7 +549,8 @@ const Customers = () => {
               <select
                 value={filters.vehicle_type}
                 onChange={(e) => handleFilterChange('vehicle_type', e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 notranslate"
+                translate="no"
               >
                 <option value="all">All Types</option>
                 <option value="4x4">4x4</option>
@@ -703,7 +706,7 @@ const Customers = () => {
                     <td className="px-6 py-4 whitespace-nowrap">{customer.phone || 'N/A'}</td>
                     <td className="px-6 py-4 whitespace-nowrap font-mono">{customer.vehicle_plate}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 capitalize">
+                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 capitalize notranslate" translate="no">
                         {customer.vehicle_type}
                       </span>
                     </td>
