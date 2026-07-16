@@ -35,8 +35,12 @@ const VehiclePlatePreview = ({ emirate, plateCode, plateNumber }) => {
         }}
       >
         {/* Left Segment: Plate Code */}
-        <div className="flex items-center justify-center w-[75px] h-full border-r-2 border-gray-300 bg-white">
-          <span className="text-3xl font-extrabold text-blue-900 tracking-tighter">
+        <div className={`flex items-center justify-center w-[75px] h-full border-r-2 border-gray-300 ${
+          displayEmirate.toLowerCase() === 'abu dhabi' ? 'bg-red-600' : 'bg-white'
+        }`}>
+          <span className={`text-3xl font-extrabold tracking-tighter ${
+            displayEmirate.toLowerCase() === 'abu dhabi' ? 'text-white' : 'text-blue-900'
+          }`}>
             {displayCode || '—'}
           </span>
         </div>

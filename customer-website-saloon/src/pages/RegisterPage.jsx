@@ -9,7 +9,7 @@ const RegisterPage = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: '',
-    phone: '',
+    phone: '9715',
     vehicle_type: 'Saloon',
     emirate: 'Dubai',
     plate_code: '',
@@ -106,7 +106,7 @@ const RegisterPage = () => {
               onClick={() => {
                 setFormData({
                   name: '',
-                  phone: '',
+                  phone: '9715',
                   vehicle_type: 'Saloon',
                   emirate: 'Dubai',
                   plate_code: '',
@@ -147,15 +147,14 @@ const RegisterPage = () => {
       {/* Main Registration Card */}
       <div className="bg-white p-6 rounded-3xl shadow-lg max-w-md w-full border border-gray-100">
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Full Name */}
+          {/* Name */}
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Full Name</label>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Name</label>
             <input
               type="text"
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g. John Doe"
               className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-bold text-sm bg-white"
             />
           </div>
@@ -167,8 +166,17 @@ const RegisterPage = () => {
               type="tel"
               required
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="e.g. 971500000000"
+              onChange={(e) => {
+                let val = e.target.value.replace(/\D/g, '');
+                if (!val.startsWith('9715') && val.length > 0) {
+                  if ('9715'.startsWith(val)) {
+                    // Let them backspace in 9715
+                  } else {
+                    val = '9715' + val;
+                  }
+                }
+                setFormData({ ...formData, phone: val });
+              }}
               className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-bold text-sm bg-white"
             />
           </div>

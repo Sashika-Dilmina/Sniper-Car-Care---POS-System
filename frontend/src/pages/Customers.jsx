@@ -926,32 +926,17 @@ const Customers = () => {
                   </p>
                 </div>
 
-                {/* QR Codes Grid */}
-                <div className="grid grid-cols-2 gap-6 pt-2">
-                  {/* Saloon Registration QR */}
-                  <div className="border-2 border-gray-250 p-4 rounded-xl bg-gray-50 flex flex-col items-center space-y-3">
-                    <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Saloon Cars</h4>
-                    <div className="bg-white p-2 rounded-lg border border-gray-200">
+                {/* Single QR Code Container */}
+                <div className="flex flex-col items-center justify-center pt-2">
+                  <div className="border-2 border-gray-250 p-6 rounded-2xl bg-gray-50 flex flex-col items-center space-y-3 shadow-sm max-w-[280px]">
+                    <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-inner">
                       <img
-                        src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=http://saloon.snipercarcare.com/register"
-                        alt="Saloon Registration QR"
-                        className="w-36 h-36"
+                        src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=http://saloon.snipercarcare.com/register"
+                        alt="Registration QR Code"
+                        className="w-44 h-44"
                       />
                     </div>
-                    <span className="text-[10px] font-semibold text-gray-500">Scan for Saloon / Sedan</span>
-                  </div>
-
-                  {/* 4x4 SUV Registration QR */}
-                  <div className="border-2 border-gray-250 p-4 rounded-xl bg-gray-50 flex flex-col items-center space-y-3">
-                    <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wider">4x4 / SUVs</h4>
-                    <div className="bg-white p-2 rounded-lg border border-gray-200">
-                      <img
-                        src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=http://4x4.snipercarcare.com/register"
-                        alt="4x4 Registration QR"
-                        className="w-36 h-36"
-                      />
-                    </div>
-                    <span className="text-[10px] font-semibold text-gray-500">Scan for 4x4 / SUV / Trucks</span>
+                    <span className="text-[11px] font-bold text-gray-600 tracking-wide">Saloon & 4x4 / SUV</span>
                   </div>
                 </div>
 
