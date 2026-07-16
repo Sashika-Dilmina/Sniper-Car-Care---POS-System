@@ -35,14 +35,21 @@ const Orders = () => {
 
   useEffect(() => {
     sessionStorage.setItem('orders_filter', JSON.stringify(filter));
-    fetchOrders();
+    fetchOrders(false);
+
+    const interval = setInterval(() => {
+      fetchOrders(true);
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [filter]);
 
   useEffect(() => {
     sessionStorage.setItem('orders_active_tab', activeTab);
   }, [activeTab]);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filter.status) params.append('status', filter.status);
@@ -53,9 +60,9 @@ const Orders = () => {
       const response = await axios.get(`/api/orders?${params.toString()}`);
       setOrders(response.data.orders);
     } catch (error) {
-      toast.error('Failed to load orders');
+      if (!silent) toast.error('Failed to load orders');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
