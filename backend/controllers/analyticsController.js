@@ -1108,7 +1108,7 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
     `SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total
      FROM services s
      JOIN orders o ON s.order_id = o.id
-     JOIN products p ON s.service_name = p.name
+     JOIN products p ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (Quick Book%')) AND (p.vehicle_type = s.vehicle_type OR p.vehicle_type = 'Both')
      WHERE o.status != 'cancelled' 
        AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id)
        AND DATE(o.created_at) BETWEEN ? AND ?`,
@@ -1296,7 +1296,7 @@ const getReportPDF = asyncHandler(async (req, res) => {
     const itemsCost = parseFloat(itemsCostResult[0].total || 0);
 
     const [servicesCostResult] = await pool.query(
-      `SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total FROM services s JOIN orders o ON s.order_id = o.id JOIN products p ON s.service_name = p.name WHERE o.status != 'cancelled' AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) AND DATE(o.created_at) BETWEEN ? AND ?`,
+      `SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total FROM services s JOIN orders o ON s.order_id = o.id JOIN products p ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (Quick Book%')) AND (p.vehicle_type = s.vehicle_type OR p.vehicle_type = 'Both') WHERE o.status != 'cancelled' AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) AND DATE(o.created_at) BETWEEN ? AND ?`,
       [start_date, end_date]
     );
     const servicesCost = parseFloat(servicesCostResult[0].total || 0);
