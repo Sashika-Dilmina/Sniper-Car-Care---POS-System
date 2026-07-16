@@ -656,19 +656,19 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
             const currentStamps = await getWashStamps(pool, targetCustId);
             if (currentStamps === 0) {
               if (order.payment_status === 'free') {
-                stampsMsg = " Congrats! You earned a FREE wash for your next visit!";
+                stampsMsg = " تهانينا! لقد حصلت على غسيل مجاني لزيارتك القادمة!";
               } else {
-                stampsMsg = " You have completed 5/5 washes. Congrats! You earned a FREE wash for your next visit!";
+                stampsMsg = " لقد أكملت 5/5 من الغسلات. تهانينا! لقد حصلت على غسيل مجاني لزيارتك القادمة!";
               }
             } else {
-              stampsMsg = ` You have completed ${currentStamps}/5 washes. Only ${5 - currentStamps} more washes left to get your FREE wash!`;
+              stampsMsg = ` لقد أكملت ${currentStamps}/5 من الغسلات. متبقي ${5 - currentStamps} غسلات فقط للحصول على غسيلك المجاني!`;
             }
           } catch (err) {
             console.error('Error fetching stamps for SMS message:', err);
           }
         }
 
-        const thankYouMessage = `Thank you for choosing Sniper Car Care. We hope you loved our service! Please leave your feedback here: ${feedbackUrl}${stampsMsg}`;
+        const thankYouMessage = `شكراً لاختياركم سنايبر للعناية بالسيارات. نأمل أن تكون خدمتنا قد نالت إعجابكم! يرجى ترك تقييمكم هنا: ${feedbackUrl}${stampsMsg}`;
 
         try {
           await sendReson8Message({

@@ -269,15 +269,15 @@ async function sendServiceCompletionNotification(service, customer, isFreeServic
     plate: customer.vehicle_plate,
   });
 
-  const firstName = customer.name ? customer.name.split(' ')[0] : 'Customer';
-  let message = `Hi ${firstName}, your ${service.service_name} service is complete. Thank you for choosing Sniper Car Care.`;
+  const firstName = customer.name ? customer.name.split(' ')[0] : 'أهلاً بك';
+  let message = `مرحباً ${firstName}، تم إكمال خدمة ${service.service_name} الخاصة بك. شكراً لاختياركم سنايبر للعناية بالسيارات.`;
 
   if (feedbackUrl) {
-    message += ` Share feedback: ${feedbackUrl}`;
+    message += ` شاركنا تقييمك: ${feedbackUrl}`;
   }
 
   if (isFreeServiceEligible) {
-    message += ' 🎉 You now qualify for a FREE service — ask our team to redeem it!';
+    message += ' 🎉 أنت الآن مؤهل للحصول على خدمة مجانية — اطلب من فريقنا تفعيلها!';
   }
 
   await sendReson8Message({

@@ -32,12 +32,12 @@ async function sendVIPCompletionNotification(booking, customer, orderId) {
 
       if (currentStamps === 0) {
         if (orderPayStatus === 'free') {
-          stampsMsg = " Congrats! You earned a FREE wash for your next visit!";
+          stampsMsg = " تهانينا! لقد حصلت على غسيل مجاني لزيارتك القادمة!";
         } else {
-          stampsMsg = " You have completed 5/5 washes. Congrats! You earned a FREE wash for your next visit!";
+          stampsMsg = " لقد أكملت 5/5 من الغسلات. تهانينا! لقد حصلت على غسيل مجاني لزيارتك القادمة!";
         }
       } else {
-        stampsMsg = ` You have completed ${currentStamps}/5 washes. Only ${5 - currentStamps} more washes left to get your FREE wash!`;
+        stampsMsg = ` لقد أكملت ${currentStamps}/5 من الغسلات. متبقي ${5 - currentStamps} غسلات فقط للحصول على غسيلك المجاني!`;
       }
     }
   } catch (err) {
@@ -51,11 +51,11 @@ async function sendVIPCompletionNotification(booking, customer, orderId) {
     orderId: orderId,
   });
 
-  const firstName = customer.name ? customer.name.split(' ')[0] : 'Customer';
-  let message = `Hi ${firstName}, your VIP ${booking.service_type} service is complete. Thank you for choosing Sniper Car Care.`;
+  const firstName = customer.name ? customer.name.split(' ')[0] : 'أهلاً بك';
+  let message = `مرحباً ${firstName}، تم إكمال خدمة الـ VIP ${booking.service_type} الخاصة بك. شكراً لاختياركم سنايبر للعناية بالسيارات.`;
 
   if (feedbackUrl) {
-    message += ` Share feedback: ${feedbackUrl}`;
+    message += ` شاركنا تقييمك: ${feedbackUrl}`;
   }
   
   message += stampsMsg;
