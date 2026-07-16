@@ -241,10 +241,13 @@ const Orders = () => {
                 const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
                 const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
 
+                const hasDiscount = order.discount && parseFloat(order.discount) > 0;
+
                 return (
                   <tr
                     key={order.id}
                     className={`hover:bg-gray-50 transition-colors ${
+                      hasDiscount ? 'bg-red-50/70 hover:bg-red-100/70 border-l-4 border-red-500' :
                       isVipOrder ? 'bg-purple-50/60 hover:bg-purple-100/60 border-l-4 border-purple-500' :
                       isCompleted && !isProductOnly && serviceTimeColor === 'green' ? 'bg-green-50/60' :
                       isCompleted && !isProductOnly && serviceTimeColor === 'red' ? 'bg-red-50/60' :
@@ -282,7 +285,16 @@ const Orders = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      AED {parseFloat(order.total).toLocaleString()}
+                      <div className="flex flex-col">
+                        <span className={hasDiscount ? "font-bold text-red-600" : "font-semibold text-gray-900"}>
+                          AED {parseFloat(order.total).toLocaleString()}
+                        </span>
+                        {hasDiscount && (
+                          <span className="text-[10px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded w-max mt-0.5 notranslate" translate="no">
+                            Discount: AED {parseFloat(order.discount).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {isProductOnly ? (
