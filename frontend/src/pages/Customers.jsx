@@ -244,7 +244,7 @@ const Customers = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center no-print">
         <h1 className="text-3xl font-bold text-gray-800">Customers</h1>
         <div className="flex gap-3">
           {user?.role === 'admin' && (
@@ -516,7 +516,7 @@ const Customers = () => {
       )}
 
       {/* Search Bar */}
-      <div className="bg-white p-4 rounded-lg shadow">
+      <div className="bg-white p-4 rounded-lg shadow no-print">
         <div className="flex gap-4">
           <input
             type="text"
@@ -540,7 +540,7 @@ const Customers = () => {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-lg shadow no-print">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-gray-800">Filter Customers</h3>
             <button
@@ -688,7 +688,7 @@ const Customers = () => {
       )}
 
       {/* Results Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-lg shadow overflow-hidden no-print">
         <div className="px-6 py-4 border-b bg-gray-50">
           <p className="text-sm text-gray-600">
             Showing <span className="font-semibold text-gray-900">{filteredCustomers.length}</span> customer{filteredCustomers.length !== 1 ? 's' : ''}
@@ -819,7 +819,7 @@ const Customers = () => {
       </div>
       {/* QR Codes Flyer Modal */}
       {showQRModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-55 flex items-center justify-center z-[100] p-4 overflow-y-auto no-print">
+        <div className="fixed inset-0 bg-black bg-opacity-55 flex items-center justify-center z-[100] p-4 overflow-y-auto print-overlay">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden animate-in fade-in zoom-in duration-200">
             {/* Modal Header */}
             <div className="bg-blue-600 p-5 text-white flex justify-between items-center no-print">
@@ -847,37 +847,64 @@ const Customers = () => {
             </div>
 
             {/* Printable Flyer Area */}
-            <div className="p-8 bg-gray-100 flex justify-center overflow-y-auto max-h-[75vh]">
+            <div className="p-8 bg-gray-100 flex justify-center overflow-y-auto max-h-[75vh] print-wrapper">
               <div
                 id="printable-qr-flyer"
-                className="bg-white p-12 border-[8px] border-black rounded-3xl max-w-2xl w-full text-center space-y-8 shadow-md"
+                className="bg-white p-8 border-[6px] border-black rounded-3xl max-w-2xl w-full text-center space-y-6 shadow-md"
                 style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}
               >
                 {/* Style sheet specifically to hide everything else on print */}
                 <style dangerouslySetInnerHTML={{__html: `
                   @media print {
+                    .no-print {
+                      display: none !important;
+                    }
                     body {
                       background: white !important;
                       color: black !important;
+                      margin: 0 !important;
+                      padding: 0 !important;
+                      -webkit-print-color-adjust: exact;
+                      print-color-adjust: exact;
                     }
-                    body * {
-                      visibility: hidden;
+                    .print-overlay {
+                      position: absolute !important;
+                      left: 0 !important;
+                      top: 0 !important;
+                      width: 100% !important;
+                      height: auto !important;
+                      background: white !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                      overflow: visible !important;
+                      display: block !important;
+                      z-index: auto !important;
                     }
-                    #printable-qr-flyer, #printable-qr-flyer * {
-                      visibility: visible;
+                    .print-overlay > div {
+                      box-shadow: none !important;
+                      border: none !important;
+                      max-width: 100% !important;
+                      width: 100% !important;
+                      margin: 0 !important;
+                      padding: 0 !important;
+                      background: white !important;
+                    }
+                    .print-wrapper {
+                      padding: 0 !important;
+                      background: white !important;
+                      max-height: none !important;
+                      overflow: visible !important;
+                      display: block !important;
                     }
                     #printable-qr-flyer {
-                      position: absolute;
-                      left: 0;
-                      top: 0;
-                      width: 100%;
-                      border: none !important;
+                      border: 5px solid black !important;
                       box-shadow: none !important;
-                      margin: 0 !important;
-                      padding: 20px !important;
-                    }
-                    .no-print {
-                      display: none !important;
+                      margin: 0 auto !important;
+                      padding: 16px 24px !important;
+                      page-break-inside: avoid !important;
+                      width: 100% !important;
+                      max-width: 580px !important;
+                      height: auto !important;
                     }
                   }
                 `}} />
@@ -885,51 +912,51 @@ const Customers = () => {
                 {/* Brand Header */}
                 <div className="space-y-2">
                   <span className="text-center leading-tight block">
-                    <span className="block text-5xl font-black italic tracking-tight text-black">SNIPER</span>
-                    <span className="block text-sm font-bold text-red-600 tracking-[0.25em] uppercase mt-1">Car Care</span>
+                    <span className="block text-4xl font-black italic tracking-tight text-black">SNIPER</span>
+                    <span className="block text-xs font-bold text-red-600 tracking-[0.25em] uppercase mt-1">Car Care</span>
                   </span>
-                  <div className="h-1 bg-red-600 w-24 mx-auto rounded-full mt-4"></div>
+                  <div className="h-0.5 bg-red-600 w-16 mx-auto rounded-full mt-3"></div>
                 </div>
 
                 {/* Call to Action */}
-                <div className="space-y-2">
-                  <h3 className="text-3xl font-black tracking-tight text-gray-900">SCAN TO REGISTER YOUR VEHICLE</h3>
-                  <p className="text-gray-650 text-sm max-w-md mx-auto">
+                <div className="space-y-1">
+                  <h3 className="text-2xl font-black tracking-tight text-gray-900">SCAN TO REGISTER YOUR VEHICLE</h3>
+                  <p className="text-gray-650 text-xs max-w-md mx-auto">
                     Skip the queue! Scan the QR code below matching your vehicle type to register details directly in our database.
                   </p>
                 </div>
 
                 {/* QR Codes Grid */}
-                <div className="grid grid-cols-2 gap-8 pt-4">
+                <div className="grid grid-cols-2 gap-6 pt-2">
                   {/* Saloon Registration QR */}
-                  <div className="border-2 border-gray-250 p-6 rounded-2xl bg-gray-50 flex flex-col items-center space-y-4">
-                    <h4 className="text-md font-bold text-gray-800 uppercase tracking-wider">Saloon Cars</h4>
-                    <div className="bg-white p-3 rounded-xl border border-gray-200">
+                  <div className="border-2 border-gray-250 p-4 rounded-xl bg-gray-50 flex flex-col items-center space-y-3">
+                    <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Saloon Cars</h4>
+                    <div className="bg-white p-2 rounded-lg border border-gray-200">
                       <img
-                        src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=http://saloon.snipercarcare.com/register"
+                        src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=http://saloon.snipercarcare.com/register"
                         alt="Saloon Registration QR"
-                        className="w-44 h-44"
+                        className="w-36 h-36"
                       />
                     </div>
-                    <span className="text-xs font-semibold text-gray-500">Scan for Saloon / Sedan</span>
+                    <span className="text-[10px] font-semibold text-gray-500">Scan for Saloon / Sedan</span>
                   </div>
 
                   {/* 4x4 SUV Registration QR */}
-                  <div className="border-2 border-gray-250 p-6 rounded-2xl bg-gray-50 flex flex-col items-center space-y-4">
-                    <h4 className="text-md font-bold text-gray-800 uppercase tracking-wider">4x4 / SUVs</h4>
-                    <div className="bg-white p-3 rounded-xl border border-gray-200">
+                  <div className="border-2 border-gray-250 p-4 rounded-xl bg-gray-50 flex flex-col items-center space-y-3">
+                    <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wider">4x4 / SUVs</h4>
+                    <div className="bg-white p-2 rounded-lg border border-gray-200">
                       <img
-                        src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=http://4x4.snipercarcare.com/register"
+                        src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=http://4x4.snipercarcare.com/register"
                         alt="4x4 Registration QR"
-                        className="w-44 h-44"
+                        className="w-36 h-36"
                       />
                     </div>
-                    <span className="text-xs font-semibold text-gray-500">Scan for 4x4 / SUV / Trucks</span>
+                    <span className="text-[10px] font-semibold text-gray-500">Scan for 4x4 / SUV / Trucks</span>
                   </div>
                 </div>
 
                 {/* Footer Info */}
-                <div className="pt-6 border-t border-gray-200 text-xs font-bold text-gray-500 tracking-wide uppercase">
+                <div className="pt-4 border-t border-gray-200 text-[10px] font-bold text-gray-500 tracking-wide uppercase">
                   Thank you for choosing Sniper Car Care!
                 </div>
               </div>

@@ -119,7 +119,7 @@ const RegisterPage = () => {
               Register Another Vehicle
             </button>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(`/?plate=${encodeURIComponent(formData.plate_code + ' ' + formData.emirate + ' ' + formData.plate_number.trim())}`)}
               className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-md transition-colors"
             >
               Go to Home Page
