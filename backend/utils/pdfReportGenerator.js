@@ -77,6 +77,12 @@ function generatePDFReport(tab, data, params, outputPath) {
         case 'credit':
           title = 'Credit Report';
           break;
+        case 'commission':
+          title = 'Commission Report';
+          break;
+        case 'service_sales':
+          title = 'Service Sales Report';
+          break;
         case 'registers':
           title = `Cash Register Session Report (#${params.register_id || 'Active'})`;
           dateRange = '';
@@ -446,6 +452,66 @@ function generatePDFReport(tab, data, params, outputPath) {
           currentY = drawTableHeaders(headers, cols, currentY);
           currentY = drawTableRows(rows, cols, currentY);
         }
+      }
+      else if (tab === 'commission') {
+        const drawSection = (title, items, y) => {
+          if (!items || items.length === 0) return y;
+          doc.fillColor(primaryColor).fontSize(12).font('Helvetica-Bold').text(title, 40, y);
+          let newY = y + 15;
+          const headers = ['Service Name', 'Quantity', 'Commission (AED)'];
+          const cols = [
+            { name: 'Service Name', key: 'name', x: 50, w: 250 },
+            { name: 'Quantity', key: 'quantity', x: 310, w: 100, align: 'right' },
+            { name: 'Commission', key: 'commission', x: 420, w: 100, align: 'right' }
+          ];
+          const rows = items.map(item => ({
+            name: item.service_name || item.vehicle_type,
+            quantity: item.quantity,
+            commission: parseFloat(item.commission).toFixed(2)
+          }));
+          // Add total row
+          const totalQty = items.reduce((sum, item) => sum + parseInt(item.quantity || 0), 0);
+          const totalComm = items.reduce((sum, item) => sum + parseFloat(item.commission || 0), 0);
+          rows.push({ name: 'TOTAL', quantity: totalQty.toString(), commission: totalComm.toFixed(2) });
+
+          newY = drawTableHeaders(headers, cols, newY);
+          return drawTableRows(rows, cols, newY) + 20;
+        };
+
+        currentY = drawSection('Saloon Services', data.saloon, currentY);
+        currentY = drawSection('4x4 Services', data.fourx4, currentY);
+        currentY = drawSection('VIP Services', data.vip, currentY);
+      }
+      else if (tab === 'service_sales') {
+        const drawSection = (title, items, y) => {
+          if (!items || items.length === 0) return y;
+          doc.fillColor(primaryColor).fontSize(12).font('Helvetica-Bold').text(title, 40, y);
+          let newY = y + 15;
+          const headers = ['Service Name', 'Qty', 'Selling (AED)', 'Net (AED)', 'Cost (AED)', 'Profit (AED)'];
+          const cols = [
+            { name: 'Service Name', key: 'name', x: 45, w: 150 },
+            { name: 'Qty', key: 'quantity', x: 200, w: 40, align: 'right' },
+            { name: 'Selling', key: 'selling', x: 250, w: 70, align: 'right' },
+            { name: 'Net', key: 'net', x: 330, w: 70, align: 'right' },
+            { name: 'Cost', key: 'cost', x: 410, w: 60, align: 'right' },
+            { name: 'Profit', key: 'profit', x: 480, w: 70, align: 'right' }
+          ];
+          const rows = items.map(item => ({
+            name: item.service_name,
+            quantity: item.quantity,
+            selling: parseFloat(item.selling_price).toFixed(2),
+            net: parseFloat(item.net_price).toFixed(2),
+            cost: parseFloat(item.cost_price).toFixed(2),
+            profit: parseFloat(item.profit).toFixed(2)
+          }));
+
+          newY = drawTableHeaders(headers, cols, newY);
+          return drawTableRows(rows, cols, newY) + 20;
+        };
+
+        currentY = drawSection('Saloon Services', data.saloon, currentY);
+        currentY = drawSection('4x4 Services', data.fourx4, currentY);
+        currentY = drawSection('VIP Services', data.vip, currentY);
       }
       else if (tab === 'registers') {
         const report = data;
