@@ -6,6 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script type="text/javascript">
       (function() {
+        // Force Arabic default migration for existing users
+        if (!localStorage.getItem('lang_migrated_to_ar_v2')) {
+          localStorage.setItem('user_lang', 'ar');
+          localStorage.setItem('lang_migrated_to_ar_v2', 'true');
+        }
         var userLang = localStorage.getItem('user_lang');
         if (!userLang) {
           userLang = 'ar';
