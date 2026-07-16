@@ -300,6 +300,12 @@ const markNotificationsAsRead = asyncHandler(async (req, res) => {
   const finalQuery = `UPDATE customer_notifications SET is_read = 1 WHERE (${query.split(' WHERE ')[1]}) AND is_read = 0`;
   await pool.query(finalQuery, queryParams);
 
+  res.json({
+    success: true,
+    message: 'Notifications marked as read'
+  });
+});
+
 // @desc    Register or update customer from public forms (via QR code)
 // @route   POST /api/public/customer/register
 // @access  Public
