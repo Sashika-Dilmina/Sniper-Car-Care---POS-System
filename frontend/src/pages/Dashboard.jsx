@@ -637,7 +637,7 @@ const Dashboard = () => {
                   topCustomers.map((customer) => (
                     <tr key={customer.id} className="border-b hover:bg-gray-50">
                       <td className="p-2">{customer.name}</td>
-                      <td className="p-2">{customer.vehicle_plate}</td>
+                      <td className="p-2 notranslate" translate="no">{customer.vehicle_plate}</td>
                       <td className="p-2 text-right">{customer.order_count}</td>
                       <td className="p-2 text-right">
                         AED {parseFloat(customer.total_spent).toLocaleString()}
@@ -694,7 +694,7 @@ const Dashboard = () => {
                           )}
                         </td>
                         <td className="p-2">{order.customer_name || 'Walk-in'}</td>
-                        <td className="p-2 font-mono">{order.vehicle_plate || 'N/A'}</td>
+                        <td className="p-2 font-mono notranslate" translate="no">{order.vehicle_plate || 'N/A'}</td>
                         <td className="p-2">
                           {order.items && order.items.length > 0 ? (
                             <div className="flex flex-col gap-1 max-w-xs truncate">
@@ -782,7 +782,7 @@ const Dashboard = () => {
                     <td className="p-2">{customer.name}</td>
                     <td className="p-2">{customer.phone}</td>
                     <td className="p-2">{customer.vehicle_type || 'N/A'}</td>
-                    <td className="p-2">{customer.vehicle_plate || 'N/A'}</td>
+                    <td className="p-2 notranslate" translate="no">{customer.vehicle_plate || 'N/A'}</td>
                     <td className="p-2 text-right">{customer.joined_date}</td>
                   </tr>
                 ))
@@ -841,7 +841,9 @@ const Dashboard = () => {
                     )}
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <span>
-                        {feedback.vehicle_plate ? `Plate: ${feedback.vehicle_plate}` :
+                        {feedback.vehicle_plate ? (
+                          <>Plate: <span className="notranslate" translate="no">{feedback.vehicle_plate}</span></>
+                        ) :
                           feedback.customer_phone ? `Phone: ${feedback.customer_phone}` :
                             'Anonymous'}
                       </span>
@@ -892,7 +894,7 @@ const Dashboard = () => {
                         <td className="p-2 font-semibold text-gray-800">
                           {service.customer_name || <span className="text-gray-400 italic font-normal">Walk-in</span>}
                         </td>
-                        <td className="p-2 font-mono text-sm">{service.vehicle_plate || 'N/A'}</td>
+                        <td className="p-2 font-mono text-sm notranslate" translate="no">{service.vehicle_plate || 'N/A'}</td>
                         <td className="p-2">{service.service_name}</td>
                         <td className="p-2 text-center text-xs text-gray-500">
                           {service.started_at ? new Date(service.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A'}
