@@ -6,6 +6,7 @@ import PaymentPage from './pages/PaymentPage';
 import HistoryPage from './pages/HistoryPage';
 import ProfilePage from './pages/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
+import RegisterPage from './pages/RegisterPage';
 import LanguageSelector from './components/LanguageSelector';
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/register" element={<RegisterPage />} />
       </Routes>
     </BrowserRouter>
   );

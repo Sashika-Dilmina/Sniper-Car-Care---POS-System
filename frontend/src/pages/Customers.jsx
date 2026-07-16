@@ -131,6 +131,7 @@ const Customers = () => {
   );
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
   const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
@@ -257,6 +258,16 @@ const Customers = () => {
               Export to Excel
             </button>
           )}
+          <button
+            onClick={() => setShowQRModal(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow-md"
+            title="Show registration QR code printouts"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 00-1 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+            Registration QR
+          </button>
           <button
             onClick={() => setShowAddModal(true)}
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition flex items-center gap-2 shadow-lg"
@@ -806,6 +817,126 @@ const Customers = () => {
           </div>
         )}
       </div>
+      {/* QR Codes Flyer Modal */}
+      {showQRModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-55 flex items-center justify-center z-[100] p-4 overflow-y-auto no-print">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="bg-blue-600 p-5 text-white flex justify-between items-center no-print">
+              <div>
+                <h2 className="text-2xl font-bold">Printable Registration QR Code Flyer</h2>
+                <p className="text-blue-100 text-sm mt-1">Hang this flyer in your service lobby for customer self-registration</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-white text-blue-700 rounded-lg hover:bg-blue-50 font-bold transition flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print Flyer
+                </button>
+                <button
+                  onClick={() => setShowQRModal(false)}
+                  className="px-4 py-2 bg-blue-750 text-white rounded-lg hover:bg-blue-800 transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Flyer Area */}
+            <div className="p-8 bg-gray-100 flex justify-center overflow-y-auto max-h-[75vh]">
+              <div
+                id="printable-qr-flyer"
+                className="bg-white p-12 border-[8px] border-black rounded-3xl max-w-2xl w-full text-center space-y-8 shadow-md"
+                style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}
+              >
+                {/* Style sheet specifically to hide everything else on print */}
+                <style dangerouslySetInnerHTML={{__html: `
+                  @media print {
+                    body {
+                      background: white !important;
+                      color: black !important;
+                    }
+                    body * {
+                      visibility: hidden;
+                    }
+                    #printable-qr-flyer, #printable-qr-flyer * {
+                      visibility: visible;
+                    }
+                    #printable-qr-flyer {
+                      position: absolute;
+                      left: 0;
+                      top: 0;
+                      width: 100%;
+                      border: none !important;
+                      box-shadow: none !important;
+                      margin: 0 !important;
+                      padding: 20px !important;
+                    }
+                    .no-print {
+                      display: none !important;
+                    }
+                  }
+                `}} />
+
+                {/* Brand Header */}
+                <div className="space-y-2">
+                  <span className="text-center leading-tight block">
+                    <span className="block text-5xl font-black italic tracking-tight text-black">SNIPER</span>
+                    <span className="block text-sm font-bold text-red-600 tracking-[0.25em] uppercase mt-1">Car Care</span>
+                  </span>
+                  <div className="h-1 bg-red-600 w-24 mx-auto rounded-full mt-4"></div>
+                </div>
+
+                {/* Call to Action */}
+                <div className="space-y-2">
+                  <h3 className="text-3xl font-black tracking-tight text-gray-900">SCAN TO REGISTER YOUR VEHICLE</h3>
+                  <p className="text-gray-650 text-sm max-w-md mx-auto">
+                    Skip the queue! Scan the QR code below matching your vehicle type to register details directly in our database.
+                  </p>
+                </div>
+
+                {/* QR Codes Grid */}
+                <div className="grid grid-cols-2 gap-8 pt-4">
+                  {/* Saloon Registration QR */}
+                  <div className="border-2 border-gray-250 p-6 rounded-2xl bg-gray-50 flex flex-col items-center space-y-4">
+                    <h4 className="text-md font-bold text-gray-800 uppercase tracking-wider">Saloon Cars</h4>
+                    <div className="bg-white p-3 rounded-xl border border-gray-200">
+                      <img
+                        src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=http://saloon.snipercarcare.com/register"
+                        alt="Saloon Registration QR"
+                        className="w-44 h-44"
+                      />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-500">Scan for Saloon / Sedan</span>
+                  </div>
+
+                  {/* 4x4 SUV Registration QR */}
+                  <div className="border-2 border-gray-250 p-6 rounded-2xl bg-gray-50 flex flex-col items-center space-y-4">
+                    <h4 className="text-md font-bold text-gray-800 uppercase tracking-wider">4x4 / SUVs</h4>
+                    <div className="bg-white p-3 rounded-xl border border-gray-200">
+                      <img
+                        src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=http://4x4.snipercarcare.com/register"
+                        alt="4x4 Registration QR"
+                        className="w-44 h-44"
+                      />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-500">Scan for 4x4 / SUV / Trucks</span>
+                  </div>
+                </div>
+
+                {/* Footer Info */}
+                <div className="pt-6 border-t border-gray-200 text-xs font-bold text-gray-500 tracking-wide uppercase">
+                  Thank you for choosing Sniper Car Care!
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

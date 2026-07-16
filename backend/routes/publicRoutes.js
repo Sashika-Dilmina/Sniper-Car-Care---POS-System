@@ -15,6 +15,7 @@ router.get('/customer/by-id', publicCustomerController.getCustomerById);
 router.get('/customer/orders', publicCustomerController.getCustomerOrders);
 router.get('/customer/notifications', publicCustomerController.getCustomerNotifications);
 router.post('/customer/notifications/mark-read', publicCustomerController.markNotificationsAsRead);
+router.post('/customer/register', publicCustomerController.registerCustomer);
 
 // Public order routes
 router.post('/orders', publicOrderController.createOrder);

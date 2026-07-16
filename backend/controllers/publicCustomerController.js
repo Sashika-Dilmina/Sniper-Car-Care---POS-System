@@ -300,10 +300,84 @@ const markNotificationsAsRead = asyncHandler(async (req, res) => {
   const finalQuery = `UPDATE customer_notifications SET is_read = 1 WHERE (${query.split(' WHERE ')[1]}) AND is_read = 0`;
   await pool.query(finalQuery, queryParams);
 
-  res.json({
-    success: true,
-    message: 'Notifications marked as read'
-  });
+// @desc    Register or update customer from public forms (via QR code)
+// @route   POST /api/public/customer/register
+// @access  Public
+const registerCustomer = asyncHandler(async (req, res) => {
+  const { name, phone, vehicle_plate, vehicle_type, province } = req.body;
+
+  if (!name || !phone || !vehicle_plate || !vehicle_type || !province) {
+    return res.status(400).json({ message: 'Name, phone, vehicle plate, vehicle type, and emirate are required' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Check if customer already exists by plate
+    const [existing] = await connection.query(
+      'SELECT id FROM customers WHERE vehicle_plate = ?',
+      [vehicle_plate]
+    );
+
+    let customerId;
+    if (existing.length > 0) {
+      customerId = existing[0].id;
+      // Update existing customer info
+      await connection.query(
+        'UPDATE customers SET name = ?, phone = ?, vehicle_type = ?, province = ? WHERE id = ?',
+        [name, phone, vehicle_type, province, customerId]
+      );
+      
+      // Also update vehicles table if exists
+      const { parsePlateComponents } = require('../utils/customerLinkUtils');
+      const { plateCode, plateNumber } = parsePlateComponents(vehicle_plate);
+      
+      await connection.query(
+        `INSERT INTO vehicles (CustomerId, VehicleRegistrationNumber, PlateCode, PlateNumber, Emirate)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE VehicleRegistrationNumber = VALUES(VehicleRegistrationNumber), PlateCode = VALUES(PlateCode), PlateNumber = VALUES(PlateNumber), Emirate = VALUES(Emirate)`,
+        [customerId, vehicle_plate, plateCode || '', plateNumber || '', province]
+      );
+      
+      await connection.commit();
+      return res.status(200).json({
+        success: true,
+        message: 'Customer information updated successfully',
+        customer_id: customerId
+      });
+    }
+
+    // Insert new customer
+    const [result] = await connection.query(
+      'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
+      [name, phone, vehicle_plate, vehicle_type, province]
+    );
+    customerId = result.insertId;
+
+    // Create entry in vehicles table
+    const { parsePlateComponents } = require('../utils/customerLinkUtils');
+    const { plateCode, plateNumber } = parsePlateComponents(vehicle_plate);
+
+    await connection.query(
+      'INSERT INTO vehicles (CustomerId, VehicleRegistrationNumber, PlateCode, PlateNumber, Emirate) VALUES (?, ?, ?, ?, ?)',
+      [customerId, vehicle_plate, plateCode || '', plateNumber || '', province]
+    );
+
+    await connection.commit();
+
+    res.status(201).json({
+      success: true,
+      message: 'Customer registered successfully',
+      customer_id: customerId
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error in public customer register:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    connection.release();
+  }
 });
 
 module.exports = {
@@ -311,6 +385,7 @@ module.exports = {
   getCustomerById,
   getCustomerOrders,
   getCustomerNotifications,
-  markNotificationsAsRead
+  markNotificationsAsRead,
+  registerCustomer
 };
 
