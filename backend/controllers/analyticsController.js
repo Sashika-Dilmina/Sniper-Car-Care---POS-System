@@ -1771,7 +1771,7 @@ const getCommissionReport = asyncHandler(async (req, res) => {
     ORDER BY p.name ASC
   `, params);
 
-  // VIP orders (orders linked to vip_bookings) grouped by vehicle type (with quantity and commission multiplied by 3)
+  // VIP orders (orders linked to vip_bookings) grouped by vehicle type (with commission multiplied by 3)
   let vipDateFilter = '';
   const vipParams = [];
   if (start_date && end_date) {
@@ -1782,7 +1782,7 @@ const getCommissionReport = asyncHandler(async (req, res) => {
   const [vipServices] = await pool.query(`
     SELECT
       types.v_type as vehicle_type,
-      COUNT(DISTINCT o.id) * 3 as quantity,
+      COUNT(DISTINCT o.id) as quantity,
       COUNT(DISTINCT o.id) * 3 as commission
     FROM (SELECT 'Saloon' as v_type UNION SELECT '4x4' as v_type) types
     LEFT JOIN vip_customers vc ON vc.vehicle_type = types.v_type
@@ -1821,9 +1821,9 @@ const getServiceSalesReport = asyncHandler(async (req, res) => {
       p.name as service_name,
       COUNT(s.id) as quantity,
       COALESCE(SUM(s.price), 0) as selling_price,
-      COALESCE(SUM(IF(o.discount > 0, s.price - (o.discount * (s.price / NULLIF(o.total + o.discount, 0))), 0)), 0) as net_price,
+      COALESCE(SUM(s.price - IF(o.discount > 0, o.discount * (s.price / NULLIF(o.total + o.discount, 0)), 0)), 0) as net_price,
       COALESCE(SUM(IF(s.id IS NOT NULL, p.purchase_price, 0)), 0) as cost_price,
-      COALESCE(SUM(IF(o.discount > 0, s.price - (o.discount * (s.price / NULLIF(o.total + o.discount, 0))), s.price) - COALESCE(p.purchase_price, 0)), 0) as profit
+      COALESCE(SUM(s.price - IF(o.discount > 0, o.discount * (s.price / NULLIF(o.total + o.discount, 0)), 0) - COALESCE(p.purchase_price, 0)), 0) as profit
     FROM products p
     LEFT JOIN services s ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (%'))
       AND s.vehicle_type = 'Saloon'
@@ -1841,9 +1841,9 @@ const getServiceSalesReport = asyncHandler(async (req, res) => {
       p.name as service_name,
       COUNT(s.id) as quantity,
       COALESCE(SUM(s.price), 0) as selling_price,
-      COALESCE(SUM(IF(o.discount > 0, s.price - (o.discount * (s.price / NULLIF(o.total + o.discount, 0))), 0)), 0) as net_price,
+      COALESCE(SUM(s.price - IF(o.discount > 0, o.discount * (s.price / NULLIF(o.total + o.discount, 0)), 0)), 0) as net_price,
       COALESCE(SUM(IF(s.id IS NOT NULL, p.purchase_price, 0)), 0) as cost_price,
-      COALESCE(SUM(IF(o.discount > 0, s.price - (o.discount * (s.price / NULLIF(o.total + o.discount, 0))), s.price) - COALESCE(p.purchase_price, 0)), 0) as profit
+      COALESCE(SUM(s.price - IF(o.discount > 0, o.discount * (s.price / NULLIF(o.total + o.discount, 0)), 0) - COALESCE(p.purchase_price, 0)), 0) as profit
     FROM products p
     LEFT JOIN services s ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (%'))
       AND s.vehicle_type = '4x4'
@@ -1867,10 +1867,10 @@ const getServiceSalesReport = asyncHandler(async (req, res) => {
     SELECT
       types.v_type as service_name,
       COUNT(DISTINCT o.id) as quantity,
-      COALESCE(SUM(o.total), 0) as selling_price,
-      COALESCE(SUM(IF(o.discount > 0, o.total - o.discount, 0)), 0) as net_price,
+      COALESCE(SUM(o.total + o.discount), 0) as selling_price,
+      COALESCE(SUM(o.total), 0) as net_price,
       0 as cost_price,
-      COALESCE(SUM(IF(o.discount > 0, o.total - o.discount, o.total)), 0) as profit
+      COALESCE(SUM(o.total), 0) as profit
     FROM (SELECT 'Saloon' as v_type UNION SELECT '4x4' as v_type) types
     LEFT JOIN vip_customers vc ON vc.vehicle_type = types.v_type
     LEFT JOIN vip_bookings vb ON vb.vip_customer_id = vc.id
