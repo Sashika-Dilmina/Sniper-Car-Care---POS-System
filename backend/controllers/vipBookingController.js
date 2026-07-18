@@ -51,13 +51,14 @@ async function sendVIPCompletionNotification(booking, customer, orderId) {
     orderId: orderId,
   });
 
-  let message = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nغسيلك المجاني صار أقرب \nتقييمك يساعدنا نقدم خدمة أفضل\n`;
+  let message = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nتقييمك يساعدنا نقدم خدمة أفضل\n`;
 
   if (feedbackUrl) {
     message += ` ${feedbackUrl}`;
   }
   
-  message += stampsMsg;
+  // stampsMsg disabled temporarily
+  // message += stampsMsg;
 
   await sendReson8Message({
     to: formattedPhone,
@@ -556,6 +557,7 @@ exports.getAvailableSlots = asyncHandler(async (req, res) => {
 // @route DELETE /api/vip-bookings/:id
 // @access Private
 exports.deleteVIPBooking = asyncHandler(async (req, res) => {
+  const { reason } = req.body;
   const [booking] = await db.query(
     'SELECT * FROM vip_bookings WHERE id = ?',
     [req.params.id]
@@ -569,8 +571,8 @@ exports.deleteVIPBooking = asyncHandler(async (req, res) => {
   }
   
   await db.query(
-    'DELETE FROM vip_bookings WHERE id = ?',
-    [req.params.id]
+    'UPDATE vip_bookings SET is_deleted = 1, delete_reason = ? WHERE id = ?',
+    [reason || 'No reason specified', req.params.id]
   );
   
   res.status(200).json({

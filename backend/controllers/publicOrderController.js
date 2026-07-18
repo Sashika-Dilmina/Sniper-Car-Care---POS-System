@@ -71,31 +71,41 @@ const createOrder = asyncHandler(async (req, res) => {
     }
 
     if (!finalCustomerId && customer_name && customer_phone && vehicle_plate) {
-      try {
-        const [newCustomer] = await connection.query(
-          'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
-          [customer_name, customer_phone, vehicle_plate, vehicleType, province]
-        );
-        finalCustomerId = newCustomer.insertId;
+      // Check if customer with same plate or phone exists
+      const [existing] = await connection.query(
+        'SELECT id FROM customers WHERE vehicle_plate = ? OR (phone IS NOT NULL AND phone != "" AND phone = ?)',
+        [vehicle_plate, customer_phone]
+      );
+      
+      if (existing.length > 0) {
+        finalCustomerId = existing[0].id;
+      } else {
         try {
-          await ensureLoyaltyRow(connection, finalCustomerId);
-        } catch (loyaltyInitErr) {
-          if (loyaltyInitErr.code !== 'ER_BAD_FIELD_ERROR') {
-            throw loyaltyInitErr;
-          }
-        }
-      } catch (error) {
-        // If customer already exists (duplicate vehicle_plate), try to fetch it
-        if (error.code === 'ER_DUP_ENTRY') {
-          const [customers] = await connection.query(
-            'SELECT id FROM customers WHERE vehicle_plate = ?',
-            [vehicle_plate]
+          const [newCustomer] = await connection.query(
+            'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
+            [customer_name, customer_phone, vehicle_plate, vehicleType, province]
           );
-          if (customers.length > 0) {
-            finalCustomerId = customers[0].id;
+          finalCustomerId = newCustomer.insertId;
+          try {
+            await ensureLoyaltyRow(connection, finalCustomerId);
+          } catch (loyaltyInitErr) {
+            if (loyaltyInitErr.code !== 'ER_BAD_FIELD_ERROR') {
+              throw loyaltyInitErr;
+            }
           }
-        } else {
-          throw error;
+        } catch (error) {
+          // If customer already exists (duplicate vehicle_plate), try to fetch it
+          if (error.code === 'ER_DUP_ENTRY') {
+            const [customers] = await connection.query(
+              'SELECT id FROM customers WHERE vehicle_plate = ?',
+              [vehicle_plate]
+            );
+            if (customers.length > 0) {
+              finalCustomerId = customers[0].id;
+            }
+          } else {
+            throw error;
+          }
         }
       }
     }
@@ -200,6 +210,8 @@ const createOrder = asyncHandler(async (req, res) => {
           serviceName = notes;
         }
 
+        /*
+        // Free wash rewards logic temporarily commented out
         if (currentStamps >= 5) {
           const { calculateFreeWashCap } = require('../utils/freeWashCap');
           const cap = await calculateFreeWashCap(connection, finalCustomerId);
@@ -240,12 +252,13 @@ const createOrder = asyncHandler(async (req, res) => {
             );
           }
         } else {
+        */
           // Paid booking, do not increment stamps yet!
           await connection.query(
             'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending', orderId]
           );
-        }
+        // }
       } catch (loyaltyErr) {
         if (loyaltyErr.code !== 'ER_BAD_FIELD_ERROR') {
           throw loyaltyErr;

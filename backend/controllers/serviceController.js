@@ -269,15 +269,17 @@ async function sendServiceCompletionNotification(service, customer, isFreeServic
     plate: customer.vehicle_plate,
   });
 
-  let message = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nغسيلك المجاني صار أقرب \nتقييمك يساعدنا نقدم خدمة أفضل\n`;
+  let message = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nتقييمك يساعدنا نقدم خدمة أفضل\n`;
 
   if (feedbackUrl) {
     message += ` ${feedbackUrl}`;
   }
 
+  /*
   if (isFreeServiceEligible) {
     message += '\n🎉 أنت الآن مؤهل للحصول على خدمة مجانية — اطلب من فريقنا تفعيلها!';
   }
+  */
 
   await sendReson8Message({
     to: formattedPhone,

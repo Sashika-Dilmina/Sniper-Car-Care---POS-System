@@ -72,10 +72,15 @@ const Employees = () => {
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete employee "${name}"?`)) return;
+    const reason = window.prompt(`Please enter the reason for deleting employee "${name}":`);
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
     
     try {
-      await axios.delete(`/api/employees/${id}`);
+      await axios.delete(`/api/employees/${id}`, { data: { reason } });
       toast.success('Employee deleted successfully');
       fetchEmployees();
     } catch (error) {
@@ -196,8 +201,15 @@ const Employees = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredEmployees.map((employee) => (
-                  <tr key={employee.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap font-medium">{employee.name}</td>
+                  <tr key={employee.id} className={`hover:bg-gray-50 ${employee.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
+                    <td className="px-6 py-4 whitespace-nowrap font-medium">
+                      {employee.name}
+                      {employee.is_deleted === 1 && (
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                          Deleted (Reason: {employee.delete_reason})
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">{employee.email}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-3 py-1 text-xs rounded-full font-semibold capitalize ${
@@ -213,24 +225,28 @@ const Employees = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleEdit(employee)}
-                          className="text-green-600 hover:text-green-800 transition-colors"
-                          title="Edit Employee"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(employee.id, employee.name)}
-                          className="text-red-600 hover:text-red-800 transition-colors"
-                          title="Delete Employee"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        {employee.is_deleted !== 1 && (
+                          <>
+                            <button
+                              onClick={() => handleEdit(employee)}
+                              className="text-green-600 hover:text-green-800 transition-colors"
+                              title="Edit Employee"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDelete(employee.id, employee.name)}
+                              className="text-red-600 hover:text-red-800 transition-colors"
+                              title="Delete Employee"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

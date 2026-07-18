@@ -107,9 +107,15 @@ const Expenses = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this expense record?')) return;
+    const reason = window.prompt('Please enter the reason for deleting this expense record:');
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
+    
     try {
-      const response = await axios.delete(`/api/expenses/${id}`);
+      const response = await axios.delete(`/api/expenses/${id}`, { data: { reason } });
       if (response.data.success) {
         toast.success('Expense record deleted successfully');
         fetchExpenses();
@@ -252,13 +258,18 @@ const Expenses = () => {
                 </tr>
               ) : filteredExpenses.length > 0 ? (
                 filteredExpenses.map((e) => (
-                  <tr key={e.id} className="hover:bg-gray-50/50 transition">
+                  <tr key={e.id} className={`hover:bg-gray-50/50 transition ${e.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {new Date(e.expense_date).toLocaleDateString('en-GB')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
                       <div>{e.title}</div>
                       {e.notes && <div className="text-xs text-gray-400 font-normal mt-0.5">{e.notes}</div>}
+                      {e.is_deleted === 1 && (
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                          Deleted (Reason: {e.delete_reason})
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-[10px] font-bold uppercase tracking-wider bg-primary-50 text-primary-700 px-2.5 py-0.5 rounded-full">
@@ -273,18 +284,22 @@ const Expenses = () => {
                     </td>
                     {user?.role === 'admin' && (
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => handleOpenEditModal(e)}
-                          className="text-primary-600 hover:text-primary-950 font-bold mr-3"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(e.id)}
-                          className="text-red-600 hover:text-red-800 font-bold"
-                        >
-                          Delete
-                        </button>
+                        {e.is_deleted !== 1 && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEditModal(e)}
+                              className="text-primary-600 hover:text-primary-950 font-bold mr-3"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(e.id)}
+                              className="text-red-600 hover:text-red-800 font-bold"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </td>
                     )}
                   </tr>

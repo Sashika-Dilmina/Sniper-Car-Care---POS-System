@@ -249,21 +249,31 @@ const registerFromANPR = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Plate number and vehicle type are required' });
   }
 
-  // Check if exists
-  const [existing] = await pool.query(`
-    SELECT DISTINCT c.id FROM customers c
+  // Check if exists (by plate or phone)
+  let existingQuery = `
+    SELECT DISTINCT c.id, c.phone, c.vehicle_plate FROM customers c
     LEFT JOIN vehicles v ON c.id = v.CustomerId
     WHERE c.vehicle_plate = ? 
        OR REPLACE(c.vehicle_plate, ' ', '') = REPLACE(?, ' ', '')
        OR v.VehicleRegistrationNumber = ?
        OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = REPLACE(?, ' ', '')
-    LIMIT 1
-  `, [finalPlate, finalPlate, finalPlate, finalPlate]);
+  `;
+  const existingParams = [finalPlate, finalPlate, finalPlate, finalPlate];
+  if (phone) {
+    existingQuery += ' OR c.phone = ?';
+    existingParams.push(phone);
+  }
+  existingQuery += ' LIMIT 1';
+
+  const [existing] = await pool.query(existingQuery, existingParams);
 
   if (existing.length > 0) {
     const [custRows] = await pool.query('SELECT * FROM customers WHERE id = ?', [existing[0].id]);
+    const matchedCustomer = existing[0];
+    const isPhoneMatch = phone && matchedCustomer.phone === phone;
+    
     return res.status(400).json({
-      message: 'Vehicle already registered',
+      message: isPhoneMatch ? 'Customer with this phone number already registered' : 'Vehicle already registered',
       customer: custRows[0]
     });
   }

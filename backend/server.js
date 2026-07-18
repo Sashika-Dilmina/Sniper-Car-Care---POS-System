@@ -28,6 +28,7 @@ const creditRoutes = require('./routes/creditRoutes');
 const registerRoutes = require('./routes/registerRoutes');
 const { startFtpServer } = require('./services/ftpServer');
 const { startFileWatcher } = require('./services/anprWatcher');
+const runSoftDeleteMigrations = require('./utils/automaticMigration');
 
 
 // Initialize app
@@ -107,10 +108,17 @@ app.use((req, res) => {
 // Start server
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 API: http://localhost:${PORT}/api`);
+  
+  // Run automatic migrations for soft delete columns
+  try {
+    await runSoftDeleteMigrations();
+  } catch (migErr) {
+    console.error('❌ Failed to run soft-delete column migrations:', migErr);
+  }
   
   // Start ANPR FTP-based services
   try {

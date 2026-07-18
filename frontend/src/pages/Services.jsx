@@ -198,10 +198,15 @@ const Services = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this service package? This will remove it from the customer websites.')) return;
+    const reason = window.prompt('Please enter the reason for deleting this service package:');
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
 
     try {
-      await axios.delete(`/api/products/${id}`);
+      await axios.delete(`/api/products/${id}`, { data: { reason } });
       toast.success('Service deleted successfully');
       fetchServices();
     } catch (error) {
@@ -287,7 +292,7 @@ const Services = () => {
           {filteredServices.map((service) => (
             <div
               key={service.id}
-              className="bg-white rounded-xl border border-gray-150 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex flex-col group"
+              className={`bg-white rounded-xl border border-gray-150 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex flex-col group ${service.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}
             >
               <div className="relative h-44 bg-gray-100 overflow-hidden shrink-0 border-b">
                 {service.image_url ? (
@@ -325,12 +330,17 @@ const Services = () => {
                   <h3 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-primary-600 transition-colors">
                     {service.name}
                   </h3>
+                  {service.is_deleted === 1 && (
+                    <span className="block text-xs text-red-500 font-bold italic mt-1">
+                      Deleted (Reason: {service.delete_reason})
+                    </span>
+                  )}
                   <p className="text-gray-500 text-sm mt-2 line-clamp-3 leading-relaxed">
                     {service.description || <span className="italic">No description provided.</span>}
                   </p>
                 </div>
 
-                {user?.role === 'admin' && (
+                {user?.role === 'admin' && service.is_deleted !== 1 && (
                   <div className="flex justify-end gap-3 pt-5 mt-4 border-t border-gray-100">
                     <button
                       onClick={() => handleEdit(service)}

@@ -145,7 +145,8 @@ const Sales = () => {
   const fetchProducts = async () => {
     try {
       const response = await axios.get('/api/products');
-      setProducts(response.data.products || []);
+      const activeProducts = (response.data.products || []).filter(p => p.is_deleted !== 1);
+      setProducts(activeProducts);
     } catch (error) {
       toast.error('Failed to load catalog items');
     } finally {
@@ -156,7 +157,8 @@ const Sales = () => {
   const fetchCustomers = async () => {
     try {
       const response = await axios.get('/api/customers');
-      setCustomers(response.data.customers || []);
+      const activeCustomers = (response.data.customers || []).filter(c => c.is_deleted !== 1);
+      setCustomers(activeCustomers);
     } catch (error) {
       toast.error('Failed to load customers');
     }

@@ -96,13 +96,17 @@ const updateProduct = asyncHandler(async (req, res) => {
 // @access  Private
 const deleteProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { reason } = req.body;
 
   const [products] = await pool.query('SELECT id FROM products WHERE id = ?', [id]);
   if (products.length === 0) {
     return res.status(404).json({ message: 'Product not found' });
   }
 
-  await pool.query('DELETE FROM products WHERE id = ?', [id]);
+  await pool.query(
+    'UPDATE products SET is_deleted = 1, delete_reason = ? WHERE id = ?',
+    [reason || 'No reason specified', id]
+  );
 
   res.json({ message: 'Product deleted successfully' });
 });

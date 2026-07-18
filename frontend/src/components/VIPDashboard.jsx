@@ -248,13 +248,19 @@ const VIPDashboard = () => {
   };
 
   const deleteBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to delete this booking?')) return;
-
+    const reason = window.prompt('Please enter the reason for deleting this booking:');
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
+ 
     try {
       await axios.delete(`/api/vip/bookings/${bookingId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        },
+        data: { reason }
       });
       toast.success('Booking deleted successfully');
       fetchVIPBookings();
@@ -400,10 +406,17 @@ const VIPDashboard = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {filteredBookings.map((booking) => (
-                      <tr key={booking.id} className="hover:bg-gray-50 transition">
+                      <tr key={booking.id} className={`hover:bg-gray-50 transition ${booking.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div>
-                            <p className="font-semibold text-gray-900">{booking.name}</p>
+                            <p className="font-semibold text-gray-900">
+                              {booking.name}
+                              {booking.is_deleted === 1 && (
+                                <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                                  Deleted (Reason: {booking.delete_reason})
+                                </span>
+                              )}
+                            </p>
                             <p className="text-sm text-gray-500">{booking.phone}</p>
                           </div>
                         </td>
@@ -447,7 +460,7 @@ const VIPDashboard = () => {
                             >
                               Action View
                             </button>
-                            {booking.status === 'in_progress' && (
+                            {booking.status === 'in_progress' && booking.is_deleted !== 1 && (
                               <button
                                 onClick={() => handleStatusChange(booking.id, 'completed')}
                                 className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold transition shadow-sm"
@@ -455,12 +468,14 @@ const VIPDashboard = () => {
                                 Done
                               </button>
                             )}
-                            <button
-                              onClick={() => deleteBooking(booking.id)}
-                              className="text-red-600 hover:text-red-900 font-semibold"
-                            >
-                              Delete
-                            </button>
+                            {booking.is_deleted !== 1 && (
+                              <button
+                                onClick={() => deleteBooking(booking.id)}
+                                className="text-red-600 hover:text-red-900 font-semibold"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

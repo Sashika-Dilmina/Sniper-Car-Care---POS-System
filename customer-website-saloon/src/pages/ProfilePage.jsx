@@ -78,9 +78,10 @@ const ProfilePage = () => {
             </div>
 
             {/* Loyalty Stamps */}
-            {customerData.loyalty && 
-             customerData.customer.emirate !== 'Garage' && 
-             customerData.customer.emirate !== 'Sniper car care' && (
+            {/*
+            customerData.loyalty && 
+            customerData.customer.emirate !== 'Garage' && 
+            customerData.customer.emirate !== 'Sniper car care' && (
               <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl shadow-lg p-6 text-white overflow-hidden relative">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/20 rounded-full blur-2xl -mr-10 -mt-10"></div>
                 <h3 className="text-lg font-bold mb-1">Sniper Loyalty</h3>
@@ -135,7 +136,8 @@ const ProfilePage = () => {
                   )}
                 </div>
               </div>
-            )}
+            )
+            */}
             
           </div>
         ) : null}

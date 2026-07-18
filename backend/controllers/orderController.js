@@ -648,6 +648,7 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
           orderId: order.id
         });
 
+        /*
         let stampsMsg = "";
         const targetCustId = order.customer_id || order.customer_id_ref;
         if (targetCustId) {
@@ -667,8 +668,9 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
             console.error('Error fetching stamps for SMS message:', err);
           }
         }
+        */
 
-        const thankYouMessage = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nغسيلك المجاني صار أقرب \nتقييمك يساعدنا نقدم خدمة أفضل\n${feedbackUrl}${stampsMsg}`;
+        const thankYouMessage = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nتقييمك يساعدنا نقدم خدمة أفضل\n${feedbackUrl}`;
 
         try {
           await sendReson8Message({

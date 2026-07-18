@@ -119,13 +119,17 @@ const updatePurchase = asyncHandler(async (req, res) => {
 // @access  Private (Admin)
 const deletePurchase = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { reason } = req.body;
 
   const [purchases] = await pool.query('SELECT id FROM purchases WHERE id = ?', [id]);
   if (purchases.length === 0) {
     return res.status(404).json({ success: false, message: 'Purchase record not found' });
   }
 
-  await pool.query('DELETE FROM purchases WHERE id = ?', [id]);
+  await pool.query(
+    'UPDATE purchases SET is_deleted = 1, delete_reason = ? WHERE id = ?',
+    [reason || 'No reason specified', id]
+  );
   res.json({ success: true, message: 'Purchase record deleted successfully' });
 });
 

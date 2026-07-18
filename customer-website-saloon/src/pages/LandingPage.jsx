@@ -1208,6 +1208,7 @@ const LandingPage = () => {
         </Reveal>
       </section>
 
+      {/*
       <section className="w-full px-2 sm:px-4 py-1 sm:py-2">
         <Reveal>
           <div className="w-full max-w-6xl mx-auto template-card border-red-100 bg-gradient-to-br from-white via-white to-red-50/40 px-2 py-2 sm:p-4 rounded-xl shadow-sm flex items-center justify-between">
@@ -1220,6 +1221,7 @@ const LandingPage = () => {
           </div>
         </Reveal>
       </section>
+      */}
 
       <section id="services" className="w-full max-w-6xl mx-auto px-3 sm:px-4 pb-10">
         <Reveal>

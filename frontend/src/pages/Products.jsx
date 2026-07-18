@@ -159,10 +159,15 @@ const Products = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this product?')) return;
+    const reason = window.prompt('Please enter the reason for deleting this product:');
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
 
     try {
-      await axios.delete(`/api/products/${id}`);
+      await axios.delete(`/api/products/${id}`, { data: { reason } });
       toast.success('Product deleted successfully');
       fetchProducts();
     } catch (error) {
@@ -328,7 +333,7 @@ const Products = () => {
           <tbody className="divide-y divide-gray-200">
             {filteredProducts.length > 0 ? (
               filteredProducts.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
+                <tr key={product.id} className={`hover:bg-gray-50 ${product.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {product.image_url ? (
                       <img
@@ -353,6 +358,11 @@ const Products = () => {
                       <p className="font-semibold">{product.name}</p>
                       {product.description && (
                         <p className="text-sm text-gray-500">{product.description}</p>
+                      )}
+                      {product.is_deleted === 1 && (
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                          Deleted (Reason: {product.delete_reason})
+                        </span>
                       )}
                     </div>
                   </td>
@@ -388,18 +398,22 @@ const Products = () => {
                   </td>
                   {user?.role === 'admin' && (
                     <td className="px-6 py-4 whitespace-nowrap space-x-2">
-                      <button
-                        onClick={() => handleEdit(product)}
-                        className="text-primary-600 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        className="text-red-600 hover:underline"
-                      >
-                        Delete
-                      </button>
+                      {product.is_deleted !== 1 && (
+                        <>
+                          <button
+                            onClick={() => handleEdit(product)}
+                            className="text-primary-600 hover:underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(product.id)}
+                            className="text-red-600 hover:underline"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </td>
                   )}
                 </tr>

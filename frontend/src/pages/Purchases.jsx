@@ -160,9 +160,14 @@ const Purchases = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this purchase record?')) return;
+    const reason = window.prompt('Please enter the reason for deleting this purchase record:');
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
     try {
-      const response = await axios.delete(`/api/purchases/${id}`);
+      const response = await axios.delete(`/api/purchases/${id}`, { data: { reason } });
       if (response.data.success) {
         toast.success('Purchase record deleted');
         fetchData();
@@ -315,13 +320,18 @@ const Purchases = () => {
                 </tr>
               ) : filteredPurchases.length > 0 ? (
                 filteredPurchases.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50/50 transition">
+                  <tr key={p.id} className={`hover:bg-gray-50/50 transition ${p.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {new Date(p.purchase_date).toLocaleDateString('en-GB')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
                       <div>{p.item_name}</div>
                       {p.notes && <div className="text-xs text-gray-400 font-normal mt-0.5">{p.notes}</div>}
+                      {p.is_deleted === 1 && (
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                          Deleted (Reason: {p.delete_reason})
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">
@@ -348,18 +358,22 @@ const Purchases = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-xs capitalize text-gray-600 font-bold">{p.payment_method}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleOpenEditModal(p)}
-                        className="text-primary-600 hover:text-primary-950 font-bold mr-3"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(p.id)}
-                        className="text-red-600 hover:text-red-800 font-bold"
-                      >
-                        Delete
-                      </button>
+                      {p.is_deleted !== 1 && (
+                        <>
+                          <button
+                            onClick={() => handleOpenEditModal(p)}
+                            className="text-primary-600 hover:text-primary-950 font-bold mr-3"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="text-red-600 hover:text-red-800 font-bold"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))

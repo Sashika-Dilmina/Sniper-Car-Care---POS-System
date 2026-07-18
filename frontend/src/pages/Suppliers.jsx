@@ -103,16 +103,20 @@ const Suppliers = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this supplier? This action cannot be undone.')) return;
+  const handleDelete = async (id, name) => {
+    const reason = window.prompt(`Please enter the reason for deleting supplier "${name}":`);
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
+
     try {
-      const response = await axios.delete(`/api/suppliers/${id}`);
-      if (response.data.success) {
-        toast.success('Supplier deleted successfully');
-        fetchSuppliers();
-      }
+      await axios.delete(`/api/suppliers/${id}`, { data: { reason } });
+      toast.success('Supplier deleted successfully');
+      fetchSuppliers();
     } catch (error) {
-      toast.error('Failed to delete supplier');
+      toast.error(error.response?.data?.message || 'Failed to delete supplier');
     }
   };
 
@@ -213,9 +217,16 @@ const Suppliers = () => {
                 </tr>
               ) : filteredSuppliers.length > 0 ? (
                 filteredSuppliers.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50/50 transition">
+                  <tr key={s.id} className={`hover:bg-gray-50/50 transition ${s.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-500">#{s.id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">{s.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
+                      {s.name}
+                      {s.is_deleted === 1 && (
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                          Deleted (Reason: {s.delete_reason})
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{s.business_name || '—'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-[11px] font-bold uppercase tracking-wider bg-primary-50 text-primary-700 px-2.5 py-0.5 rounded-full">
@@ -232,18 +243,22 @@ const Suppliers = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleOpenEditModal(s)}
-                        className="text-primary-600 hover:text-primary-950 font-bold mr-3"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(s.id)}
-                        className="text-red-600 hover:text-red-800 font-bold"
-                      >
-                        Delete
-                      </button>
+                      {s.is_deleted !== 1 && (
+                        <>
+                          <button
+                            onClick={() => handleOpenEditModal(s)}
+                            className="text-primary-600 hover:text-primary-950 font-bold mr-3"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(s.id, s.name)}
+                            className="text-red-600 hover:text-red-800 font-bold"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))

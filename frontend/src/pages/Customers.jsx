@@ -78,14 +78,19 @@ const Customers = () => {
   };
 
   const handleDelete = async (customerId, customerName) => {
-    if (window.confirm(`Are you sure you want to delete customer "${customerName}"? This action cannot be undone.`)) {
-      try {
-        await axios.delete(`/api/customers/${customerId}`);
-        toast.success('Customer deleted successfully');
-        fetchCustomers();
-      } catch (error) {
-        toast.error(error.response?.data?.message || 'Failed to delete customer');
-      }
+    const reason = window.prompt(`Please enter the reason for deleting customer "${customerName}":`);
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
+    
+    try {
+      await axios.delete(`/api/customers/${customerId}`, { data: { reason } });
+      toast.success('Customer deleted successfully');
+      fetchCustomers();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete customer');
     }
   };
 
@@ -712,8 +717,15 @@ const Customers = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredCustomers.map((customer) => (
-                  <tr key={customer.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">{customer.name}</td>
+                  <tr key={customer.id} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {customer.name}
+                      {customer.is_deleted === 1 && (
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                          Deleted (Reason: {customer.delete_reason})
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">{customer.phone || 'N/A'}</td>
                     <td className="px-6 py-4 whitespace-nowrap font-mono notranslate" translate="no">{customer.vehicle_plate}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -747,24 +759,28 @@ const Customers = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleOpenCheckin(customer)}
-                          className="text-primary-600 hover:text-primary-800 transition-colors"
-                          title="Manual Check-in / Scan"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                          </svg>
-                        </button>
-                         <button
-                          onClick={() => navigate(`/sales?customer_id=${customer.id}`)}
-                          className="text-indigo-600 hover:text-indigo-800 transition-colors"
-                          title="Book Service / POS Sale"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                        </button>
+                        {customer.is_deleted !== 1 && (
+                          <>
+                            <button
+                              onClick={() => handleOpenCheckin(customer)}
+                              className="text-primary-600 hover:text-primary-800 transition-colors"
+                              title="Manual Check-in / Scan"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                              </svg>
+                            </button>
+                             <button
+                              onClick={() => navigate(`/sales?customer_id=${customer.id}`)}
+                              className="text-indigo-600 hover:text-indigo-800 transition-colors"
+                              title="Book Service / POS Sale"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
                         <Link
                           to={`/customers/${customer.id}`}
                           className="text-blue-600 hover:text-blue-800 transition-colors"
@@ -775,16 +791,18 @@ const Customers = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                         </Link>
-                        <Link
-                          to={`/customers/${customer.id}/edit`}
-                          className="text-green-600 hover:text-green-800 transition-colors"
-                          title="Edit Customer"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </Link>
-                        {user?.role === 'admin' && (
+                        {customer.is_deleted !== 1 && (
+                          <Link
+                            to={`/customers/${customer.id}/edit`}
+                            className="text-green-600 hover:text-green-800 transition-colors"
+                            title="Edit Customer"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </Link>
+                        )}
+                        {user?.role === 'admin' && customer.is_deleted !== 1 && (
                           <button
                             onClick={() => handleDelete(customer.id, customer.name)}
                             className="text-red-600 hover:text-red-800 transition-colors"

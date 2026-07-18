@@ -6,7 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 // @access  Public
 const getProducts = asyncHandler(async (req, res) => {
   const { category, vehicle_type } = req.query;
-  let query = 'SELECT * FROM products WHERE 1=1';
+  let query = 'SELECT * FROM products WHERE (is_deleted = 0 OR is_deleted IS NULL)';
   const params = [];
 
   if (category) {
