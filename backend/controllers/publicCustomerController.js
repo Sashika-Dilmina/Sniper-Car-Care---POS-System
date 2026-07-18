@@ -312,52 +312,38 @@ const registerCustomer = asyncHandler(async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // Check if customer already exists by plate or phone
+    // Check if customer already exists by plate
     const [existing] = await connection.query(
-      'SELECT id, vehicle_plate, phone FROM customers WHERE vehicle_plate = ? OR (phone IS NOT NULL AND phone != "" AND phone = ?)',
-      [vehicle_plate, phone]
+      'SELECT id FROM customers WHERE vehicle_plate = ?',
+      [vehicle_plate]
     );
 
     let customerId;
     if (existing.length > 0) {
-      const sameCust = existing.find(c => c.vehicle_plate.replace(/\s+/g, '').toLowerCase() === vehicle_plate.replace(/\s+/g, '').toLowerCase() && c.phone === phone);
-      if (sameCust) {
-        customerId = sameCust.id;
-        // Update existing customer info
-        await connection.query(
-          'UPDATE customers SET name = ?, vehicle_type = ?, province = ? WHERE id = ?',
-          [name, vehicle_type, province, customerId]
-        );
-        
-        // Also update vehicles table if exists
-        const { parsePlateComponents } = require('../utils/customerLinkUtils');
-        const { plateCode, plateNumber } = parsePlateComponents(vehicle_plate);
-        
-        await connection.query(
-          `INSERT INTO vehicles (CustomerId, VehicleRegistrationNumber, PlateCode, PlateNumber, Emirate)
-           VALUES (?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE VehicleRegistrationNumber = VALUES(VehicleRegistrationNumber), PlateCode = VALUES(PlateCode), PlateNumber = VALUES(PlateNumber), Emirate = VALUES(Emirate)`,
-          [customerId, vehicle_plate, plateCode || '', plateNumber || '', province]
-        );
-        
-        await connection.commit();
-        return res.status(200).json({
-          success: true,
-          message: 'Customer information updated successfully',
-          customer_id: customerId
-        });
-      } else {
-        // Conflicting customer details
-        const hasPlate = existing.some(c => c.vehicle_plate.replace(/\s+/g, '').toLowerCase() === vehicle_plate.replace(/\s+/g, '').toLowerCase());
-        const hasPhone = existing.some(c => phone && c.phone === phone);
-        if (hasPlate) {
-          await connection.rollback();
-          return res.status(400).json({ message: 'Customer with this vehicle plate already exists' });
-        } else if (hasPhone) {
-          await connection.rollback();
-          return res.status(400).json({ message: 'Customer with this phone number already exists' });
-        }
-      }
+      customerId = existing[0].id;
+      // Update existing customer info
+      await connection.query(
+        'UPDATE customers SET name = ?, phone = ?, vehicle_type = ?, province = ? WHERE id = ?',
+        [name, phone, vehicle_type, province, customerId]
+      );
+      
+      // Also update vehicles table if exists
+      const { parsePlateComponents } = require('../utils/customerLinkUtils');
+      const { plateCode, plateNumber } = parsePlateComponents(vehicle_plate);
+      
+      await connection.query(
+        `INSERT INTO vehicles (CustomerId, VehicleRegistrationNumber, PlateCode, PlateNumber, Emirate)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE VehicleRegistrationNumber = VALUES(VehicleRegistrationNumber), PlateCode = VALUES(PlateCode), PlateNumber = VALUES(PlateNumber), Emirate = VALUES(Emirate)`,
+        [customerId, vehicle_plate, plateCode || '', plateNumber || '', province]
+      );
+      
+      await connection.commit();
+      return res.status(200).json({
+        success: true,
+        message: 'Customer information updated successfully',
+        customer_id: customerId
+      });
     }
 
     // Insert new customer

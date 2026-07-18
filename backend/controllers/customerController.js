@@ -160,21 +160,14 @@ const createCustomer = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Please provide all required fields' });
   }
 
-  // Check if customer with same plate or phone exists
+  // Check if customer with same plate exists
   const [existing] = await pool.query(
-    'SELECT id, phone, vehicle_plate FROM customers WHERE vehicle_plate = ? OR (phone IS NOT NULL AND phone != "" AND phone = ?)',
-    [finalPlate, phone]
+    'SELECT id FROM customers WHERE vehicle_plate = ?',
+    [finalPlate]
   );
 
   if (existing.length > 0) {
-    const hasPlate = existing.some(c => c.vehicle_plate.replace(/\s+/g, '').toLowerCase() === finalPlate.replace(/\s+/g, '').toLowerCase());
-    const hasPhone = existing.some(c => phone && c.phone === phone);
-    if (hasPlate) {
-      return res.status(400).json({ message: 'Customer with this vehicle plate already exists' });
-    }
-    if (hasPhone) {
-      return res.status(400).json({ message: 'Customer with this phone number already exists' });
-    }
+    return res.status(400).json({ message: 'Customer with this vehicle plate already exists' });
   }
 
   const finalProvince = province || req.body.emirate || null;
@@ -221,21 +214,14 @@ const updateCustomer = asyncHandler(async (req, res) => {
   }
   const finalProvince = province || req.body.emirate || null;
 
-  // Check if another customer has the same plate or phone
+  // Check if another customer has the same plate
   const [existingCheck] = await pool.query(
-    'SELECT id, phone, vehicle_plate FROM customers WHERE (vehicle_plate = ? OR (phone IS NOT NULL AND phone != "" AND phone = ?)) AND id != ?',
-    [finalPlate, phone, id]
+    'SELECT id FROM customers WHERE vehicle_plate = ? AND id != ?',
+    [finalPlate, id]
   );
 
   if (existingCheck.length > 0) {
-    const hasPlate = existingCheck.some(c => c.vehicle_plate.replace(/\s+/g, '').toLowerCase() === finalPlate.replace(/\s+/g, '').toLowerCase());
-    const hasPhone = existingCheck.some(c => phone && c.phone === phone);
-    if (hasPlate) {
-      return res.status(400).json({ message: 'Another customer with this vehicle plate already exists' });
-    }
-    if (hasPhone) {
-      return res.status(400).json({ message: 'Another customer with this phone number already exists' });
-    }
+    return res.status(400).json({ message: 'Another customer with this vehicle plate already exists' });
   }
 
   await pool.query(

@@ -71,10 +71,10 @@ const createOrder = asyncHandler(async (req, res) => {
     }
 
     if (!finalCustomerId && customer_name && customer_phone && vehicle_plate) {
-      // Check if customer with same plate or phone exists
+      // Check if customer with same plate exists
       const [existing] = await connection.query(
-        'SELECT id FROM customers WHERE vehicle_plate = ? OR (phone IS NOT NULL AND phone != "" AND phone = ?)',
-        [vehicle_plate, customer_phone]
+        'SELECT id FROM customers WHERE vehicle_plate = ?',
+        [vehicle_plate]
       );
       
       if (existing.length > 0) {
