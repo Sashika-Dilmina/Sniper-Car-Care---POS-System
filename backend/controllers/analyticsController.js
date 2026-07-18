@@ -1108,7 +1108,7 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
     `SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total
      FROM services s
      JOIN orders o ON s.order_id = o.id
-     JOIN products p ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (Quick Book%')) AND (p.vehicle_type = s.vehicle_type OR p.vehicle_type = 'Both')
+     JOIN products p ON s.service_name = p.name
      WHERE o.status != 'cancelled' 
        AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id)
        AND DATE(o.created_at) BETWEEN ? AND ?`,
@@ -1296,7 +1296,7 @@ const getReportPDF = asyncHandler(async (req, res) => {
     const itemsCost = parseFloat(itemsCostResult[0].total || 0);
 
     const [servicesCostResult] = await pool.query(
-      `SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total FROM services s JOIN orders o ON s.order_id = o.id JOIN products p ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (Quick Book%')) AND (p.vehicle_type = s.vehicle_type OR p.vehicle_type = 'Both') WHERE o.status != 'cancelled' AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) AND DATE(o.created_at) BETWEEN ? AND ?`,
+      `SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total FROM services s JOIN orders o ON s.order_id = o.id JOIN products p ON s.service_name = p.name WHERE o.status != 'cancelled' AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) AND DATE(o.created_at) BETWEEN ? AND ?`,
       [start_date, end_date]
     );
     const servicesCost = parseFloat(servicesCostResult[0].total || 0);
@@ -1565,6 +1565,92 @@ const getReportPDF = asyncHandler(async (req, res) => {
       amount_in_cash_drawer: amountInCashDrawer,
       notes: register.notes
     };
+  } else if (tab === 'commission') {
+    let dateFilter = '';
+    const paramsList = [];
+    if (start_date && end_date) {
+      dateFilter = 'AND DATE(s.created_at) BETWEEN ? AND ?';
+      paramsList.push(start_date, end_date);
+    }
+
+    const [saloonServices] = await pool.query(`
+      SELECT p.name as service_name, COUNT(s.id) as quantity, COUNT(s.id) * 0.25 as commission
+      FROM products p
+      LEFT JOIN services s ON p.name = s.service_name AND s.vehicle_type = 'Saloon' AND s.status = 'completed' ${dateFilter}
+      WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both')
+      GROUP BY p.name ORDER BY p.name ASC
+    `, paramsList);
+
+    const [fourx4Services] = await pool.query(`
+      SELECT p.name as service_name, COUNT(s.id) as quantity, COUNT(s.id) * 0.25 as commission
+      FROM products p
+      LEFT JOIN services s ON p.name = s.service_name AND s.vehicle_type = '4x4' AND s.status = 'completed' ${dateFilter}
+      WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both')
+      GROUP BY p.name ORDER BY p.name ASC
+    `, paramsList);
+
+    let vipDateFilter = '';
+    const vipParams = [];
+    if (start_date && end_date) {
+      vipDateFilter = 'AND DATE(o.created_at) BETWEEN ? AND ?';
+      vipParams.push(start_date, end_date);
+    }
+    const [vipServices] = await pool.query(`
+      SELECT types.v_type as vehicle_type, COUNT(DISTINCT o.id) as quantity, COALESCE(SUM(o.total), 0) * 0.25 as commission
+      FROM (SELECT 'Saloon' as v_type UNION SELECT '4x4' as v_type) types
+      LEFT JOIN vip_customers vc ON vc.vehicle_type = types.v_type
+      LEFT JOIN vip_bookings vb ON vb.vip_customer_id = vc.id
+      LEFT JOIN orders o ON o.vip_booking_id = vb.id AND o.status != 'cancelled' ${vipDateFilter}
+      GROUP BY types.v_type ORDER BY types.v_type ASC
+    `, vipParams);
+
+    reportData = { saloon: saloonServices, fourx4: fourx4Services, vip: vipServices };
+  } else if (tab === 'service_sales') {
+    let dateFilter = '';
+    const paramsList = [];
+    if (start_date && end_date) {
+      dateFilter = 'AND DATE(s.created_at) BETWEEN ? AND ?';
+      paramsList.push(start_date, end_date);
+    }
+
+    const [saloonServices] = await pool.query(`
+      SELECT p.name as service_name, COUNT(s.id) as quantity, COALESCE(AVG(s.price), p.price) as selling_price,
+             COALESCE(AVG(s.price), p.price) as net_price, COALESCE(p.purchase_price, 0) as cost_price,
+             COALESCE(AVG(s.price), p.price) - COALESCE(p.purchase_price, 0) as profit
+      FROM products p
+      LEFT JOIN services s ON p.name = s.service_name AND s.vehicle_type = 'Saloon' AND s.status = 'completed' ${dateFilter}
+      WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both')
+      GROUP BY p.name, p.price, p.purchase_price ORDER BY p.name ASC
+    `, paramsList);
+
+    const [fourx4Services] = await pool.query(`
+      SELECT p.name as service_name, COUNT(s.id) as quantity, COALESCE(AVG(s.price), p.price) as selling_price,
+             COALESCE(AVG(s.price), p.price) as net_price, COALESCE(p.purchase_price, 0) as cost_price,
+             COALESCE(AVG(s.price), p.price) - COALESCE(p.purchase_price, 0) as profit
+      FROM products p
+      LEFT JOIN services s ON p.name = s.service_name AND s.vehicle_type = '4x4' AND s.status = 'completed' ${dateFilter}
+      WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both')
+      GROUP BY p.name, p.price, p.purchase_price ORDER BY p.name ASC
+    `, paramsList);
+
+    let vipDateFilter = '';
+    const vipParams = [];
+    if (start_date && end_date) {
+      vipDateFilter = 'AND DATE(o.created_at) BETWEEN ? AND ?';
+      vipParams.push(start_date, end_date);
+    }
+    const [vipServices] = await pool.query(`
+      SELECT types.v_type as service_name, COUNT(DISTINCT o.id) as quantity, COALESCE(AVG(o.total), 0) as selling_price,
+             COALESCE(AVG(CASE WHEN o.discount > 0 THEN o.total - o.discount ELSE o.total END), 0) as net_price,
+             0 as cost_price, COALESCE(AVG(CASE WHEN o.discount > 0 THEN o.total - o.discount ELSE o.total END), 0) as profit
+      FROM (SELECT 'Saloon' as v_type UNION SELECT '4x4' as v_type) types
+      LEFT JOIN vip_customers vc ON vc.vehicle_type = types.v_type
+      LEFT JOIN vip_bookings vb ON vb.vip_customer_id = vc.id
+      LEFT JOIN orders o ON o.vip_booking_id = vb.id AND o.status != 'cancelled' ${vipDateFilter}
+      GROUP BY types.v_type ORDER BY types.v_type ASC
+    `, vipParams);
+
+    reportData = { saloon: saloonServices, fourx4: fourx4Services, vip: vipServices };
   }
 
   if (!reportData) {
@@ -1639,6 +1725,167 @@ const getStockReport = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Get Commission Report
+// @route   GET /api/analytics/reports/commission
+// @access  Private (Admin)
+const getCommissionReport = asyncHandler(async (req, res) => {
+  const { start_date, end_date } = req.query;
+
+  let dateFilter = '';
+  const params = [];
+
+  if (start_date && end_date) {
+    dateFilter = 'AND DATE(s.created_at) BETWEEN ? AND ?';
+    params.push(start_date, end_date);
+  }
+
+  // Saloon services
+  const [saloonServices] = await pool.query(`
+    SELECT
+      p.name as service_name,
+      COUNT(s.id) as quantity,
+      COUNT(s.id) * 0.25 as commission
+    FROM products p
+    LEFT JOIN services s ON p.name = s.service_name
+      AND s.vehicle_type = 'Saloon'
+      AND s.status = 'completed'
+      ${dateFilter}
+    WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both')
+    GROUP BY p.name
+    ORDER BY p.name ASC
+  `, params);
+
+  // 4x4 services
+  const [fourx4Services] = await pool.query(`
+    SELECT
+      p.name as service_name,
+      COUNT(s.id) as quantity,
+      COUNT(s.id) * 0.25 as commission
+    FROM products p
+    LEFT JOIN services s ON p.name = s.service_name
+      AND s.vehicle_type = '4x4'
+      AND s.status = 'completed'
+      ${dateFilter}
+    WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both')
+    GROUP BY p.name
+    ORDER BY p.name ASC
+  `, params);
+
+  // VIP orders (orders linked to vip_bookings) grouped by vehicle type
+  let vipDateFilter = '';
+  const vipParams = [];
+  if (start_date && end_date) {
+    vipDateFilter = 'AND DATE(o.created_at) BETWEEN ? AND ?';
+    vipParams.push(start_date, end_date);
+  }
+
+  const [vipServices] = await pool.query(`
+    SELECT
+      types.v_type as vehicle_type,
+      COUNT(DISTINCT o.id) as quantity,
+      COALESCE(SUM(o.total), 0) * 0.25 as commission
+    FROM (SELECT 'Saloon' as v_type UNION SELECT '4x4' as v_type) types
+    LEFT JOIN vip_customers vc ON vc.vehicle_type = types.v_type
+    LEFT JOIN vip_bookings vb ON vb.vip_customer_id = vc.id
+    LEFT JOIN orders o ON o.vip_booking_id = vb.id AND o.status != 'cancelled' ${vipDateFilter}
+    GROUP BY types.v_type
+    ORDER BY types.v_type ASC
+  `, vipParams);
+
+  res.json({
+    success: true,
+    period: { start_date: start_date || null, end_date: end_date || null },
+    saloon: saloonServices || [],
+    fourx4: fourx4Services || [],
+    vip: vipServices || []
+  });
+});
+
+// @desc    Get Service Sales Report
+// @route   GET /api/analytics/reports/service-sales
+// @access  Private (Admin)
+const getServiceSalesReport = asyncHandler(async (req, res) => {
+  const { start_date, end_date } = req.query;
+
+  let dateFilter = '';
+  const params = [];
+
+  if (start_date && end_date) {
+    dateFilter = 'AND DATE(s.created_at) BETWEEN ? AND ?';
+    params.push(start_date, end_date);
+  }
+
+  // Saloon services with price details
+  const [saloonServices] = await pool.query(`
+    SELECT
+      p.name as service_name,
+      COUNT(s.id) as quantity,
+      COALESCE(AVG(s.price), p.price) as selling_price,
+      COALESCE(AVG(s.price), p.price) as net_price,
+      COALESCE(p.purchase_price, 0) as cost_price,
+      COALESCE(AVG(s.price), p.price) - COALESCE(p.purchase_price, 0) as profit
+    FROM products p
+    LEFT JOIN services s ON p.name = s.service_name
+      AND s.vehicle_type = 'Saloon'
+      AND s.status = 'completed'
+      ${dateFilter}
+    WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both')
+    GROUP BY p.name, p.price, p.purchase_price
+    ORDER BY p.name ASC
+  `, params);
+
+  // 4x4 services with price details
+  const [fourx4Services] = await pool.query(`
+    SELECT
+      p.name as service_name,
+      COUNT(s.id) as quantity,
+      COALESCE(AVG(s.price), p.price) as selling_price,
+      COALESCE(AVG(s.price), p.price) as net_price,
+      COALESCE(p.purchase_price, 0) as cost_price,
+      COALESCE(AVG(s.price), p.price) - COALESCE(p.purchase_price, 0) as profit
+    FROM products p
+    LEFT JOIN services s ON p.name = s.service_name
+      AND s.vehicle_type = '4x4'
+      AND s.status = 'completed'
+      ${dateFilter}
+    WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both')
+    GROUP BY p.name, p.price, p.purchase_price
+    ORDER BY p.name ASC
+  `, params);
+
+  // VIP orders by vehicle type
+  let vipDateFilter = '';
+  const vipParams = [];
+  if (start_date && end_date) {
+    vipDateFilter = 'AND DATE(o.created_at) BETWEEN ? AND ?';
+    vipParams.push(start_date, end_date);
+  }
+
+  const [vipServices] = await pool.query(`
+    SELECT
+      types.v_type as service_name,
+      COUNT(DISTINCT o.id) as quantity,
+      COALESCE(AVG(o.total), 0) as selling_price,
+      COALESCE(AVG(CASE WHEN o.discount > 0 THEN o.total - o.discount ELSE o.total END), 0) as net_price,
+      0 as cost_price,
+      COALESCE(AVG(CASE WHEN o.discount > 0 THEN o.total - o.discount ELSE o.total END), 0) as profit
+    FROM (SELECT 'Saloon' as v_type UNION SELECT '4x4' as v_type) types
+    LEFT JOIN vip_customers vc ON vc.vehicle_type = types.v_type
+    LEFT JOIN vip_bookings vb ON vb.vip_customer_id = vc.id
+    LEFT JOIN orders o ON o.vip_booking_id = vb.id AND o.status != 'cancelled' ${vipDateFilter}
+    GROUP BY types.v_type
+    ORDER BY types.v_type ASC
+  `, vipParams);
+
+  res.json({
+    success: true,
+    period: { start_date: start_date || null, end_date: end_date || null },
+    saloon: saloonServices || [],
+    fourx4: fourx4Services || [],
+    vip: vipServices || []
+  });
+});
+
 module.exports = {
   getDashboardAnalytics,
   getSalesReport,
@@ -1650,6 +1897,8 @@ module.exports = {
   getPurchasesReport,
   getProfitLossReport,
   getStockReport,
-  getReportPDF
+  getReportPDF,
+  getCommissionReport,
+  getServiceSalesReport
 };
 

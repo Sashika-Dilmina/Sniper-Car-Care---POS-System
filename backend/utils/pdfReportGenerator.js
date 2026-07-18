@@ -77,6 +77,12 @@ function generatePDFReport(tab, data, params, outputPath) {
         case 'credit':
           title = 'Credit Report';
           break;
+        case 'commission':
+          title = 'Commission Report';
+          break;
+        case 'service_sales':
+          title = 'Service Sales Report';
+          break;
         case 'registers':
           title = `Cash Register Session Report (#${params.register_id || 'Active'})`;
           dateRange = '';
@@ -447,6 +453,66 @@ function generatePDFReport(tab, data, params, outputPath) {
           currentY = drawTableRows(rows, cols, currentY);
         }
       }
+      else if (tab === 'commission') {
+        const drawSection = (title, items, y) => {
+          if (!items || items.length === 0) return y;
+          doc.fillColor(primaryColor).fontSize(12).font('Helvetica-Bold').text(title, 40, y);
+          let newY = y + 15;
+          const headers = ['Service Name', 'Quantity', 'Commission (AED)'];
+          const cols = [
+            { name: 'Service Name', key: 'name', x: 50, w: 250 },
+            { name: 'Quantity', key: 'quantity', x: 310, w: 100, align: 'right' },
+            { name: 'Commission', key: 'commission', x: 420, w: 100, align: 'right' }
+          ];
+          const rows = items.map(item => ({
+            name: item.service_name || item.vehicle_type,
+            quantity: item.quantity,
+            commission: parseFloat(item.commission).toFixed(2)
+          }));
+          // Add total row
+          const totalQty = items.reduce((sum, item) => sum + parseInt(item.quantity || 0), 0);
+          const totalComm = items.reduce((sum, item) => sum + parseFloat(item.commission || 0), 0);
+          rows.push({ name: 'TOTAL', quantity: totalQty.toString(), commission: totalComm.toFixed(2) });
+
+          newY = drawTableHeaders(headers, cols, newY);
+          return drawTableRows(rows, cols, newY) + 20;
+        };
+
+        currentY = drawSection('Saloon Services', data.saloon, currentY);
+        currentY = drawSection('4x4 Services', data.fourx4, currentY);
+        currentY = drawSection('VIP Services', data.vip, currentY);
+      }
+      else if (tab === 'service_sales') {
+        const drawSection = (title, items, y) => {
+          if (!items || items.length === 0) return y;
+          doc.fillColor(primaryColor).fontSize(12).font('Helvetica-Bold').text(title, 40, y);
+          let newY = y + 15;
+          const headers = ['Service Name', 'Qty', 'Selling (AED)', 'Net (AED)', 'Cost (AED)', 'Profit (AED)'];
+          const cols = [
+            { name: 'Service Name', key: 'name', x: 45, w: 150 },
+            { name: 'Qty', key: 'quantity', x: 200, w: 40, align: 'right' },
+            { name: 'Selling', key: 'selling', x: 250, w: 70, align: 'right' },
+            { name: 'Net', key: 'net', x: 330, w: 70, align: 'right' },
+            { name: 'Cost', key: 'cost', x: 410, w: 60, align: 'right' },
+            { name: 'Profit', key: 'profit', x: 480, w: 70, align: 'right' }
+          ];
+          const rows = items.map(item => ({
+            name: item.service_name,
+            quantity: item.quantity,
+            selling: parseFloat(item.selling_price).toFixed(2),
+            net: parseFloat(item.net_price).toFixed(2),
+            cost: parseFloat(item.cost_price).toFixed(2),
+            profit: parseFloat(item.profit).toFixed(2)
+          }));
+
+          newY = drawTableHeaders(headers, cols, newY);
+          return drawTableRows(rows, cols, newY) + 20;
+        };
+
+        currentY = drawSection('Saloon Services', data.saloon, currentY);
+        currentY = drawSection('4x4 Services', data.fourx4, currentY);
+        currentY = drawSection('VIP Services', data.vip, currentY);
+      }
       else if (tab === 'registers') {
         const report = data;
         
@@ -506,150 +572,6 @@ function generatePDFReport(tab, data, params, outputPath) {
   });
 }
 
-function generateInvoicePDF(order, outputPath) {
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({ margin: 40, size: 'A4' });
-      const writeStream = fs.createWriteStream(outputPath);
-      doc.pipe(writeStream);
-
-      // Colors
-      const primaryColor = '#1e3a8a'; // Deep blue
-      const secondaryColor = '#eab308'; // Amber/Gold
-      const darkColor = '#1f2937'; // Dark charcoal
-      const grayLine = '#e5e7eb'; // Light gray line
-      const white = '#ffffff';
-
-      // Header Banner
-      doc.rect(0, 0, 595.28, 90).fill(darkColor);
-      
-      doc.fillColor(secondaryColor)
-         .fontSize(22)
-         .font('Helvetica-Bold')
-         .text('SNIPER CAR CARE', 40, 22);
-         
-      doc.fillColor(white)
-         .fontSize(9)
-         .font('Helvetica')
-         .text('ANPR POS & AUTOMATED VEHICLE CARE SYSTEM', 40, 48);
-
-      doc.fillColor(white)
-         .fontSize(16)
-         .font('Helvetica-Bold')
-         .text('TAX INVOICE', 400, 30, { align: 'right', width: 155 });
-
-      let currentY = 110;
-
-      // Invoice Details Block (Grid layout)
-      doc.fillColor(darkColor).fontSize(10).font('Helvetica-Bold').text('Invoice To:', 40, currentY);
-      doc.font('Helvetica-Bold').text('Invoice Details:', 350, currentY);
-      
-      currentY += 15;
-      
-      doc.font('Helvetica').fillColor('#4b5563');
-      doc.text(`Customer: ${order.customer_name || 'Walk-in Customer'}`, 40, currentY);
-      doc.text(`Invoice No: #INV-${order.id}`, 350, currentY);
-      
-      currentY += 15;
-      
-      doc.text(`Phone: ${order.customer_phone || order.phone || 'N/A'}`, 40, currentY);
-      doc.text(`Date: ${new Date(order.created_at).toLocaleString()}`, 350, currentY);
-      
-      currentY += 15;
-      
-      doc.text(`Plate: ${order.vehicle_plate || 'N/A'}`, 40, currentY);
-      doc.text(`Payment: ${order.payment_method?.toUpperCase()} (${order.payment_status?.toUpperCase()})`, 350, currentY);
-
-      currentY += 15;
-      doc.text(`Vehicle: ${order.vehicle_type || 'N/A'}`, 40, currentY);
-
-      currentY += 30;
-
-      // Draw horizontal dividing line
-      doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor(grayLine).lineWidth(1).stroke();
-
-      currentY += 20;
-
-      // Table Header
-      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(10);
-      doc.text('Item Description', 40, currentY);
-      doc.text('Qty', 320, currentY, { width: 30, align: 'center' });
-      doc.text('Price (AED)', 380, currentY, { width: 80, align: 'right' });
-      doc.text('Total (AED)', 470, currentY, { width: 85, align: 'right' });
-
-      currentY += 15;
-      doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor(grayLine).lineWidth(0.5).stroke();
-      currentY += 10;
-
-      // Table Items
-      doc.font('Helvetica').fillColor('#374151');
-      const items = order.items || [];
-      let subtotal = 0;
-
-      for (const item of items) {
-        const itemQty = parseInt(item.quantity || 1);
-        const itemPrice = parseFloat(item.price || 0);
-        const itemTotal = itemQty * itemPrice;
-        subtotal += itemTotal;
-
-        // Check page overflow
-        if (currentY > 720) {
-          doc.addPage();
-          currentY = 40;
-        }
-
-        doc.text(item.product_name || 'N/A', 40, currentY, { width: 260 });
-        doc.text(itemQty.toString(), 320, currentY, { width: 30, align: 'center' });
-        doc.text(itemPrice.toFixed(2), 380, currentY, { width: 80, align: 'right' });
-        doc.text(itemTotal.toFixed(2), 470, currentY, { width: 85, align: 'right' });
-
-        currentY += 20;
-      }
-
-      currentY += 10;
-      doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor(grayLine).lineWidth(1).stroke();
-      currentY += 15;
-
-      // Summary Section (align right)
-      const summaryX = 350;
-      const valX = 470;
-      const valWidth = 85;
-
-      doc.font('Helvetica').fillColor('#4b5563');
-      doc.text('Subtotal:', summaryX, currentY);
-      doc.text(`AED ${subtotal.toFixed(2)}`, valX, currentY, { width: valWidth, align: 'right' });
-      
-      currentY += 15;
-      doc.text('Discount:', summaryX, currentY);
-      doc.text(`AED ${parseFloat(order.discount || 0).toFixed(2)}`, valX, currentY, { width: valWidth, align: 'right' });
-
-      currentY += 15;
-      doc.moveTo(summaryX, currentY).lineTo(555, currentY).strokeColor(grayLine).lineWidth(0.5).stroke();
-      currentY += 10;
-
-      doc.font('Helvetica-Bold').fillColor(primaryColor).fontSize(12);
-      doc.text('Total Amount:', summaryX, currentY);
-      doc.text(`AED ${parseFloat(order.total || 0).toFixed(2)}`, valX, currentY, { width: valWidth, align: 'right' });
-
-      // Thank you message
-      currentY += 60;
-      doc.fillColor('#9ca3af')
-         .fontSize(9)
-         .font('Helvetica-Oblique')
-         .text('Thank you for choosing Sniper Car Care!', 40, currentY, { align: 'center', width: 515 });
-
-      doc.text('For support or booking, contact us on +971 50 855 4405', 40, currentY + 15, { align: 'center', width: 515 });
-
-      doc.end();
-      writeStream.on('finish', () => resolve(outputPath));
-      writeStream.on('error', err => reject(err));
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
-
 module.exports = {
-  generatePDFReport,
-  generateInvoicePDF
+  generatePDFReport
 };
