@@ -228,7 +228,7 @@ const Layout = () => {
       { path: '/vip', label: 'VIP', icon: 'vip' },
       { path: '/expenses', label: 'Expenses', icon: 'expenses' },
       { path: '/anpr', label: 'ANPR', icon: 'anpr' },
-      { path: '/reports?tab=registers', label: 'Cash Register Report', icon: 'reports' },
+      { path: '/reports', label: 'Reports', icon: 'reports' },
     ];
   }
 

@@ -505,6 +505,22 @@ function generatePDFReport(tab, data, params, outputPath) {
             profit: parseFloat(item.profit).toFixed(2)
           }));
 
+          // Add summary totals row
+          const totalQty = items.reduce((sum, item) => sum + parseInt(item.quantity || 0), 0);
+          const totalSelling = items.reduce((sum, item) => sum + parseFloat(item.selling_price || 0), 0);
+          const totalNet = items.reduce((sum, item) => sum + parseFloat(item.net_price || 0), 0);
+          const totalCost = items.reduce((sum, item) => sum + parseFloat(item.cost_price || 0), 0);
+          const totalProfit = items.reduce((sum, item) => sum + parseFloat(item.profit || 0), 0);
+
+          rows.push({
+            name: 'TOTAL',
+            quantity: totalQty.toString(),
+            selling: totalSelling.toFixed(2),
+            net: totalNet.toFixed(2),
+            cost: totalCost.toFixed(2),
+            profit: totalProfit.toFixed(2)
+          });
+
           newY = drawTableHeaders(headers, cols, newY);
           return drawTableRows(rows, cols, newY) + 20;
         };

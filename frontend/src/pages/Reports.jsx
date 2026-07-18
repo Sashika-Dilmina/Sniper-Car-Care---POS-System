@@ -489,6 +489,7 @@ const Reports = () => {
     { id: 'service_sales', label: 'Service Sales Report' },
   ] : [
     { id: 'registers', label: 'Cash Register Sessions' },
+    { id: 'commission', label: 'Commission Report' },
   ];
 
   const handleWhatsAppShare = async () => {
@@ -1489,8 +1490,17 @@ const Reports = () => {
           </div>
 
           {commissionReport && (
-            <div className="space-y-0 print-full-width">
-              <div className="overflow-x-auto border border-gray-200 rounded-lg mt-4">
+            <div className="space-y-6 print-full-width">
+              {/* Report Header */}
+              <div className="text-center border-b pb-4 mb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <p className="text-sm font-semibold text-gray-500">Business Location: Kalba Sharjah</p>
+                <h2 className="text-xl font-bold mt-2">Commission Report</h2>
+                <p className="text-sm text-gray-600">
+                  Period: {commissionStartDate} to {commissionEndDate}
+                </p>
+              </div>
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b">
@@ -1642,8 +1652,17 @@ const Reports = () => {
           </div>
 
           {serviceSalesReport && (
-            <div className="space-y-0 print-full-width">
-              <div className="overflow-x-auto border border-gray-200 rounded-lg mt-4">
+            <div className="space-y-6 print-full-width">
+              {/* Report Header */}
+              <div className="text-center border-b pb-4 mb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <p className="text-sm font-semibold text-gray-500">Business Location: Kalba Sharjah</p>
+                <h2 className="text-xl font-bold mt-2">Service Wise Report</h2>
+                <p className="text-sm text-gray-600">
+                  Period: {serviceSalesStartDate} to {serviceSalesEndDate}
+                </p>
+              </div>
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b">
@@ -1676,6 +1695,27 @@ const Reports = () => {
                         <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No Saloon services found</td>
                       </tr>
                     )}
+                    {/* Saloon Total Row */}
+                    {serviceSalesReport.saloon && serviceSalesReport.saloon.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
 
                     {/* Spacer */}
                     <tr className="border-b">
@@ -1702,6 +1742,27 @@ const Reports = () => {
                         <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No 4x4 services found</td>
                       </tr>
                     )}
+                    {/* 4x4 Total Row */}
+                    {serviceSalesReport.fourx4 && serviceSalesReport.fourx4.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
 
                     {/* Spacer */}
                     <tr className="border-b">
@@ -1726,6 +1787,27 @@ const Reports = () => {
                     ) : (
                       <tr className="border-b">
                         <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No VIP services found</td>
+                      </tr>
+                    )}
+                    {/* VIP Total Row */}
+                    {serviceSalesReport.vip && serviceSalesReport.vip.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
                       </tr>
                     )}
                   </tbody>
