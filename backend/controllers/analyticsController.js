@@ -55,6 +55,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
       `SELECT 
         CASE 
           WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
           ELSE p.method 
         END as method,
         COALESCE(SUM(p.amount), 0) as total_amount
@@ -63,6 +64,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
        GROUP BY 
         CASE 
           WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
           ELSE p.method 
         END`
     );
@@ -701,6 +703,9 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
     SELECT 
       CASE 
         WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+        WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+        WHEN p.method = 'free' AND COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') = 'Saloon' THEN 'saloon_free'
+        WHEN p.method = 'free' AND COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') = '4x4' THEN '4x4_free'
         ELSE p.method 
       END as method,
       COUNT(*) as transaction_count,
@@ -715,10 +720,16 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
       COUNT(CASE WHEN p.status = 'failed' THEN 1 END) as failed_count
     FROM payments p
     JOIN orders o ON p.order_id = o.id
+    LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
     WHERE 1=1 ${dateFilter}
     GROUP BY 
       CASE 
         WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+        WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+        WHEN p.method = 'free' AND COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') = 'Saloon' THEN 'saloon_free'
+        WHEN p.method = 'free' AND COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') = '4x4' THEN '4x4_free'
         ELSE p.method 
       END
     ORDER BY total_amount DESC
@@ -1074,11 +1085,27 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
     [start_date, end_date]
   );
 
-  // Query Free Washes (sum of discount for orders with payment_status = 'free')
-  const [freeWashesResult] = await pool.query(
-    "SELECT COALESCE(SUM(discount), 0) as total, COUNT(*) as count FROM orders WHERE status != 'cancelled' AND payment_status = 'free' AND DATE(created_at) BETWEEN ? AND ?",
-    [start_date, end_date]
-  );
+  // Query Free Washes breakdown (Saloon vs 4x4)
+  const [freeWashBreakdown] = await pool.query(`
+    SELECT 
+      COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') as vehicle_type,
+      COALESCE(SUM(o.discount), 0) as total_amount,
+      COUNT(o.id) as washes_count
+    FROM orders o
+    LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+    WHERE o.status != 'cancelled' AND o.payment_status = 'free' AND DATE(o.created_at) BETWEEN ? AND ?
+    GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')
+  `, [start_date, end_date]);
+
+  const saloonFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === 'Saloon')?.total_amount || 0;
+  const saloonFreeCount = freeWashBreakdown.find(f => f.vehicle_type === 'Saloon')?.washes_count || 0;
+  const fourWheelFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === '4x4')?.total_amount || 0;
+  const fourWheelFreeCount = freeWashBreakdown.find(f => f.vehicle_type === '4x4')?.washes_count || 0;
+  
+  const freeWashTotal = parseFloat(saloonFreeAmount) + parseFloat(fourWheelFreeAmount);
+  const freeWashCount = parseInt(saloonFreeCount) + parseInt(fourWheelFreeCount);
 
   const cashSales = parseFloat(cashSalesResult[0].total || 0);
   const cardSales = parseFloat(cardSalesResult[0].total || 0);
@@ -1086,8 +1113,6 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
   const creditSales = parseFloat(creditSalesResult[0].total || 0);
   const totalDiscounts = parseFloat(discountsResult[0].total_discounts || 0);
   const salesCount = discountsResult[0].sales_count || 0;
-  const freeWashTotal = parseFloat(freeWashesResult[0].total || 0);
-  const freeWashCount = parseInt(freeWashesResult[0].count || 0);
 
   const netSales = cashSales + cardSales + bankSales + creditSales + freeWashTotal;
   const totalSales = netSales + totalDiscounts - freeWashTotal;
@@ -1193,7 +1218,11 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
       card_recovery: parseFloat(cardRecoveryResult[0].total || 0),
       bank_recovery: parseFloat(bankRecoveryResult[0].total || 0),
       free_wash_total: freeWashTotal,
-      free_wash_count: freeWashCount
+      free_wash_count: freeWashCount,
+      saloon_free_wash_total: saloonFreeAmount,
+      saloon_free_wash_count: saloonFreeCount,
+      fourx4_free_wash_total: fourWheelFreeAmount,
+      fourx4_free_wash_count: fourWheelFreeCount
     },
     purchases_by_category: purchasesByCategory || [],
     expenses_by_category: expensesByCategory || []
@@ -1280,14 +1309,36 @@ const getReportPDF = asyncHandler(async (req, res) => {
       [start_date, end_date]
     );
 
+    // Query Free Washes breakdown (Saloon vs 4x4)
+    const [freeWashBreakdown] = await pool.query(`
+      SELECT 
+        COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') as vehicle_type,
+        COALESCE(SUM(o.discount), 0) as total_amount,
+        COUNT(o.id) as washes_count
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+      LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+      WHERE o.status != 'cancelled' AND o.payment_status = 'free' AND DATE(o.created_at) BETWEEN ? AND ?
+      GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')
+    `, [start_date, end_date]);
+
+    const saloonFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === 'Saloon')?.total_amount || 0;
+    const saloonFreeCount = freeWashBreakdown.find(f => f.vehicle_type === 'Saloon')?.washes_count || 0;
+    const fourWheelFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === '4x4')?.total_amount || 0;
+    const fourWheelFreeCount = freeWashBreakdown.find(f => f.vehicle_type === '4x4')?.washes_count || 0;
+    
+    const freeWashTotal = parseFloat(saloonFreeAmount) + parseFloat(fourWheelFreeAmount);
+    const freeWashCount = parseInt(saloonFreeCount) + parseInt(fourWheelFreeCount);
+
     const cashSales = parseFloat(cashSalesResult[0].total || 0);
     const cardSales = parseFloat(cardSalesResult[0].total || 0);
     const bankSales = parseFloat(bankSalesResult[0].total || 0);
     const creditSales = parseFloat(creditSalesResult[0].total || 0);
     const totalDiscounts = parseFloat(discountsResult[0].total_discounts || 0);
     const salesCount = discountsResult[0].sales_count || 0;
-    const netSales = cashSales + cardSales + bankSales + creditSales;
-    const totalSales = netSales + totalDiscounts;
+    const netSales = cashSales + cardSales + bankSales + creditSales + freeWashTotal;
+    const totalSales = netSales + totalDiscounts - freeWashTotal;
 
     const [itemsCostResult] = await pool.query(
       `SELECT COALESCE(SUM(oi.quantity * COALESCE(p.purchase_price, 0)), 0) as total FROM order_items oi JOIN products p ON oi.product_id = p.id JOIN orders o ON oi.order_id = o.id WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?`,
@@ -1350,7 +1401,13 @@ const getReportPDF = asyncHandler(async (req, res) => {
         credit_sales: creditSales,
         cash_recovery: parseFloat(cashRecoveryResult[0].total || 0),
         card_recovery: parseFloat(cardRecoveryResult[0].total || 0),
-        bank_recovery: parseFloat(bankRecoveryResult[0].total || 0)
+        bank_recovery: parseFloat(bankRecoveryResult[0].total || 0),
+        free_wash_total: freeWashTotal,
+        free_wash_count: freeWashCount,
+        saloon_free_wash_total: saloonFreeAmount,
+        saloon_free_wash_count: saloonFreeCount,
+        fourx4_free_wash_total: fourWheelFreeAmount,
+        fourx4_free_wash_count: fourWheelFreeCount
       },
       purchases_by_category: purchasesByCategory || [],
       expenses_by_category: expensesByCategory || []
@@ -1375,6 +1432,9 @@ const getReportPDF = asyncHandler(async (req, res) => {
       `SELECT 
         CASE 
           WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+          WHEN p.method = 'free' AND COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') = 'Saloon' THEN 'saloon_free'
+          WHEN p.method = 'free' AND COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') = '4x4' THEN '4x4_free'
           ELSE p.method 
         END as method,
         COUNT(*) as transaction_count, 
@@ -1388,11 +1448,18 @@ const getReportPDF = asyncHandler(async (req, res) => {
             ELSE 0 
           END
         ), 0) as total_amount
-       FROM payments p JOIN orders o ON p.order_id = o.id 
+       FROM payments p 
+       JOIN orders o ON p.order_id = o.id 
+       LEFT JOIN customers c ON o.customer_id = c.id
+       LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+       LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
        WHERE DATE(o.created_at) BETWEEN ? AND ? 
        GROUP BY 
         CASE 
           WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
+          WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+          WHEN p.method = 'free' AND COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') = 'Saloon' THEN 'saloon_free'
+          WHEN p.method = 'free' AND COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') = '4x4' THEN '4x4_free'
           ELSE p.method 
         END`,
       [start_date, end_date]
@@ -1750,7 +1817,7 @@ const getCommissionReport = asyncHandler(async (req, res) => {
       AND s.vehicle_type = 'Saloon'
       AND s.status = 'completed'
       ${dateFilter}
-    WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both')
+    WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both') AND p.name NOT IN ('Body Wash', 'Just Water', 'Saloon VIP Service')
     GROUP BY p.name
     ORDER BY p.name ASC
   `, params);
@@ -1766,7 +1833,7 @@ const getCommissionReport = asyncHandler(async (req, res) => {
       AND s.vehicle_type = '4x4'
       AND s.status = 'completed'
       ${dateFilter}
-    WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both')
+    WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both') AND p.name NOT IN ('Body Wash', 'Just Water', '4x4 VIP Service')
     GROUP BY p.name
     ORDER BY p.name ASC
   `, params);
@@ -1830,7 +1897,7 @@ const getServiceSalesReport = asyncHandler(async (req, res) => {
       AND s.status = 'completed'
       ${dateFilter}
     LEFT JOIN orders o ON s.order_id = o.id AND o.status != 'cancelled'
-    WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both')
+    WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both') AND p.name != 'Saloon VIP Service'
     GROUP BY p.name
     ORDER BY p.name ASC
   `, params);
@@ -1850,7 +1917,7 @@ const getServiceSalesReport = asyncHandler(async (req, res) => {
       AND s.status = 'completed'
       ${dateFilter}
     LEFT JOIN orders o ON s.order_id = o.id AND o.status != 'cancelled'
-    WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both')
+    WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both') AND p.name != '4x4 VIP Service'
     GROUP BY p.name
     ORDER BY p.name ASC
   `, params);

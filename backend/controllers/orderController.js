@@ -16,6 +16,17 @@ const getOrders = asyncHandler(async (req, res) => {
            COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
            cc.status as credit_status,
            cc.remaining_amount as credit_remaining,
+           (
+             SELECT GROUP_CONCAT(DISTINCT 
+               CASE 
+                 WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'TAP'
+                 WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+                 ELSE p.method
+               END
+             )
+             FROM payments p 
+             WHERE p.order_id = o.id AND p.status = 'completed'
+           ) as payment_methods,
            -- Service time: Duration from service start to service completion
            -- Start: o.service_started_at
            -- End: o.service_completed_at
@@ -138,7 +149,18 @@ const getOrder = asyncHandler(async (req, res) => {
            COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
            COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
            cc.status as credit_status,
-           cc.remaining_amount as credit_remaining
+           cc.remaining_amount as credit_remaining,
+           (
+             SELECT GROUP_CONCAT(DISTINCT 
+               CASE 
+                 WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'TAP'
+                 WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+                 ELSE p.method
+               END
+             )
+             FROM payments p 
+             WHERE p.order_id = o.id AND p.status = 'completed'
+           ) as payment_methods
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
@@ -327,7 +349,7 @@ const createOrder = asyncHandler(async (req, res) => {
     const serviceStartedAt = hasService ? new Date() : null;
     const serviceCompletedAt = hasService ? null : new Date();
     
-    const paymentStatus = (freeWashRedeemed && finalTotal === 0) ? 'free' : 'pending';
+    const paymentStatus = (finalTotal === 0) ? 'free' : 'pending';
 
     // Create order
     const [orderResult] = await connection.query(
@@ -340,13 +362,13 @@ const createOrder = asyncHandler(async (req, res) => {
     if (freeWashRedeemed) {
       const { resetWashStamps } = require('../utils/loyaltyStamps');
       await resetWashStamps(connection, customer_id);
-      
-      if (finalTotal === 0) {
-        await connection.query(
-          'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
-          [orderId]
-        );
-      }
+    }
+
+    if (finalTotal === 0) {
+      await connection.query(
+        'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
+        [orderId]
+      );
     }
 
     // Fetch customer vehicle type if customer_id exists

@@ -1191,27 +1191,43 @@ const Sales = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {order.credit_status ? (
-                              order.credit_status === 'unpaid' ? (
-                                <span className="px-2 py-0.5 text-xs rounded-full font-semibold bg-red-50 text-red-750">
-                                  Credit / Unpaid
+                            {(() => {
+                              const getPaymentLabel = () => {
+                                if (order.credit_status) {
+                                  if (order.credit_status === 'unpaid') return 'Credit / Unpaid';
+                                  if (order.credit_status === 'partially_paid') return 'Credit / Partial';
+                                }
+                                if (order.payment_status === 'free') return 'Free';
+                                if (order.payment_methods) {
+                                  return order.payment_methods.split(',').map(m => {
+                                    const val = m.trim().toLowerCase();
+                                    if (val === 'tap') return 'TAP';
+                                    if (val === 'bank_transfer') return 'Bank';
+                                    return val.charAt(0).toUpperCase() + val.slice(1);
+                                  }).join(', ');
+                                }
+                                if (order.payment_status === 'paid') return 'Paid';
+                                return order.payment_status ? (order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1)) : 'Pending';
+                              };
+
+                              const getPaymentBadgeClass = () => {
+                                if (order.credit_status) {
+                                  if (order.credit_status === 'unpaid') return 'bg-red-50 text-red-750';
+                                  if (order.credit_status === 'partially_paid') return 'bg-yellow-50 text-yellow-750';
+                                  return 'bg-green-50 text-green-700';
+                                }
+                                if (order.payment_status === 'paid' || order.payment_status === 'free') {
+                                  return 'bg-green-50 text-green-700';
+                                }
+                                return 'bg-red-50 text-red-700';
+                              };
+
+                              return (
+                                <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${getPaymentBadgeClass()}`}>
+                                  {getPaymentLabel()}
                                 </span>
-                              ) : order.credit_status === 'partially_paid' ? (
-                                <span className="px-2 py-0.5 text-xs rounded-full font-semibold bg-yellow-50 text-yellow-750">
-                                  Credit / Partial
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 text-xs rounded-full font-semibold bg-green-50 text-green-700">
-                                  Paid
-                                </span>
-                              )
-                            ) : (
-                              <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
-                                order.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                              }`}>
-                                {order.payment_status}
-                              </span>
-                            )}
+                              );
+                            })()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap font-extrabold text-gray-900 text-right">
                             {order.payment_status === 'free' ? (

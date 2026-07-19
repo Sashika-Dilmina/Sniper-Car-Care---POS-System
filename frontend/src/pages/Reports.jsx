@@ -929,9 +929,16 @@ const Reports = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {paymentReport.payment_methods.map((pm, idx) => (
+                        {paymentReport.payment_methods.map((pm, idx) => {
+                          const displayMethod = (m) => {
+                            if (m === 'saloon_free') return 'Saloon Free Wash';
+                            if (m === '4x4_free') return '4x4 Free Wash';
+                            if (m === 'tap') return 'TAP';
+                            return m.charAt(0).toUpperCase() + m.slice(1);
+                          };
+                          return (
                           <tr key={idx} className="border-b">
-                            <td className="px-4 py-2 capitalize">{pm.method}</td>
+                            <td className="px-4 py-2 font-semibold">{displayMethod(pm.method)}</td>
                             <td className="px-4 py-2 text-right">{pm.transaction_count}</td>
                             <td className="px-4 py-2 text-right">{pm.completed_count}</td>
                             <td className="px-4 py-2 text-right">{pm.pending_count}</td>
@@ -940,7 +947,8 @@ const Reports = () => {
                               AED {parseFloat(pm.total_amount || 0).toLocaleString()}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1368,8 +1376,12 @@ const Reports = () => {
                     <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Other Activities:</h3>
                     <div className="space-y-1.5 pl-2">
                       <div className="flex justify-between">
-                        <span className="text-gray-700">Free Washes Value</span>
-                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.free_wash_total || 0).toFixed(3)} ({plReport.summary.free_wash_count || 0} washes)</span>
+                        <span className="text-gray-700">Saloon Free Wash</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.saloon_free_wash_total || 0).toFixed(3)} ({plReport.summary.saloon_free_wash_count || 0} washes)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">4*4 Free Wash</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.fourx4_free_wash_total || 0).toFixed(3)} ({plReport.summary.fourx4_free_wash_count || 0} washes)</span>
                       </div>
                     </div>
                   </div>
@@ -2224,7 +2236,7 @@ const Reports = () => {
                     <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Other Sale</span>
+                    <span>TAP Sale</span>
                     <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -2302,7 +2314,7 @@ const Reports = () => {
               <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Other Sale</span>
+              <span>TAP Sale</span>
               <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">

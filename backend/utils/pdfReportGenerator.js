@@ -270,7 +270,8 @@ function generatePDFReport(tab, data, params, outputPath) {
         currentY = drawRow('  - Bank Recoveries', `AED ${parseFloat(summary.bank_recovery || 0).toFixed(2)}`, currentY);
         currentY = drawRow('Total Inventory Purchases', `AED ${parseFloat(summary.total_purchases || 0).toFixed(2)}`, currentY);
         currentY = drawRow('Total Business Expenses', `AED ${parseFloat(summary.total_expenses || 0).toFixed(2)}`, currentY);
-        currentY = drawRow('Free Washes Total', `AED ${parseFloat(summary.free_wash_total || 0).toFixed(2)} (${summary.free_wash_count || 0} washes)`, currentY);
+        currentY = drawRow('Saloon Free Wash', `AED ${parseFloat(summary.saloon_free_wash_total || 0).toFixed(2)} (${summary.saloon_free_wash_count || 0} washes)`, currentY);
+        currentY = drawRow('4*4 Free Wash', `AED ${parseFloat(summary.fourx4_free_wash_total || 0).toFixed(2)} (${summary.fourx4_free_wash_count || 0} washes)`, currentY);
 
         currentY += 20;
 
@@ -567,7 +568,7 @@ function generatePDFReport(tab, data, params, outputPath) {
         currentY = drawRow('  - Card Credit Recoveries', `AED ${parseFloat(report.card_payments.recovery).toFixed(3)}`, currentY);
         currentY = drawRow('Cheque Sales', `AED ${parseFloat(report.cheque_payments).toFixed(3)}`, currentY);
         currentY = drawRow('Bank Transfer Sales', `AED ${parseFloat(report.bank_transfer).toFixed(3)}`, currentY);
-        currentY = drawRow('Other Sales (Apple/Samsung/Tap)', `AED ${parseFloat(report.other_payments).toFixed(3)}`, currentY);
+        currentY = drawRow('TAP Sales', `AED ${parseFloat(report.other_payments).toFixed(3)}`, currentY);
         currentY = drawRow('Credit Sales', `AED ${parseFloat(report.credit_sales).toFixed(3)}`, currentY);
         currentY = drawRow('Free Washes Amount', `AED ${parseFloat(report.free_wash_amount || 0).toFixed(3)}`, currentY);
         currentY = drawRow('Total Register Sales', `AED ${parseFloat(report.total_sales).toFixed(3)}`, currentY, true);
