@@ -458,10 +458,10 @@ const Sales = () => {
     return customer.includes(query) || plate.includes(query) || phone.includes(query);
   });
 
-  // Ledger stats
-  const totalSalesCount = filteredLedgerOrders.length;
-  const totalDiscount = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.discount || 0), 0);
-  const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + parseFloat(o.payment_status === 'free' ? o.discount || 0 : o.total || 0), 0);
+  // Ledger stats (excluding cancelled orders)
+  const totalSalesCount = filteredLedgerOrders.filter(o => o.status !== 'cancelled').length;
+  const totalDiscount = filteredLedgerOrders.reduce((sum, o) => sum + (o.status === 'cancelled' ? 0 : parseFloat(o.discount || 0)), 0);
+  const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + (o.status === 'cancelled' ? 0 : parseFloat(o.total || 0)), 0);
 
   const renderCatalogCard = (product) => {
     const isService = product.category === 'Services' || product.category === 'VIP';
