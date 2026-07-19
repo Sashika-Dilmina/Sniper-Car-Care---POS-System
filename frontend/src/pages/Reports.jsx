@@ -2336,6 +2336,15 @@ const Reports = () => {
                     <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between font-bold">
+                    <span>Staff Return</span>
+                    <span>
+                      {(selectedRegisterReport.closed_amount !== null
+                        ? selectedRegisterReport.closed_amount
+                        : 0.00
+                      ).toFixed(3)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-bold">
                     <span>Difference Amount</span>
                     <span>
                       {(selectedRegisterReport.closed_amount !== null
@@ -2412,6 +2421,15 @@ const Reports = () => {
             <div className="flex justify-between font-bold">
               <span>Cash In Drawer</span>
               <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Staff Return</span>
+              <span>
+                {(selectedRegisterReport.closed_amount !== null
+                  ? selectedRegisterReport.closed_amount
+                  : 0.00
+                ).toFixed(3)}
+              </span>
             </div>
             <div className="flex justify-between font-bold">
               <span>Difference Amount</span>

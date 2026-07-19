@@ -475,7 +475,7 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
       ), 0) as total_amount
     FROM payments p
     JOIN orders o ON p.order_id = o.id
-    WHERE DATE(o.created_at) = ? AND p.status = 'completed'
+    WHERE DATE(o.created_at) = ? AND p.status IN ('completed', 'pending') AND o.status != 'cancelled'
     GROUP BY 
       CASE 
         WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
@@ -818,7 +818,7 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
     LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
-    WHERE 1=1 ${dateFilter}
+    WHERE 1=1 ${dateFilter} AND o.status != 'cancelled' AND p.status IN ('completed', 'pending')
     GROUP BY 
       CASE 
         WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
@@ -843,7 +843,7 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
       ), 0) as total_amount
     FROM payments p
     JOIN orders o ON p.order_id = o.id
-    WHERE 1=1 ${dateFilter}
+    WHERE 1=1 ${dateFilter} AND o.status != 'cancelled' AND p.status IN ('completed', 'pending')
     GROUP BY p.status
   `, params);
 
@@ -1152,19 +1152,19 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
 
   // 1. Query Cash Sales
   const [cashSalesResult] = await pool.query(
-    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status IN ('completed', 'pending') AND DATE(o.created_at) BETWEEN ? AND ?",
     [start_date, end_date]
   );
   
   // 2. Query Card Sales (group all methods other than cash, bank_transfer, credit, free)
   const [cardSalesResult] = await pool.query(
-    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method NOT IN ('cash', 'bank_transfer', 'credit', 'free') AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method NOT IN ('cash', 'bank_transfer', 'credit', 'free') AND p.status IN ('completed', 'pending') AND DATE(o.created_at) BETWEEN ? AND ?",
     [start_date, end_date]
   );
 
   // 3. Query Bank Transfer Sales
   const [bankSalesResult] = await pool.query(
-    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+    "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status IN ('completed', 'pending') AND DATE(o.created_at) BETWEEN ? AND ?",
     [start_date, end_date]
   );
 
@@ -1384,15 +1384,15 @@ const getReportPDF = asyncHandler(async (req, res) => {
     };
   } else if (tab === 'business_summary') {
     const [cashSalesResult] = await pool.query(
-      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status IN ('completed', 'pending') AND DATE(o.created_at) BETWEEN ? AND ?",
       [start_date, end_date]
     );
     const [cardSalesResult] = await pool.query(
-      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method NOT IN ('cash', 'bank_transfer', 'credit', 'free') AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method NOT IN ('cash', 'bank_transfer', 'credit', 'free') AND p.status IN ('completed', 'pending') AND DATE(o.created_at) BETWEEN ? AND ?",
       [start_date, end_date]
     );
     const [bankSalesResult] = await pool.query(
-      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status IN ('completed', 'pending') AND DATE(o.created_at) BETWEEN ? AND ?",
       [start_date, end_date]
     );
     const [creditSalesResult] = await pool.query(
@@ -1628,7 +1628,13 @@ const getReportPDF = asyncHandler(async (req, res) => {
     const closedAt = register.closed_at || new Date();
 
     const [cashSalesRows] = await pool.query(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cash" AND status = "completed"',
+      `SELECT COALESCE(SUM(p.amount), 0) as total 
+       FROM payments p 
+       JOIN orders o ON p.order_id = o.id 
+       WHERE p.created_at >= ? AND p.created_at <= ? 
+         AND p.method = 'cash' 
+         AND p.status IN ('completed', 'pending') 
+         AND o.status != 'cancelled'`,
       [openedAt, closedAt]
     );
     const cashSales = parseFloat(cashSalesRows[0].total);
@@ -1641,7 +1647,13 @@ const getReportPDF = asyncHandler(async (req, res) => {
     const totalCashPayments = cashSales + cashRecoveries;
 
     const [cardSalesRows] = await pool.query(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND (method = "card" OR method = "visa") AND status = "completed"',
+      `SELECT COALESCE(SUM(p.amount), 0) as total 
+       FROM payments p 
+       JOIN orders o ON p.order_id = o.id 
+       WHERE p.created_at >= ? AND p.created_at <= ? 
+         AND (p.method = 'card' OR p.method = 'visa') 
+         AND p.status IN ('completed', 'pending') 
+         AND o.status != 'cancelled'`,
       [openedAt, closedAt]
     );
     const cardSales = parseFloat(cardSalesRows[0].total);
@@ -1654,25 +1666,47 @@ const getReportPDF = asyncHandler(async (req, res) => {
     const totalCardPayments = cardSales + cardRecoveries;
 
     const [chequeSalesRows] = await pool.query(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cheque" AND status = "completed"',
+      `SELECT COALESCE(SUM(p.amount), 0) as total 
+       FROM payments p 
+       JOIN orders o ON p.order_id = o.id 
+       WHERE p.created_at >= ? AND p.created_at <= ? 
+         AND p.method = 'cheque' 
+         AND p.status IN ('completed', 'pending') 
+         AND o.status != 'cancelled'`,
       [openedAt, closedAt]
     );
     const chequeSales = parseFloat(chequeSalesRows[0].total);
 
     const [bankSalesRows] = await pool.query(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "bank_transfer" AND status = "completed"',
+      `SELECT COALESCE(SUM(p.amount), 0) as total 
+       FROM payments p 
+       JOIN orders o ON p.order_id = o.id 
+       WHERE p.created_at >= ? AND p.created_at <= ? 
+         AND p.method = 'bank_transfer' 
+         AND p.status IN ('completed', 'pending') 
+         AND o.status != 'cancelled'`,
       [openedAt, closedAt]
     );
     const bankSales = parseFloat(bankSalesRows[0].total);
 
     const [otherSalesRows] = await pool.query(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method IN ("apple_pay", "samsung_pay", "tap") AND status = "completed"',
+      `SELECT COALESCE(SUM(p.amount), 0) as total 
+       FROM payments p 
+       JOIN orders o ON p.order_id = o.id 
+       WHERE p.created_at >= ? AND p.created_at <= ? 
+         AND p.method IN ('apple_pay', 'samsung_pay', 'tap') 
+         AND p.status IN ('completed', 'pending') 
+         AND o.status != 'cancelled'`,
       [openedAt, closedAt]
     );
     const otherSales = parseFloat(otherSalesRows[0].total);
 
     const [creditSalesRows] = await pool.query(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM customer_credits WHERE created_at >= ? AND created_at <= ?',
+      `SELECT COALESCE(SUM(cc.amount), 0) as total 
+       FROM customer_credits cc 
+       JOIN orders o ON cc.order_id = o.id 
+       WHERE cc.created_at >= ? AND cc.created_at <= ? 
+         AND o.status != 'cancelled'`,
       [openedAt, closedAt]
     );
     const creditSales = parseFloat(creditSalesRows[0].total);
@@ -1697,7 +1731,13 @@ const getReportPDF = asyncHandler(async (req, res) => {
 
     // Query Free Washes original amount
     const [freeWashRows] = await pool.query(
-      'SELECT COALESCE(SUM(o.discount), 0) as total FROM payments p INNER JOIN orders o ON p.order_id = o.id WHERE p.created_at >= ? AND p.created_at <= ? AND p.method = "free" AND p.status = "completed"',
+      `SELECT COALESCE(SUM(o.discount), 0) as total 
+       FROM payments p 
+       INNER JOIN orders o ON p.order_id = o.id 
+       WHERE p.created_at >= ? AND p.created_at <= ? 
+         AND p.method = 'free' 
+         AND p.status IN ('completed', 'pending') 
+         AND o.status != 'cancelled'`,
       [openedAt, closedAt]
     );
     const freeWashAmount = parseFloat(freeWashRows[0].total);
