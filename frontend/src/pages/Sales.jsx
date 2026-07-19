@@ -76,7 +76,10 @@ const Sales = () => {
   const [loadingRegister, setLoadingRegister] = useState(true);
 
   // Ledger - State
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  });
   const [sharing, setSharing] = useState(false);
   const [ledgerOrders, setLedgerOrders] = useState([]);
   const [loadingLedger, setLoadingLedger] = useState(false);
@@ -123,22 +126,30 @@ const Sales = () => {
     }
   };
 
-  // Fetch ledger sales when active sub-tab is ledger or date changes
+  // Fetch ledger sales when active sub-tab is ledger or date changes, and poll every 7 seconds for real-time updates
   useEffect(() => {
+    let interval;
     if (activeSubTab === 'ledger') {
-      fetchDailySales();
+      fetchDailySales(false); // Initial non-silent fetch
+
+      interval = setInterval(() => {
+        fetchDailySales(true); // Silent background updates
+      }, 7000);
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [selectedDate, activeSubTab]);
 
-  const fetchDailySales = async () => {
+  const fetchDailySales = async (silent = false) => {
     try {
-      setLoadingLedger(true);
+      if (!silent) setLoadingLedger(true);
       const response = await axios.get(`/api/orders?date=${selectedDate}`);
       setLedgerOrders(response.data.orders || []);
     } catch (error) {
-      toast.error('Failed to load daily sales data');
+      if (!silent) toast.error('Failed to load daily sales data');
     } finally {
-      setLoadingLedger(false);
+      if (!silent) setLoadingLedger(false);
     }
   };
 
@@ -361,6 +372,8 @@ const Sales = () => {
       
       // Refresh local products (for updated stock counts)
       fetchProducts();
+      // Refresh daily sales ledger
+      fetchDailySales();
     } catch (error) {
       console.error(error);
       toast.error(error.response?.data?.message || error.message || 'Failed to complete sale');

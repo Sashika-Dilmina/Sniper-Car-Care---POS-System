@@ -22,6 +22,15 @@ if (dbPassword && dbPassword.trim() !== '') {
 
 const pool = mysql.createPool(poolConfig);
 
+// Set session time zone to UAE time (+04:00) for all database operations
+pool.on('connection', (connection) => {
+  connection.query("SET time_zone = '+04:00';", (err) => {
+    if (err) {
+      console.error('Error setting time zone:', err);
+    }
+  });
+});
+
 // Test database connection
 setTimeout(() => {
   pool.getConnection()
