@@ -531,6 +531,10 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
         'UPDATE payments SET status = "failed" WHERE order_id = ?',
         [id]
       );
+      await connection.query(
+        'DELETE FROM customer_credits WHERE order_id = ?',
+        [id]
+      );
     } else if (status === 'pending') {
       serviceStatus = 'pending';
       serviceStartedUpdate = ', started_at = NULL';
@@ -775,6 +779,9 @@ const deleteOrder = asyncHandler(async (req, res) => {
 
     // Delete payments
     await connection.query('DELETE FROM payments WHERE order_id = ?', [id]);
+
+    // Delete customer credits
+    await connection.query('DELETE FROM customer_credits WHERE order_id = ?', [id]);
 
     // Delete order
     await connection.query('DELETE FROM orders WHERE id = ?', [id]);
