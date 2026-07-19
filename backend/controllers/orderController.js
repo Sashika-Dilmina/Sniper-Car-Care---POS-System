@@ -79,10 +79,27 @@ const getOrders = asyncHandler(async (req, res) => {
   }
 
   if (date) {
-    query += ' AND DATE(o.created_at) = ?';
-    params.push(date);
+    const [sessions] = await pool.query(
+      'SELECT opened_at, closed_at FROM cash_registers WHERE DATE(opened_at) = ? ORDER BY opened_at ASC',
+      [date]
+    );
+    if (sessions.length > 0) {
+      const startTime = sessions[0].opened_at;
+      const endTime = sessions[sessions.length - 1].closed_at || new Date();
+      query += ' AND o.created_at >= ? AND o.created_at <= ?';
+      params.push(startTime, endTime);
+    } else {
+      query += ' AND DATE(o.created_at) = ?';
+      params.push(date);
+    }
   } else if (req.user && req.user.role === 'staff') {
-    query += ' AND DATE(o.created_at) = CURDATE()';
+    const [active] = await pool.query('SELECT opened_at FROM cash_registers WHERE status = "open" LIMIT 1');
+    if (active.length > 0) {
+      query += ' AND o.created_at >= ?';
+      params.push(active[0].opened_at);
+    } else {
+      query += ' AND DATE(o.created_at) = CURDATE()';
+    }
   }
 
   // Filter by service time at SQL level
