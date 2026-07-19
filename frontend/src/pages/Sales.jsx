@@ -1097,19 +1097,19 @@ const Sales = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
             <div className="bg-gradient-to-br from-primary-600 to-primary-700 p-6 rounded-2xl shadow-sm border text-white flex flex-col justify-between">
               <span className="text-sm font-bold uppercase tracking-wider opacity-85">Daily Sales Revenue</span>
-              <h3 className="text-3xl font-black mt-2">AED {totalRevenue.toFixed(2)}</h3>
+              <h3 className="text-3xl font-black mt-2 notranslate">AED {totalRevenue.toFixed(2)}</h3>
               <span className="text-xs opacity-75 mt-4">Total net sales generated today</span>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
               <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Sales Count</span>
-              <h3 className="text-3xl font-black text-gray-800 mt-2">{totalSalesCount} Sales</h3>
+              <h3 className="text-3xl font-black text-gray-800 mt-2"><span className="notranslate">{totalSalesCount}</span> Sales</h3>
               <span className="text-xs text-green-500 font-semibold mt-4">Including normal and VIP services</span>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
               <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Applied Discounts</span>
-              <h3 className="text-3xl font-black text-red-500 mt-2">AED {totalDiscount.toFixed(2)}</h3>
+              <h3 className="text-3xl font-black text-red-500 mt-2 notranslate">AED {totalDiscount.toFixed(2)}</h3>
               <span className="text-xs text-gray-400 mt-4">Discounts offered to customers</span>
             </div>
           </div>
