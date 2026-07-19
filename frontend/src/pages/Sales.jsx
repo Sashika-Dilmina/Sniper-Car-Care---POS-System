@@ -463,6 +463,9 @@ const Sales = () => {
   const totalDiscount = filteredLedgerOrders.reduce((sum, o) => sum + (o.status === 'cancelled' ? 0 : parseFloat(o.discount || 0)), 0);
   const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + (o.status === 'cancelled' ? 0 : parseFloat(o.total || 0)), 0);
 
+  console.log('DEBUG: filteredLedgerOrders =', filteredLedgerOrders);
+  console.log('DEBUG: totalRevenue =', totalRevenue);
+
   const renderCatalogCard = (product) => {
     const isService = product.category === 'Services' || product.category === 'VIP';
     const outOfStock = !isService && product.stock <= 0;
