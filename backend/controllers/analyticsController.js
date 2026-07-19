@@ -1787,7 +1787,11 @@ const getReportPDF = asyncHandler(async (req, res) => {
   } else if (tab === 'credit') {
     const [credits] = await pool.query(
       `SELECT cc.*, c.name as customer_name, c.phone as customer_phone, c.vehicle_plate, c.vehicle_type
-       FROM customer_credits cc JOIN customers c ON cc.customer_id = c.id ORDER BY cc.status ASC, cc.created_at DESC`
+       FROM customer_credits cc 
+       JOIN customers c ON cc.customer_id = c.id 
+       JOIN orders o ON cc.order_id = o.id
+       WHERE o.status != 'cancelled'
+       ORDER BY cc.status ASC, cc.created_at DESC`
     );
     let filtered = credits;
     if (start_date && end_date) {

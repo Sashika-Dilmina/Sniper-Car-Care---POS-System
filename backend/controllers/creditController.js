@@ -14,7 +14,8 @@ const getCustomerCredits = asyncHandler(async (req, res) => {
            c.vehicle_type
     FROM customer_credits cc
     JOIN customers c ON cc.customer_id = c.id
-    WHERE 1=1
+    JOIN orders o ON cc.order_id = o.id
+    WHERE o.status != 'cancelled'
   `;
   const params = [];
 
