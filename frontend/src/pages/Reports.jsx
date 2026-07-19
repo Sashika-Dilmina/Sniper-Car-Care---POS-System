@@ -832,35 +832,107 @@ const Reports = () => {
                 </div>
               )}
 
-              {dailyReport.top_products && dailyReport.top_products.length > 0 && (
+              {/* Top Services & Products Sections */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Saloon Services */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <h3 className="text-lg font-semibold mb-3">Top Saloon Services</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-2 text-left">Product</th>
-                          <th className="px-4 py-2 text-left">Category</th>
-                          <th className="px-4 py-2 text-right">Quantity</th>
-                          <th className="px-4 py-2 text-right">Revenue</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Service</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {dailyReport.top_products.map((product, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="px-4 py-2">{product.name}</td>
-                            <td className="px-4 py-2">{product.category}</td>
-                            <td className="px-4 py-2 text-right">{product.quantity_sold}</td>
-                            <td className="px-4 py-2 text-right">
-                              AED {parseFloat(product.revenue || 0).toLocaleString()}
-                            </td>
+                        {dailyReport.top_services_saloon && dailyReport.top_services_saloon.length > 0 ? (
+                          dailyReport.top_services_saloon.map((service, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{service.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{service.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(service.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No saloon services sold</td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>
                 </div>
-              )}
+
+                {/* 4x4 Services */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Top 4x4 Services</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Service</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyReport.top_services_4x4 && dailyReport.top_services_4x4.length > 0 ? (
+                          dailyReport.top_services_4x4.map((service, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{service.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{service.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(service.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No 4x4 services sold</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Physical Products */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Product</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyReport.top_products && dailyReport.top_products.length > 0 ? (
+                          dailyReport.top_products.map((product, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{product.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{product.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(product.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No products sold</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

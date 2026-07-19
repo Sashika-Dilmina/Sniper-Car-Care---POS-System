@@ -483,21 +483,110 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
       END
   `, [targetDate]);
 
-  // Top products sold
-  const [topProducts] = await pool.query(`
+  // Query all non-cancelled order items for the target date
+  const [orderItems] = await pool.query(`
     SELECT 
-      p.name,
+      oi.product_id,
+      p.name as product_name,
       p.category,
-      SUM(oi.quantity) as quantity_sold,
-      SUM(oi.quantity * oi.price) as revenue
+      oi.quantity,
+      oi.price,
+      o.discount,
+      o.total as order_total
     FROM order_items oi
     JOIN products p ON oi.product_id = p.id
     JOIN orders o ON oi.order_id = o.id
-    WHERE DATE(o.created_at) = ? AND o.payment_status = 'paid'
-    GROUP BY p.id
-    ORDER BY revenue DESC
-    LIMIT 10
+    WHERE DATE(o.created_at) = ? AND o.status != 'cancelled'
   `, [targetDate]);
+
+  // Query all non-cancelled, non-deleted services for the target date
+  const [dayServices] = await pool.query(`
+    SELECT 
+      s.service_name,
+      s.vehicle_type,
+      s.price as service_price,
+      o.discount,
+      o.total as order_total
+    FROM services s
+    JOIN orders o ON s.order_id = o.id
+    WHERE DATE(s.created_at) = ? AND o.status != 'cancelled' AND s.is_deleted = 0
+  `, [targetDate]);
+
+  // Group and calculate net revenues for Products
+  const productMap = {};
+  for (const item of orderItems) {
+    if (item.category === 'Services' || item.category === 'VIP') continue;
+    
+    const qty = parseInt(item.quantity) || 0;
+    const price = parseFloat(item.price) || 0;
+    const itemSubtotal = qty * price;
+    
+    const discount = parseFloat(item.discount) || 0;
+    const orderTotal = parseFloat(item.order_total) || 0;
+    const orderSubtotal = orderTotal + discount;
+    const netRevenue = orderSubtotal > 0 ? itemSubtotal * (1 - (discount / orderSubtotal)) : 0;
+    
+    const key = item.product_name;
+    if (!productMap[key]) {
+      productMap[key] = {
+        name: item.product_name,
+        category: item.category,
+        quantity_sold: 0,
+        revenue: 0
+      };
+    }
+    productMap[key].quantity_sold += qty;
+    productMap[key].revenue += netRevenue;
+  }
+  
+  const topProductsList = Object.values(productMap)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10);
+
+  // Group and calculate net revenues for Services (Saloon vs 4x4)
+  const saloonServicesMap = {};
+  const fourWheelServicesMap = {};
+  
+  for (const s of dayServices) {
+    let cleanName = s.service_name.split(' (')[0].trim();
+    const cleanNameLower = cleanName.toLowerCase();
+    
+    if (cleanNameLower.includes('full body service')) cleanName = 'Full Body Service';
+    else if (cleanNameLower.includes('full body wash')) cleanName = 'Full Body Wash';
+    else if (cleanNameLower.includes('ceramic wash')) cleanName = 'Ceramic Wash';
+    else if (cleanNameLower.includes('double soap')) cleanName = 'Double Soap';
+    else if (cleanNameLower.includes('body wash')) cleanName = 'Body Wash';
+    else if (cleanNameLower.includes('just water')) cleanName = 'Just Water';
+    else if (cleanNameLower.includes('saloon vip')) cleanName = 'Saloon VIP Service';
+    else if (cleanNameLower.includes('4x4 vip')) cleanName = '4x4 VIP Service';
+    
+    const price = parseFloat(s.service_price) || 0;
+    const discount = parseFloat(s.discount) || 0;
+    const orderTotal = parseFloat(s.order_total) || 0;
+    const orderSubtotal = orderTotal + discount;
+    const netRevenue = orderSubtotal > 0 ? price * (1 - (discount / orderSubtotal)) : 0;
+    
+    const targetMap = s.vehicle_type === '4x4' ? fourWheelServicesMap : saloonServicesMap;
+    
+    if (!targetMap[cleanName]) {
+      targetMap[cleanName] = {
+        name: cleanName,
+        category: s.vehicle_type === '4x4' ? '4x4 Service' : 'Saloon Service',
+        quantity_sold: 0,
+        revenue: 0
+      };
+    }
+    targetMap[cleanName].quantity_sold += 1;
+    targetMap[cleanName].revenue += netRevenue;
+  }
+  
+  const topSaloonServicesList = Object.values(saloonServicesMap)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10);
+    
+  const topFourWheelServicesList = Object.values(fourWheelServicesMap)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10);
 
   // Free washes breakdown query (Saloon vs 4x4)
   const [freeWashBreakdown] = await pool.query(`
@@ -534,7 +623,9 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
     orders: ordersSummary[0] || {},
     services: servicesSummary[0] || {},
     payment_methods: paymentMethods || [],
-    top_products: topProducts || []
+    top_products: topProductsList || [],
+    top_services_saloon: topSaloonServicesList || [],
+    top_services_4x4: topFourWheelServicesList || []
   };
 
   if (format === 'excel') {
