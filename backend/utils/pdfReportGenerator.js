@@ -251,6 +251,7 @@ function generatePDFReport(tab, data, params, outputPath) {
         currentY = drawRow('Net Sales', `AED ${parseFloat(summary.net_sales || 0).toFixed(2)}`, currentY, true);
         currentY = drawRow('  - Cash Sales', `AED ${parseFloat(summary.cash_sales || 0).toFixed(2)}`, currentY);
         currentY = drawRow('  - Card Sales', `AED ${parseFloat(summary.card_sales || 0).toFixed(2)}`, currentY);
+        currentY = drawRow('  - TAP Sales', `AED ${parseFloat(summary.tap_sales || 0).toFixed(2)}`, currentY);
         currentY = drawRow('  - Credit Sales', `AED ${parseFloat(summary.credit_sales || 0).toFixed(2)}`, currentY);
         currentY = drawRow('  - Bank Transfer Sales', `AED ${parseFloat(summary.bank_transfer_sales || 0).toFixed(2)}`, currentY);
         currentY = drawRow('Cost of Goods/Services Sold', `AED ${parseFloat(summary.total_cost || 0).toFixed(2)}`, currentY, true);
