@@ -1378,6 +1378,10 @@ const Reports = () => {
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.card_sales || 0).toFixed(3)}</span>
                       </div>
                       <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">TAP Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.tap_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
                         <span className="text-gray-500">Credit Sale</span>
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.credit_sales || 0).toFixed(3)}</span>
                       </div>
