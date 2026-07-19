@@ -515,9 +515,13 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
   const saloonFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === 'Saloon')?.total_amount || 0;
   const fourWheelFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === '4x4')?.total_amount || 0;
 
-  const totalSales = paymentMethods
-    .filter(pm => pm.method !== 'free')
-    .reduce((sum, pm) => sum + parseFloat(pm.total_amount), 0);
+  // Get sum of order totals (excluding cancelled ones) for that date (net sales = subtotal - discount)
+  const [ordersTotalSum] = await pool.query(`
+    SELECT COALESCE(SUM(total), 0) as total_net_sales
+    FROM orders
+    WHERE DATE(created_at) = ? AND status != 'cancelled'
+  `, [targetDate]);
+  const totalSales = parseFloat(ordersTotalSum[0].total_net_sales || 0);
 
   if (ordersSummary[0]) {
     ordersSummary[0].total_sales = totalSales;
