@@ -498,7 +498,10 @@ const Sales = () => {
           <h3 className="font-bold text-gray-800 group-hover:text-primary-600 transition-colors line-clamp-1">
             {product.name}
           </h3>
-          <p className="text-xs text-gray-500 line-clamp-2">{product.description || 'No description available'}</p>
+          <p className="text-sm font-extrabold text-primary-600 mt-0.5">
+            AED {parseFloat(product.price).toFixed(2)}
+          </p>
+          <p className="text-xs text-gray-500 line-clamp-2 mt-1">{product.description || 'No description available'}</p>
         </div>
         <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-50">
           <span className="font-extrabold text-gray-900">AED {parseFloat(product.price).toFixed(2)}</span>

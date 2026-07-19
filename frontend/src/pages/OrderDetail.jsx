@@ -345,7 +345,7 @@ const OrderDetail = () => {
                     👑 Manage VIP Booking
                   </button>
                 ) : (
-                  (order.status === 'processing' || order.status === 'pending') && (order.payment_status === 'paid' || order.payment_status === 'free') && (
+                  (order.status === 'processing' || order.status === 'pending') && (order.payment_status === 'paid' || order.payment_status === 'free' || order.credit_status === 'unpaid' || order.credit_status === 'partially_paid') && (
                     <button
                       onClick={() => handleStatusUpdate('completed')}
                       disabled={registerStatus !== 'open'}

@@ -62,22 +62,28 @@ const Credits = () => {
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const fetchCredits = async () => {
+  const fetchCredits = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await axios.get('/api/credits');
       if (response.data.success) {
         setCredits(response.data.credits || []);
       }
     } catch (error) {
-      toast.error('Failed to load customer credits ledger');
+      if (!silent) toast.error('Failed to load customer credits ledger');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCredits();
+    fetchCredits(false); // Initial load
+    
+    const interval = setInterval(() => {
+      fetchCredits(true); // Silent background polling
+    }, 7000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleOpenRecoverModal = (credit) => {

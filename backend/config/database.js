@@ -12,7 +12,8 @@ const poolConfig = {
   port: parseInt(process.env.DB_PORT) || 3306,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  timezone: '+04:00'
 };
 
 // Only add password if it's not empty (some MySQL setups reject empty string in pools)
