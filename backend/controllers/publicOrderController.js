@@ -513,6 +513,11 @@ const confirmPayment = asyncHandler(async (req, res) => {
       } catch (error) {
         await connection.rollback();
         connection.release();
+        if (error.code === 'ER_DUP_ENTRY') {
+          return res.json({
+            message: 'Payment confirmed successfully'
+          });
+        }
         throw error;
       }
     } else {

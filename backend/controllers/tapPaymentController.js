@@ -172,6 +172,10 @@ const handleTapCallback = asyncHandler(async (req, res) => {
       } catch (dbError) {
         await connection.rollback();
         connection.release();
+        if (dbError.code === 'ER_DUP_ENTRY') {
+          console.log(`[Tap Callback] Concurrently processed charge ${tap_id} already registered. Redirecting to success.`);
+          return res.redirect(`${finalRedirectUrl}${finalRedirectUrl.includes('?') ? '&' : '?'}status=success&order_id=${order_id}`);
+        }
         throw dbError;
       }
     } else {
