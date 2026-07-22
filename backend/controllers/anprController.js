@@ -1,56 +1,7 @@
 const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
-const { buildCustomerWebsiteUrl, formatPhoneNumber } = require('../utils/customerLinkUtils');
-
-// Helper to parse Plate string into Emirate, Code and Plate Number
-function parsePlateComponents(plateStr) {
-  if (!plateStr) return { plateCode: '', emirate: '', plateNumber: '' };
-  
-  const cleanStr = plateStr.trim().replace(/\s+/g, ' ');
-  const emiratesList = [
-    'dubai',
-    'abu dhabi',
-    'sharjah',
-    'ajman',
-    'umm al quwain',
-    'ras al khaimah',
-    'fujairah'
-  ];
-  
-  let detectedEmirate = '';
-  let remainingStr = cleanStr;
-  
-  for (const emirate of emiratesList) {
-    const regex = new RegExp(`\\b${emirate}\\b`, 'i');
-    if (regex.test(cleanStr)) {
-      detectedEmirate = emirate.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-      remainingStr = cleanStr.replace(regex, '').trim().replace(/\s+/g, ' ');
-      break;
-    }
-  }
-  
-  const parts = remainingStr.split(' ').filter(Boolean);
-  let plateCode = '';
-  let plateNumber = '';
-  
-  if (parts.length >= 2) {
-    plateCode = parts[0];
-    plateNumber = parts[parts.length - 1];
-  } else if (parts.length === 1) {
-    const part = parts[0];
-    const match = part.match(/^([A-Za-z]+)?([0-9]+)$/);
-    if (match) {
-      plateCode = match[1] || '';
-      plateNumber = match[2];
-    } else {
-      plateNumber = part;
-    }
-  }
-  
-  return { plateCode, emirate: detectedEmirate, plateNumber };
-}
-
+const { buildCustomerWebsiteUrl, formatPhoneNumber, parsePlateComponents, findMatchingCustomer } = require('../utils/customerLinkUtils');
 
 // @desc    Mock ANPR detection - simulate camera plate recognition
 // @route   POST /api/anpr/detect
@@ -69,17 +20,17 @@ const detectPlate = asyncHandler(async (req, res) => {
     isMock = true;
   }
 
-  // Check if plate has been scanned in the last 24 hours
+  // Check if plate has been scanned in the last 5 minutes (prevents duplicate camera triggers)
   const [recentScans] = await pool.query(
-    'SELECT id FROM anpr_logs WHERE plate_number = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) LIMIT 1',
+    'SELECT id FROM anpr_logs WHERE plate_number = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE) LIMIT 1',
     [detectedPlate]
   );
 
   if (recentScans.length > 0) {
-    console.log(`[ANPR] Plate ${detectedPlate} already scanned within last 24 hours. Ignoring scan.`);
+    console.log(`[ANPR] Plate ${detectedPlate} already scanned within last 5 minutes. Ignoring scan.`);
     return res.status(200).json({
       success: true,
-      message: 'Plate already scanned in the last 24 hours. Scan ignored.',
+      message: 'Plate already scanned in the last 5 minutes. Scan ignored.',
       plate_number: detectedPlate,
       skipped: true
     });
@@ -88,77 +39,12 @@ const detectPlate = asyncHandler(async (req, res) => {
   const mockProvince = ['Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman', 'Fujairah'][Math.floor(Math.random() * 5)];
   const confidence = reqConfidence || (0.85 + Math.random() * 0.15).toFixed(2);
 
-  // Try to find existing customer with this plate, checking both customers.vehicle_plate and vehicles.VehicleRegistrationNumber.
-  // We match exactly first, and then match space-insensitively.
-  const [customers] = await pool.query(`
-    SELECT DISTINCT c.* FROM customers c
-    LEFT JOIN vehicles v ON c.id = v.CustomerId
-    WHERE c.vehicle_plate = ? 
-       OR REPLACE(c.vehicle_plate, ' ', '') = REPLACE(?, ' ', '')
-       OR v.VehicleRegistrationNumber = ?
-       OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = REPLACE(?, ' ', '')
-    LIMIT 1
-  `, [detectedPlate, detectedPlate, detectedPlate, detectedPlate]);
+  // Strict matching on full plate & plate components (Emirate + Code + Number)
+  const customer = await findMatchingCustomer(pool, detectedPlate);
 
-
-  let customer = null;
-  if (customers.length > 0) {
-    customer = customers[0];
-  } else {
-    // Robust fallback match: parse the detected plate and match by PlateCode and PlateNumber
-    const { plateCode, emirate: parsedEmirate, plateNumber: parsedPlateNum } = parsePlateComponents(detectedPlate);
-    if (parsedPlateNum) {
-      const [fallbackCustomers] = await pool.query(`
-        SELECT DISTINCT c.* FROM customers c
-        JOIN vehicles v ON c.id = v.CustomerId
-        WHERE v.PlateNumber = ? AND (v.PlateCode = ? OR (? = '' AND (v.PlateCode = '' OR v.PlateCode IS NULL)))
-        LIMIT 1
-      `, [parsedPlateNum, plateCode, plateCode]);
-      
-      if (fallbackCustomers.length > 0) {
-        customer = fallbackCustomers[0];
-      } else {
-        // Check if PlateNumber is unique in database to avoid wrong matches on duplicates
-        const [countVehicles] = await pool.query(`
-          SELECT COUNT(DISTINCT CustomerId) as count FROM vehicles WHERE PlateNumber = ?
-        `, [parsedPlateNum]);
-        
-        const [countCustomers] = await pool.query(`
-          SELECT COUNT(id) as count FROM customers 
-          WHERE REPLACE(vehicle_plate, ' ', '') LIKE ?
-        `, [`%${parsedPlateNum}`]);
-        
-        const totalMatches = (countVehicles[0]?.count || 0) + (countCustomers[0]?.count || 0);
-
-        if (totalMatches === 1) {
-          const [numberOnlyCustomers] = await pool.query(`
-            SELECT DISTINCT c.* FROM customers c
-            JOIN vehicles v ON c.id = v.CustomerId
-            WHERE v.PlateNumber = ?
-            LIMIT 1
-          `, [parsedPlateNum]);
-          
-          if (numberOnlyCustomers.length > 0) {
-            customer = numberOnlyCustomers[0];
-          } else {
-            const [custByPlate] = await pool.query(`
-              SELECT * FROM customers 
-              WHERE REPLACE(vehicle_plate, ' ', '') LIKE ?
-              LIMIT 1
-            `, [`%${parsedPlateNum}`]);
-            if (custByPlate.length > 0) {
-              customer = custByPlate[0];
-            }
-          }
-        } else {
-          console.log(`[ANPR] Skipped loose PlateNumber match for ${parsedPlateNum} because it matches multiple customers/vehicles.`);
-        }
-      }
-    }
-  }
 
   if (customer) {
-    // Enforce one SMS/scan per customer per 24 hours
+    // Enforce one SMS/scan per customer account/vehicle per 24 hours
     const [recentCustScans] = await pool.query(`
       SELECT id FROM anpr_logs 
       WHERE customer_id = ? 
@@ -166,42 +52,65 @@ const detectPlate = asyncHandler(async (req, res) => {
       LIMIT 1
     `, [customer.id]);
 
+    // Update last seen (always update when scanned)
+    await pool.query(
+      'UPDATE customers SET last_seen = NOW() WHERE id = ?',
+      [customer.id]
+    );
+
     if (recentCustScans.length > 0) {
-      console.log(`[ANPR] Customer ${customer.name} already matched/scanned in the last 24 hours. Ignoring duplicate.`);
+      console.log(`[ANPR] Customer account ID ${customer.id} already scanned in the last 24 hours. Logging scan but skipping SMS.`);
       
-      // Save log but skip SMS
+      // Save log but skip SMS (truncate plate to 100 chars)
+      const safePlate = detectedPlate ? detectedPlate.substring(0, 100) : '';
       await pool.query(
         'INSERT INTO anpr_logs (plate_number, camera_id, confidence, image_url, customer_id) VALUES (?, ?, ?, ?, ?)',
-        [detectedPlate, cameraId || 'HTTP_CAM', confidence, imageUrl, customer.id]
+        [safePlate, camera_id || 'HTTP_CAM', confidence, image_url || null, customer.id]
       );
 
       return res.status(200).json({
         success: true,
-        message: 'Customer already scanned in the last 24 hours. SMS skipped.',
+        message: 'Customer account already scanned in the last 24 hours. SMS skipped.',
         plate_number: detectedPlate,
         customer_name: customer.name,
         skipped: true
       });
     }
 
-    // Update last seen
+    // Save log FIRST to prevent race conditions before the slow SMS API call
+    const safePlateNumber = detectedPlate ? detectedPlate.substring(0, 100) : '';
     await pool.query(
-      'UPDATE customers SET last_seen = NOW() WHERE id = ?',
-      [customer.id]
+      'INSERT INTO anpr_logs (plate_number, camera_id, confidence, image_url, customer_id) VALUES (?, ?, ?, ?, ?)',
+      [safePlateNumber, camera_id || 'HTTP_CAM', confidence, image_url || null, customer.id]
     );
 
     // Send SMS with product page link
+    let smsSent = false;
     try {
       await sendProductPageSMS(customer, detectedPlate);
+      smsSent = true;
     } catch (error) {
       console.error('Failed to send welcome SMS:', error.message);
     }
+
+    return res.json({
+      success: true,
+      plate_number: detectedPlate,
+      province: mockProvince,
+      confidence,
+      camera_id: camera_id || 'HTTP_CAM',
+      image_url: image_url || null,
+      customer_id: customer.id,
+      customer_name: customer.name,
+      sms_sent: smsSent
+    });
   }
 
-  // LOG THE DETECTION (Always save to anpr_logs for frontend to pick up)
+  // LOG THE DETECTION for unmatched vehicles (New Vehicles)
+  const safePlateNumber = detectedPlate ? detectedPlate.substring(0, 100) : '';
   await pool.query(
     'INSERT INTO anpr_logs (plate_number, camera_id, confidence, image_url, customer_id) VALUES (?, ?, ?, ?, ?)',
-    [detectedPlate, camera_id || 'CAM-001', confidence, image_url || null, customer?.id || null]
+    [safePlateNumber, camera_id || 'CAM-001', confidence, image_url || null, null]
   );
 
   res.json({
@@ -210,9 +119,9 @@ const detectPlate = asyncHandler(async (req, res) => {
     province: mockProvince,
     confidence,
     camera_id: camera_id || 'CAM-001',
-    timestamp: new Date().toISOString(),
-    existing_customer: customer,
-    is_simulation: isMock
+    image_url: image_url || null,
+    customer_id: null,
+    sms_sent: false
   });
 });
 
@@ -221,11 +130,22 @@ const detectPlate = asyncHandler(async (req, res) => {
 // @access  Private
 const getLatestDetections = asyncHandler(async (req, res) => {
   const [logs] = await pool.query(`
-    SELECT l.*, c.name as customer_name, c.phone as customer_phone, c.vehicle_type 
+    SELECT l.*, 
+           c.name as customer_name, 
+           c.phone as customer_phone, 
+           c.vehicle_plate as customer_vehicle_plate, 
+           c.vehicle_type, 
+           c.province as customer_province,
+           c.last_seen as customer_last_seen,
+           COALESCE(ly.points, 0) as loyalty_points,
+           COALESCE(ly.wash_stamps, 0) as wash_stamps,
+           (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) as total_orders,
+           (SELECT COALESCE(SUM(o.total), 0) FROM orders o WHERE o.customer_id = c.id) as total_spent
     FROM anpr_logs l 
     LEFT JOIN customers c ON l.customer_id = c.id 
+    LEFT JOIN loyalty ly ON c.id = ly.customer_id
     ORDER BY l.created_at DESC 
-    LIMIT 10
+    LIMIT 25
   `);
 
   res.json({
@@ -249,22 +169,12 @@ const registerFromANPR = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Plate number and vehicle type are required' });
   }
 
-  // Check if exists
-  const [existing] = await pool.query(`
-    SELECT DISTINCT c.id FROM customers c
-    LEFT JOIN vehicles v ON c.id = v.CustomerId
-    WHERE c.vehicle_plate = ? 
-       OR REPLACE(c.vehicle_plate, ' ', '') = REPLACE(?, ' ', '')
-       OR v.VehicleRegistrationNumber = ?
-       OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = REPLACE(?, ' ', '')
-    LIMIT 1
-  `, [finalPlate, finalPlate, finalPlate, finalPlate]);
-
-  if (existing.length > 0) {
-    const [custRows] = await pool.query('SELECT * FROM customers WHERE id = ?', [existing[0].id]);
+  // Check if exists using strict component matching
+  const existingCustomer = await findMatchingCustomer(pool, finalPlate);
+  if (existingCustomer) {
     return res.status(400).json({
       message: 'Vehicle already registered',
-      customer: custRows[0]
+      customer: existingCustomer
     });
   }
 
@@ -494,11 +404,37 @@ const manualCheckIn = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Manually assign or change customer for an ANPR log detection
+// @route   POST /api/anpr/assign-customer
+// @access  Private
+const assignCustomerToLog = asyncHandler(async (req, res) => {
+  const { log_id, customer_id } = req.body;
+
+  if (!log_id || !customer_id) {
+    return res.status(400).json({ message: 'log_id and customer_id are required' });
+  }
+
+  const [custRows] = await pool.query('SELECT * FROM customers WHERE id = ?', [customer_id]);
+  if (custRows.length === 0) {
+    return res.status(404).json({ message: 'Customer not found' });
+  }
+
+  await pool.query('UPDATE anpr_logs SET customer_id = ? WHERE id = ?', [customer_id, log_id]);
+
+  res.json({
+    success: true,
+    message: 'Customer assigned successfully to detection log',
+    customer: custRows[0]
+  });
+});
+
 module.exports = {
   detectPlate,
   getLatestDetections,
   registerFromANPR,
   sendWelcomeFromDashboard,
   manualCheckIn,
+  assignCustomerToLog,
 };
+
 

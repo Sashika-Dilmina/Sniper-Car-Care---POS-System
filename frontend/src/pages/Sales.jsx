@@ -444,10 +444,29 @@ const Sales = () => {
   });
 
   // Filter Customers for Search Dropdown
-  const filteredCustomers = customers.filter(c =>
-    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.vehicle_plate?.toLowerCase().includes(customerSearch.toLowerCase())
-  );
+  const filteredCustomers = customers.filter(c => {
+    if (!customerSearch || !customerSearch.trim()) return true;
+
+    const rawSearch = customerSearch.trim().toLowerCase();
+    const cleanSearch = rawSearch.replace(/[\s\-_]+/g, '');
+
+    const name = (c.name || '').toLowerCase();
+    const phone = (c.phone || '').toLowerCase();
+    const phoneClean = phone.replace(/[^0-9]/g, '');
+    const plate = (c.vehicle_plate || '').toLowerCase();
+    const plateClean = plate.replace(/[\s\-_]+/g, '');
+    const province = (c.province || '').toLowerCase();
+
+    return (
+      name.includes(rawSearch) ||
+      phone.includes(rawSearch) ||
+      (phoneClean && phoneClean.includes(cleanSearch)) ||
+      plate.includes(rawSearch) ||
+      (plateClean && plateClean.includes(cleanSearch)) ||
+      province.includes(rawSearch)
+    );
+  });
+
 
   // Filter Ledger Orders
   const filteredLedgerOrders = ledgerOrders.filter(order => {

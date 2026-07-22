@@ -130,10 +130,34 @@ const Customers = () => {
     }
   };
 
-  const filteredCustomers = customers.filter(customer =>
-    customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.vehicle_plate?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCustomers = customers.filter(customer => {
+    if (!searchTerm || !searchTerm.trim()) return true;
+
+    const rawSearch = searchTerm.trim().toLowerCase();
+    const cleanSearch = rawSearch.replace(/[\s\-_]+/g, '');
+
+    const name = (customer.name || '').toLowerCase();
+    const phone = (customer.phone || '').toLowerCase();
+    const phoneClean = phone.replace(/[^0-9]/g, '');
+    const plate = (customer.vehicle_plate || '').toLowerCase();
+    const plateClean = plate.replace(/[\s\-_]+/g, '');
+    const province = (customer.province || '').toLowerCase();
+
+    // Check name match
+    if (name.includes(rawSearch)) return true;
+
+    // Check phone match (raw or numeric only)
+    if (phone.includes(rawSearch) || (phoneClean && phoneClean.includes(cleanSearch))) return true;
+
+    // Check plate match (raw substring or space-insensitive match)
+    if (plate.includes(rawSearch) || (plateClean && plateClean.includes(cleanSearch))) return true;
+
+    // Check province match
+    if (province.includes(rawSearch)) return true;
+
+    return false;
+  });
+
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);

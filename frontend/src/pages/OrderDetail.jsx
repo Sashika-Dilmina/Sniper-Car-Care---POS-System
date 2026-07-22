@@ -408,6 +408,18 @@ const OrderDetail = () => {
                 </span>
               )}
             </div>
+            <div>
+              <p className="text-sm text-gray-600">Payment Method</p>
+              <span className={`px-3 py-1 text-sm rounded-full font-semibold capitalize ${
+                (order.payment_methods || order.payments?.[0]?.method) === 'cash' ? 'bg-green-100 text-green-800' :
+                (order.payment_methods || order.payments?.[0]?.method) === 'card' ? 'bg-purple-100 text-purple-800' :
+                (order.payment_methods || order.payments?.[0]?.method) === 'credit' ? 'bg-orange-100 text-orange-800' :
+                (order.payment_methods || order.payments?.[0]?.method) ? 'bg-blue-100 text-blue-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {order.payment_methods || order.payments?.[0]?.method || 'N/A'}
+              </span>
+            </div>
             {order.source && (
               <div>
                 <p className="text-sm text-gray-600">Order Source</p>

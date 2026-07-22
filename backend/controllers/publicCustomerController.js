@@ -29,50 +29,38 @@ async function resolveCustomerByPlate(plate) {
   const { plateCode, emirate, plateNumber: parsedPlateNum } = parsePlateComponents(plate);
   
   if (parsedPlateNum) {
-    // A. Match by PlateNumber and PlateCode
-    const [fallbackCustomers] = await pool.query(
-      `SELECT DISTINCT c.* FROM customers c
+    // B. Check if PlateNumber is unique in database to allow loose fallback first
+    const [matchingCustomers] = await pool.query(
+      `SELECT DISTINCT c.id FROM customers c
        JOIN vehicles v ON c.id = v.CustomerId
-       WHERE v.PlateNumber = ? AND (v.PlateCode = ? OR (? = '' AND (v.PlateCode = '' OR v.PlateCode IS NULL)))
-       LIMIT 1`,
-      [parsedPlateNum, plateCode, plateCode]
-    );
-    
-    if (fallbackCustomers.length > 0) {
-      return fallbackCustomers[0];
-    }
-
-    // B. Check if PlateNumber is unique in database to allow loose fallback
-    const [countVehicles] = await pool.query(
-      `SELECT COUNT(DISTINCT CustomerId) as count FROM vehicles WHERE PlateNumber = ?`,
+       WHERE v.PlateNumber = ?`,
       [parsedPlateNum]
     );
     
-    const [countCustomers] = await pool.query(
-      `SELECT COUNT(id) as count FROM customers WHERE REPLACE(vehicle_plate, ' ', '') LIKE ?`,
-      [`%${parsedPlateNum}`]
-    );
-    
-    const totalMatches = (countVehicles[0]?.count || 0) + (countCustomers[0]?.count || 0);
-    
-    if (totalMatches === 1) {
-      const [numberOnlyCustomers] = await pool.query(
+    if (matchingCustomers.length === 1) {
+      const matchedCustomerId = matchingCustomers[0].id;
+      const [matchedCustRows] = await pool.query(
+        'SELECT * FROM customers WHERE id = ?',
+        [matchedCustomerId]
+      );
+      if (matchedCustRows.length > 0) {
+        return matchedCustRows[0];
+      }
+    } else if (matchingCustomers.length > 1) {
+      // If there are duplicate plate numbers, distinguish them using plate code/emirate
+      console.log(`[Public Customer] Duplicate plate number ${parsedPlateNum} found. Resolving using code: ${plateCode}`);
+      const [resolvedCustomers] = await pool.query(
         `SELECT DISTINCT c.* FROM customers c
          JOIN vehicles v ON c.id = v.CustomerId
-         WHERE v.PlateNumber = ?
+         WHERE v.PlateNumber = ? AND (v.PlateCode = ? OR (? = '' AND (v.PlateCode = '' OR v.PlateCode IS NULL)))
          LIMIT 1`,
-        [parsedPlateNum]
+        [parsedPlateNum, plateCode, plateCode]
       );
-      if (numberOnlyCustomers.length > 0) {
-        return numberOnlyCustomers[0];
-      }
-
-      const [custByPlate] = await pool.query(
-        `SELECT * FROM customers WHERE REPLACE(vehicle_plate, ' ', '') LIKE ? LIMIT 1`,
-        [`%${parsedPlateNum}`]
-      );
-      if (custByPlate.length > 0) {
-        return custByPlate[0];
+      
+      if (resolvedCustomers.length > 0) {
+        return resolvedCustomers[0];
+      } else {
+        console.log(`[Public Customer] Could not resolve duplicate plate number ${parsedPlateNum} with code ${plateCode}`);
       }
     }
   }

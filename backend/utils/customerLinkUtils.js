@@ -204,6 +204,76 @@ function parsePlateComponents(plateStr) {
   };
 }
 
+async function findMatchingCustomer(pool, plateStr) {
+  if (!plateStr) return null;
+
+  const cleanPlateStr = plateStr.trim().replace(/\s+/g, ' ');
+  const spaceLessPlateStr = cleanPlateStr.replace(/\s+/g, '');
+
+  // 1. Direct exact match on vehicle_plate or VehicleRegistrationNumber (space-insensitive)
+  const [exactMatches] = await pool.query(`
+    SELECT DISTINCT c.* FROM customers c
+    LEFT JOIN vehicles v ON c.id = v.CustomerId
+    WHERE c.vehicle_plate = ? 
+       OR REPLACE(c.vehicle_plate, ' ', '') = ?
+       OR v.VehicleRegistrationNumber = ?
+       OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = ?
+    LIMIT 1
+  `, [cleanPlateStr, spaceLessPlateStr, cleanPlateStr, spaceLessPlateStr]);
+
+  if (exactMatches.length > 0) {
+    return exactMatches[0];
+  }
+
+  // 2. Component-level Match
+  const { plateCode, emirate, plateNumber } = parsePlateComponents(cleanPlateStr);
+  if (!plateNumber) return null;
+
+  // Query candidate vehicles matching numeric plate number
+  const [vehicles] = await pool.query(`
+    SELECT v.*, c.id as cust_id
+    FROM vehicles v
+    JOIN customers c ON v.CustomerId = c.id
+    WHERE v.PlateNumber = ? 
+       OR v.VehicleRegistrationNumber = ?
+       OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = ?
+  `, [plateNumber, cleanPlateStr, spaceLessPlateStr]);
+
+  if (vehicles.length === 0) {
+    return null;
+  }
+
+  // Filter candidates strictly by PlateCode and Emirate if detected in input
+  const matchedVehicles = vehicles.filter(v => {
+    // If input has plateCode, candidate's PlateCode must match
+    if (plateCode) {
+      const vCode = (v.PlateCode || '').toString().trim().toUpperCase();
+      if (vCode && vCode !== plateCode.toUpperCase()) {
+        return false;
+      }
+    }
+
+    // If input has emirate, candidate's Emirate must match
+    if (emirate) {
+      const vEmirate = (v.Emirate || '').toString().trim().toUpperCase();
+      const inputEmirate = emirate.toUpperCase();
+      if (vEmirate && !vEmirate.includes(inputEmirate) && !inputEmirate.includes(vEmirate)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  if (matchedVehicles.length === 1) {
+    const matchedCustId = matchedVehicles[0].cust_id;
+    const [custRows] = await pool.query('SELECT * FROM customers WHERE id = ?', [matchedCustId]);
+    return custRows[0] || null;
+  }
+
+  return null;
+}
+
 module.exports = {
   buildCustomerWebsiteUrl,
   buildFeedbackUrl,
@@ -211,6 +281,8 @@ module.exports = {
   formatPhoneNumber,
   isFourByFour,
   parsePlateComponents,
+  findMatchingCustomer,
 };
+
 
 
