@@ -762,7 +762,7 @@ const CustomersContent = () => {
       )}
 
       {/* Results Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden no-print notranslate" translate="no">
+      <div className="bg-white rounded-lg shadow overflow-hidden no-print">
         <div className="px-6 py-4 border-b bg-gray-50">
           <p className="text-sm text-gray-600">
             Showing <span className="font-semibold text-gray-900">{filteredCustomers.length}</span> customer{filteredCustomers.length !== 1 ? 's' : ''}
@@ -786,11 +786,11 @@ const CustomersContent = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredCustomers.map((customer, index) => (
-                  <tr key={customer.id || `cust-${index}`} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span translate="no" className="notranslate">{String(customer.name || '')}</span>
+                  <tr key={`${customer.id || index}-${searchTerm || 'all'}`} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
+                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                      <span>{String(customer.name || '')}</span>
                       {customer.is_deleted === 1 && (
-                        <span className="block text-xs text-red-500 font-medium italic mt-0.5" translate="no">
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
                           Deleted (Reason: {String(customer.delete_reason || 'N/A')})
                         </span>
                       )}
