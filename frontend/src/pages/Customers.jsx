@@ -106,6 +106,7 @@ const CustomersContent = () => {
   };
 
   const resetFilters = () => {
+    setSearchTerm('');
     setFilters({
       vehicle_type: 'all',
       payment_type: 'all',
@@ -761,7 +762,7 @@ const CustomersContent = () => {
       )}
 
       {/* Results Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden no-print">
+      <div className="bg-white rounded-lg shadow overflow-hidden no-print notranslate" translate="no">
         <div className="px-6 py-4 border-b bg-gray-50">
           <p className="text-sm text-gray-600">
             Showing <span className="font-semibold text-gray-900">{filteredCustomers.length}</span> customer{filteredCustomers.length !== 1 ? 's' : ''}
@@ -787,15 +788,15 @@ const CustomersContent = () => {
                 {filteredCustomers.map((customer, index) => (
                   <tr key={customer.id || `cust-${index}`} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {String(customer.name || '')}
+                      <span translate="no" className="notranslate">{String(customer.name || '')}</span>
                       {customer.is_deleted === 1 && (
-                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5" translate="no">
                           Deleted (Reason: {String(customer.delete_reason || 'N/A')})
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{String(customer.phone || 'N/A')}</td>
-                    <td className="px-6 py-4 whitespace-nowrap font-mono notranslate" translate="no">{String(customer.vehicle_plate || '')}</td>
+                    <td className="px-6 py-4 whitespace-nowrap"><span translate="no" className="notranslate">{String(customer.phone || 'N/A')}</span></td>
+                    <td className="px-6 py-4 whitespace-nowrap font-mono notranslate" translate="no"><span translate="no" className="notranslate">{String(customer.vehicle_plate || '')}</span></td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 capitalize notranslate" translate="no">
                         {String(customer.vehicle_type || 'Saloon')}
@@ -803,15 +804,15 @@ const CustomersContent = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {customer.last_payment_method ? (
-                        <span className={`px-2 py-1 text-xs rounded-full capitalize ${String(customer.last_payment_method) === 'cash' ? 'bg-green-100 text-green-800' :
+                        <span className={`px-2 py-1 text-xs rounded-full capitalize notranslate ${String(customer.last_payment_method) === 'cash' ? 'bg-green-100 text-green-800' :
                             String(customer.last_payment_method) === 'card' ? 'bg-purple-100 text-purple-800' :
                               String(customer.last_payment_method) === 'credit' ? 'bg-orange-100 text-orange-800' :
                                 'bg-gray-100 text-gray-800'
-                          }`}>
+                          }`} translate="no">
                           {String(customer.last_payment_method)}
                         </span>
                       ) : (
-                        <span className="text-gray-400 text-xs">No orders</span>
+                        <span className="text-gray-400 text-xs" translate="no">No orders</span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{customer.total_orders || 0}</td>
