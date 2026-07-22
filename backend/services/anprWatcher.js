@@ -123,7 +123,7 @@ function startFileWatcher() {
     persistent: true,
     ignoreInitial: true,
     awaitWriteFinish: {
-      stabilityThreshold: 3000, // Wait for file to be fully written (3s)
+      stabilityThreshold: 300, // Instant trigger as soon as camera finishes image write (300ms)
       pollInterval: 100
     }
   });

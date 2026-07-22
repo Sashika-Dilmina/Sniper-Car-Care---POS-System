@@ -445,27 +445,34 @@ const Sales = () => {
 
   // Filter Customers for Search Dropdown
   const filteredCustomers = customers.filter(c => {
-    if (!customerSearch || !customerSearch.trim()) return true;
+    if (!c) return false;
+    if (!customerSearch || typeof customerSearch !== 'string' || !customerSearch.trim()) return true;
 
-    const rawSearch = customerSearch.trim().toLowerCase();
-    const cleanSearch = rawSearch.replace(/[\s\-_]+/g, '');
+    try {
+      const rawSearch = String(customerSearch).trim().toLowerCase();
+      const cleanSearch = rawSearch.replace(/[\s\-_]+/g, '');
 
-    const name = (c.name || '').toLowerCase();
-    const phone = (c.phone || '').toLowerCase();
-    const phoneClean = phone.replace(/[^0-9]/g, '');
-    const plate = (c.vehicle_plate || '').toLowerCase();
-    const plateClean = plate.replace(/[\s\-_]+/g, '');
-    const province = (c.province || '').toLowerCase();
+      const name = String(c.name || '').toLowerCase();
+      const phone = String(c.phone || '').toLowerCase();
+      const phoneClean = phone.replace(/[^0-9]/g, '');
+      const plate = String(c.vehicle_plate || '').toLowerCase();
+      const plateClean = plate.replace(/[\s\-_]+/g, '');
+      const province = String(c.province || '').toLowerCase();
 
-    return (
-      name.includes(rawSearch) ||
-      phone.includes(rawSearch) ||
-      (phoneClean && phoneClean.includes(cleanSearch)) ||
-      plate.includes(rawSearch) ||
-      (plateClean && plateClean.includes(cleanSearch)) ||
-      province.includes(rawSearch)
-    );
+      return (
+        name.includes(rawSearch) ||
+        phone.includes(rawSearch) ||
+        (phoneClean && cleanSearch && phoneClean.includes(cleanSearch)) ||
+        plate.includes(rawSearch) ||
+        (plateClean && cleanSearch && plateClean.includes(cleanSearch)) ||
+        province.includes(rawSearch)
+      );
+    } catch (err) {
+      console.error('Error filtering sales customer:', err);
+      return false;
+    }
   });
+
 
 
   // Filter Ledger Orders
