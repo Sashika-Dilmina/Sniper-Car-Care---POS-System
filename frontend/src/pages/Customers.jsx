@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Component } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
@@ -6,7 +6,44 @@ import VehiclePlatePreview from '../components/VehiclePlatePreview';
 import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../context/AuthContext';
 
-const Customers = () => {
+class CustomerErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('CustomerErrorBoundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 bg-red-50 border border-red-200 rounded-2xl text-center space-y-4 my-6">
+          <div className="text-4xl">⚠️</div>
+          <h2 className="text-xl font-bold text-red-800">Customers List Error</h2>
+          <p className="text-xs text-red-600">An unexpected display issue occurred. Please reset search or reload.</p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false });
+              window.location.reload();
+            }}
+            className="px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-xs"
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const CustomersContent = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
@@ -747,31 +784,31 @@ const Customers = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredCustomers.map((customer) => (
-                  <tr key={customer.id} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
+                {filteredCustomers.map((customer, index) => (
+                  <tr key={customer.id || `cust-${index}`} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {customer.name}
+                      {String(customer.name || '')}
                       {customer.is_deleted === 1 && (
                         <span className="block text-xs text-red-500 font-medium italic mt-0.5">
-                          Deleted (Reason: {customer.delete_reason})
+                          Deleted (Reason: {String(customer.delete_reason || 'N/A')})
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{customer.phone || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap font-mono notranslate" translate="no">{customer.vehicle_plate}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{String(customer.phone || 'N/A')}</td>
+                    <td className="px-6 py-4 whitespace-nowrap font-mono notranslate" translate="no">{String(customer.vehicle_plate || '')}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 capitalize notranslate" translate="no">
-                        {customer.vehicle_type}
+                        {String(customer.vehicle_type || 'Saloon')}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {customer.last_payment_method ? (
-                        <span className={`px-2 py-1 text-xs rounded-full capitalize ${customer.last_payment_method === 'cash' ? 'bg-green-100 text-green-800' :
-                            customer.last_payment_method === 'card' ? 'bg-purple-100 text-purple-800' :
-                              customer.last_payment_method === 'credit' ? 'bg-orange-100 text-orange-800' :
+                        <span className={`px-2 py-1 text-xs rounded-full capitalize ${String(customer.last_payment_method) === 'cash' ? 'bg-green-100 text-green-800' :
+                            String(customer.last_payment_method) === 'card' ? 'bg-purple-100 text-purple-800' :
+                              String(customer.last_payment_method) === 'credit' ? 'bg-orange-100 text-orange-800' :
                                 'bg-gray-100 text-gray-800'
                           }`}>
-                          {customer.last_payment_method}
+                          {String(customer.last_payment_method)}
                         </span>
                       ) : (
                         <span className="text-gray-400 text-xs">No orders</span>
@@ -1002,5 +1039,12 @@ const Customers = () => {
   );
 };
 
+const Customers = () => (
+  <CustomerErrorBoundary>
+    <CustomersContent />
+  </CustomerErrorBoundary>
+);
+
 export default Customers;
+
 

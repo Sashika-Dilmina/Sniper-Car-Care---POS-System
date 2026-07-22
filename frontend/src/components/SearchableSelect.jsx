@@ -23,8 +23,9 @@ const SearchableSelect = ({ options, value, onChange, placeholder, disabled }) =
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [value]);
 
-  const filteredOptions = options.filter(option =>
-    option.toLowerCase().includes(search.toLowerCase())
+  const safeOptions = Array.isArray(options) ? options : [];
+  const filteredOptions = safeOptions.filter(option =>
+    String(option || '').toLowerCase().includes(String(search || '').toLowerCase())
   );
 
   const handleSelect = (option) => {
