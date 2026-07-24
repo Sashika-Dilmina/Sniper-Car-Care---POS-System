@@ -24,22 +24,28 @@ const Suppliers = () => {
 
   const categories = ['Chemicals', 'Tools', 'Products', 'Marketing', 'Utilities', 'Other'];
 
-  const fetchSuppliers = async () => {
+  const fetchSuppliers = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await axios.get('/api/suppliers');
       if (response.data.success) {
         setSuppliers(response.data.suppliers || []);
       }
     } catch (error) {
-      toast.error('Failed to load suppliers list');
+      if (!silent) toast.error('Failed to load suppliers list');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSuppliers();
+    fetchSuppliers(false);
+
+    const interval = setInterval(() => {
+      fetchSuppliers(true);
+    }, 7000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleOpenAddModal = () => {

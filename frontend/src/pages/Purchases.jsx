@@ -35,9 +35,9 @@ const Purchases = () => {
 
   const categories = ['Product', 'Service', 'Equipment', 'Chemicals', 'Other'];
 
-  const fetchData = async () => {
+  const fetchData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [purchasesRes, suppliersRes, productsRes] = await Promise.all([
         axios.get('/api/purchases'),
         axios.get('/api/suppliers'),
@@ -54,14 +54,20 @@ const Purchases = () => {
         setDbProductsList(productsRes.data.products || []);
       }
     } catch (error) {
-      toast.error('Failed to load purchases data');
+      if (!silent) toast.error('Failed to load purchases data');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(false);
+
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 7000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleOpenAddModal = () => {
@@ -179,26 +185,34 @@ const Purchases = () => {
 
   // Filtered purchases
   const filteredPurchases = purchases.filter(p => {
-    const matchesSearch = p.item_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (p.notes && p.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (!p || typeof p !== 'object') return false;
+
+    const itemName = String(p.item_name || '').toLowerCase();
+    const notes = String(p.notes || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = itemName.includes(q) || notes.includes(q);
     
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     const matchesSupplier = selectedSupplierId === 'All' || String(p.supplier_id) === String(selectedSupplierId);
     
     let matchesDate = true;
+    const pDateStr = String(p.purchase_date || '').slice(0, 10);
     if (startDate && endDate) {
-      const pDate = new Date(p.purchase_date).toISOString().split('T')[0];
-      matchesDate = pDate >= startDate && pDate <= endDate;
+      matchesDate = pDateStr >= startDate && pDateStr <= endDate;
+    } else if (startDate) {
+      matchesDate = pDateStr >= startDate;
+    } else if (endDate) {
+      matchesDate = pDateStr <= endDate;
     }
 
     return matchesSearch && matchesCategory && matchesSupplier && matchesDate;
   });
 
-  // Calculate totals
-  const totalPurchasesCost = filteredPurchases.reduce((sum, p) => sum + parseFloat(p.total_price), 0);
-  const paidPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'paid').reduce((sum, p) => sum + parseFloat(p.total_price), 0);
-  const pendingPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'pending').reduce((sum, p) => sum + parseFloat(p.total_price), 0);
-  const partialPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'partial').reduce((sum, p) => sum + parseFloat(p.total_price), 0);
+  // Calculate totals robustly
+  const totalPurchasesCost = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
+  const paidPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'paid').reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
+  const pendingPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'pending').reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
+  const partialPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'partial').reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
 
   return (
     <div className="space-y-6">

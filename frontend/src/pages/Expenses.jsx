@@ -7,12 +7,19 @@ const Expenses = () => {
   const { user } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Filters State
+  const getTodayDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Filters State - Default to today's date
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(getTodayDateString());
+  const [endDate, setEndDate] = useState(getTodayDateString());
 
   // Modal & Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,29 +29,35 @@ const Expenses = () => {
     title: '',
     category: 'Utilities',
     amount: '',
-    expense_date: new Date().toISOString().split('T')[0],
+    expense_date: getTodayDateString(),
     payment_method: 'cash',
     notes: ''
   });
 
   const categories = ['Rent', 'Salaries', 'Utilities', 'Marketing', 'Repairs', 'Other'];
 
-  const fetchExpenses = async () => {
+  const fetchExpenses = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await axios.get('/api/expenses');
       if (response.data.success) {
         setExpenses(response.data.expenses || []);
       }
     } catch (error) {
-      toast.error('Failed to load expenses list');
+      if (!silent) toast.error('Failed to load expenses list');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchExpenses();
+    fetchExpenses(false);
+
+    const interval = setInterval(() => {
+      fetchExpenses(true);
+    }, 7000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleOpenAddModal = () => {
@@ -127,24 +140,32 @@ const Expenses = () => {
 
   // Filtered list
   const filteredExpenses = expenses.filter(exp => {
-    const matchesSearch = exp.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (exp.notes && exp.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (!exp || typeof exp !== 'object') return false;
+
+    const title = String(exp.title || '').toLowerCase();
+    const notes = String(exp.notes || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = title.includes(q) || notes.includes(q);
     
     const matchesCategory = selectedCategory === 'All' || exp.category === selectedCategory;
     
     let matchesDate = true;
+    const expDateStr = String(exp.expense_date || '').slice(0, 10);
     if (startDate && endDate) {
-      const eDate = new Date(exp.expense_date).toISOString().split('T')[0];
-      matchesDate = eDate >= startDate && eDate <= endDate;
+      matchesDate = expDateStr >= startDate && expDateStr <= endDate;
+    } else if (startDate) {
+      matchesDate = expDateStr >= startDate;
+    } else if (endDate) {
+      matchesDate = expDateStr <= endDate;
     }
 
     return matchesSearch && matchesCategory && matchesDate;
   });
 
   // Calculate totals
-  const totalExpensesCost = filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-  const cashExpensesCost = filteredExpenses.filter(e => e.payment_method === 'cash').reduce((sum, e) => sum + parseFloat(e.amount), 0);
-  const cardExpensesCost = filteredExpenses.filter(e => e.payment_method === 'card').reduce((sum, e) => sum + parseFloat(e.amount), 0);
+  const totalExpensesCost = filteredExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+  const cashExpensesCost = filteredExpenses.filter(e => e.payment_method === 'cash').reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+  const cardExpensesCost = filteredExpenses.filter(e => e.payment_method === 'card' || e.payment_method === 'bank').reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
 
   return (
     <div className="space-y-6">

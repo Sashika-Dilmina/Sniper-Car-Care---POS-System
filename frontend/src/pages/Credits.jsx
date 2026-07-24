@@ -154,9 +154,14 @@ const Credits = () => {
 
   // Filters
   const filteredCredits = credits.filter(c => {
-    const matchesSearch = c.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          c.vehicle_plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (c.customer_phone && c.customer_phone.includes(searchQuery));
+    if (!c || typeof c !== 'object') return false;
+
+    const cName = String(c.customer_name || '').toLowerCase();
+    const cPlate = String(c.vehicle_plate || '').toLowerCase();
+    const cPhone = String(c.customer_phone || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+
+    const matchesSearch = cName.includes(q) || cPlate.includes(q) || cPhone.includes(q);
     
     let matchesStatus = true;
     if (selectedStatus === 'active') {
@@ -172,10 +177,23 @@ const Credits = () => {
     ? groupCreditsByCustomer(filteredCredits).sort((a, b) => b.total_remaining - a.total_remaining)
     : [];
 
-  // Calculate totals
-  const totalOutstanding = credits.filter(c => c.status !== 'fully_paid').reduce((sum, c) => sum + parseFloat(c.remaining_amount), 0);
-  const totalRecovered = credits.reduce((sum, c) => sum + (parseFloat(c.amount) - parseFloat(c.remaining_amount)), 0);
-  const activeCreditCustomers = new Set(credits.filter(c => c.status !== 'fully_paid').map(c => c.customer_id)).size;
+  // Calculate totals robustly across all credits
+  const totalOutstanding = credits
+    .filter(c => c && c.status !== 'fully_paid')
+    .reduce((sum, c) => sum + (parseFloat(c.remaining_amount) || 0), 0);
+
+  const totalRecovered = credits
+    .reduce((sum, c) => {
+      const amt = parseFloat(c.amount) || 0;
+      const rem = parseFloat(c.remaining_amount) || 0;
+      return sum + Math.max(0, amt - rem);
+    }, 0);
+
+  const activeCreditCustomers = new Set(
+    credits
+      .filter(c => c && c.status !== 'fully_paid' && c.customer_id)
+      .map(c => c.customer_id)
+  ).size;
 
   return (
     <div className="space-y-6">

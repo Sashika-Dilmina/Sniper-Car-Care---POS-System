@@ -8,14 +8,14 @@ const getCustomerCredits = asyncHandler(async (req, res) => {
   const { status, search } = req.query;
   let query = `
     SELECT cc.*, 
-           c.name as customer_name, 
-           c.phone as customer_phone, 
-           c.vehicle_plate, 
-           c.vehicle_type
+           COALESCE(c.name, 'Customer') as customer_name, 
+           COALESCE(c.phone, 'N/A') as customer_phone, 
+           COALESCE(c.vehicle_plate, 'N/A') as vehicle_plate, 
+           COALESCE(c.vehicle_type, 'Saloon') as vehicle_type
     FROM customer_credits cc
-    JOIN customers c ON cc.customer_id = c.id
-    JOIN orders o ON cc.order_id = o.id
-    WHERE o.status != 'cancelled'
+    LEFT JOIN customers c ON cc.customer_id = c.id
+    LEFT JOIN orders o ON cc.order_id = o.id
+    WHERE (o.status IS NULL OR o.status != 'cancelled')
   `;
   const params = [];
 
