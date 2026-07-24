@@ -73,7 +73,7 @@ conn.on('ready', async () => {
 
     // 2. Install backend dependencies, run migrations, and restart Node app
     console.log('\n⚙️ Updating backend dependencies, running migrations & restarting...');
-    const backendRes = await executeCommand(conn, `cd ${repoPath} && mysql -u root -p123456 sniper_pos < database/migration_fix_ghost_order_477.sql || true && cd backend && npm install && pm2 restart all`);
+    const backendRes = await executeCommand(conn, `cd ${repoPath} && mysql -u root -p123456 sniper_car_care < database/migration_fix_ghost_order_477.sql || true && mysql -u root -p123456 sniper_car_care < database/migration_performance_indexes.sql || true && cd backend && npm install && pm2 restart all`);
     if (backendRes.code !== 0) throw new Error('Backend update/restart failed');
 
     // 3. Build frontends locally

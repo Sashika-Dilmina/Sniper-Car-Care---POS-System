@@ -54,7 +54,7 @@ const Layout = () => {
 
     const pollNewOrders = async () => {
       try {
-        const response = await axios.get('/api/orders');
+        const response = await axios.get('/api/orders?limit=15');
         const orders = response.data.orders || [];
         
         if (orders.length === 0) return;

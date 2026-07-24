@@ -7,7 +7,7 @@ const { formatPhoneNumber, buildFeedbackUrl, buildPaymentUrl } = require('../uti
 // @route   GET /api/orders
 // @access  Private
 const getOrders = asyncHandler(async (req, res) => {
-  const { status, payment_status, customer_id, date, service_time } = req.query;
+  const { status, payment_status, customer_id, date, service_time, limit } = req.query;
   let query = `
     SELECT o.*, 
            COALESCE(c.name, vc.name) as customer_name, 
@@ -141,17 +141,33 @@ const getOrders = asyncHandler(async (req, res) => {
 
   query += ' ORDER BY o.created_at DESC';
 
+  if (limit && !isNaN(limit)) {
+    query += ` LIMIT ${parseInt(limit)}`;
+  }
+
   const [orders] = await pool.query(query, params);
 
-  // Get order items for each order
-  for (let order of orders) {
-    const [items] = await pool.query(`
+  // Batch fetch order items in 1 query for ultra-fast response
+  if (orders.length > 0) {
+    const orderIds = orders.map(o => o.id);
+    const [allItems] = await pool.query(`
       SELECT oi.*, p.name as product_name, p.category
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
-      WHERE oi.order_id = ?
-    `, [order.id]);
-    order.items = items;
+      WHERE oi.order_id IN (?)
+    `, [orderIds]);
+
+    const itemsByOrderId = {};
+    for (const item of allItems) {
+      if (!itemsByOrderId[item.order_id]) {
+        itemsByOrderId[item.order_id] = [];
+      }
+      itemsByOrderId[item.order_id].push(item);
+    }
+
+    for (let order of orders) {
+      order.items = itemsByOrderId[order.id] || [];
+    }
   }
 
   res.json({ orders });
