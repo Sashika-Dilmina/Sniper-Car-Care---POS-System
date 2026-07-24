@@ -64,8 +64,12 @@ const getOrders = asyncHandler(async (req, res) => {
   const params = [];
 
   if (status) {
-    query += ' AND o.status = ?';
-    params.push(status);
+    if (status === 'pending') {
+      query += " AND o.status IN ('pending', 'processing')";
+    } else {
+      query += ' AND o.status = ?';
+      params.push(status);
+    }
   }
 
   if (payment_status) {
@@ -85,8 +89,8 @@ const getOrders = asyncHandler(async (req, res) => {
     );
     if (sessions.length > 0) {
       const startTime = sessions[0].opened_at;
-      const endTime = sessions[sessions.length - 1].closed_at;
-      query += ' AND o.created_at >= ? AND o.created_at <= COALESCE(?, CURRENT_TIMESTAMP)';
+      const endTime = sessions[sessions.length - 1].closed_at || `${date} 23:59:59`;
+      query += ' AND o.created_at >= ? AND o.created_at <= ?';
       params.push(startTime, endTime);
     } else {
       query += ' AND DATE(o.created_at) = ?';

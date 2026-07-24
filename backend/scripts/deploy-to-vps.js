@@ -68,12 +68,12 @@ conn.on('ready', async () => {
 
     // 1. Pull backend/code changes on VPS via git
     console.log('\n📦 Pulling latest code changes on VPS...');
-    const pullRes = await executeCommand(conn, `cd ${repoPath} && git pull origin ravix`);
+    const pullRes = await executeCommand(conn, `cd ${repoPath} && git fetch --all && git reset --hard origin/ravix`);
     if (pullRes.code !== 0) throw new Error('Git pull failed');
 
-    // 2. Install backend dependencies and restart Node app
-    console.log('\n⚙️ Updating backend dependencies & restarting...');
-    const backendRes = await executeCommand(conn, `cd ${repoPath}/backend && npm install && pm2 restart all`);
+    // 2. Install backend dependencies, run migrations, and restart Node app
+    console.log('\n⚙️ Updating backend dependencies, running migrations & restarting...');
+    const backendRes = await executeCommand(conn, `cd ${repoPath} && mysql -u root -p123456 sniper_pos < database/migration_fix_ghost_order_477.sql || true && cd backend && npm install && pm2 restart all`);
     if (backendRes.code !== 0) throw new Error('Backend update/restart failed');
 
     // 3. Build frontends locally
