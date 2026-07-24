@@ -13,7 +13,7 @@ const getCustomers = asyncHandler(async (req, res) => {
            COALESCE(SUM(o.total), 0) as total_spent,
            COALESCE(l.points, 0) as loyalty_points,
            COALESCE(l.wash_stamps, 0) as wash_stamps,
-           lp.method as last_payment_method
+           MAX(lp.method) as last_payment_method
     FROM customers c
     LEFT JOIN orders o ON c.id = o.customer_id
     LEFT JOIN loyalty l ON c.id = l.customer_id
