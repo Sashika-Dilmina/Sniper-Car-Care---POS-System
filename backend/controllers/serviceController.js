@@ -134,6 +134,9 @@ const updateServiceStatus = asyncHandler(async (req, res) => {
       [status, id]
     );
   } else {
+    await pool.query('UPDATE services SET status = ? WHERE id = ?', [status, id]);
+  }
+
   // Sync parent order status if all services are completed
   if (status === 'completed' && service.order_id) {
     const [uncompletedServices] = await pool.query(
