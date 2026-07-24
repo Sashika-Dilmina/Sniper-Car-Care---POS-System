@@ -9,11 +9,11 @@ import { useAuth } from '../context/AuthContext';
 class CustomerErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
   }
 
   componentDidCatch(error, errorInfo) {
@@ -25,17 +25,29 @@ class CustomerErrorBoundary extends Component {
       return (
         <div className="p-8 bg-red-50 border border-red-200 rounded-2xl text-center space-y-4 my-6">
           <div className="text-4xl">⚠️</div>
-          <h2 className="text-xl font-bold text-red-800">Customers List Error</h2>
-          <p className="text-xs text-red-600">An unexpected display issue occurred. Please reset search or reload.</p>
-          <button
-            onClick={() => {
-              this.setState({ hasError: false });
-              window.location.reload();
-            }}
-            className="px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-xs"
-          >
-            Reload Page
-          </button>
+          <h2 className="text-xl font-bold text-red-800">Customers List Display Issue</h2>
+          <p className="text-xs text-red-600">
+            {this.state.error?.message || 'A temporary display issue occurred.'}
+          </p>
+          <div className="flex justify-center gap-3 pt-2">
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+              }}
+              className="px-4 py-2 bg-gray-700 text-white rounded-xl font-bold text-xs"
+            >
+              Reset View
+            </button>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-xs"
+            >
+              Reload Page
+            </button>
+          </div>
         </div>
       );
     }
