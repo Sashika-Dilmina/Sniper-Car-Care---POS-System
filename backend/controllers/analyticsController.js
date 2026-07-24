@@ -159,9 +159,11 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
           AND o.vip_booking_id IS NULL
           AND ${dateFilter.replace(/created_at/g, 'o.created_at')}
           AND (
-            EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
-            OR
-            EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
+            EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status IN ('pending', 'in_progress'))
+            OR (
+              EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
+              AND NOT EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status = 'completed')
+            )
           )
        GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')`
     );
@@ -181,10 +183,12 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
            AND o.vip_booking_id IS NOT NULL
            AND ${dateFilter.replace(/created_at/g, 'o.created_at')}
           AND (
-           EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
-           OR
-           EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
-         )`
+            EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status IN ('pending', 'in_progress'))
+            OR (
+              EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
+              AND NOT EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status = 'completed')
+            )
+          )`
     );
     pendingVipCount = pendingVipResult[0]?.count || 0;
   } catch (error) {

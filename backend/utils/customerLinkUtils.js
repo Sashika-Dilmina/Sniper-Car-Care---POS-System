@@ -208,16 +208,16 @@ async function findMatchingCustomer(pool, plateStr) {
   if (!plateStr) return null;
 
   const cleanPlateStr = plateStr.trim().replace(/\s+/g, ' ');
-  const spaceLessPlateStr = cleanPlateStr.replace(/\s+/g, '');
+  const spaceLessPlateStr = cleanPlateStr.replace(/\s+/g, '').toUpperCase();
 
   // 1. Direct exact match on vehicle_plate or VehicleRegistrationNumber (space-insensitive)
   const [exactMatches] = await pool.query(`
     SELECT DISTINCT c.* FROM customers c
     LEFT JOIN vehicles v ON c.id = v.CustomerId
     WHERE c.vehicle_plate = ? 
-       OR REPLACE(c.vehicle_plate, ' ', '') = ?
+       OR UPPER(REPLACE(c.vehicle_plate, ' ', '')) = ?
        OR v.VehicleRegistrationNumber = ?
-       OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = ?
+       OR UPPER(REPLACE(v.VehicleRegistrationNumber, ' ', '')) = ?
     LIMIT 1
   `, [cleanPlateStr, spaceLessPlateStr, cleanPlateStr, spaceLessPlateStr]);
 
@@ -229,36 +229,40 @@ async function findMatchingCustomer(pool, plateStr) {
   const { plateCode, emirate, plateNumber } = parsePlateComponents(cleanPlateStr);
   if (!plateNumber) return null;
 
-  // Query candidate vehicles matching numeric plate number
+  // Query candidate vehicles matching numeric plate number from vehicles table
   const [vehicles] = await pool.query(`
-    SELECT v.*, c.id as cust_id
+    SELECT v.*, c.id as cust_id, c.vehicle_plate as cust_vehicle_plate, c.province as cust_province
     FROM vehicles v
     JOIN customers c ON v.CustomerId = c.id
     WHERE v.PlateNumber = ? 
        OR v.VehicleRegistrationNumber = ?
-       OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = ?
+       OR UPPER(REPLACE(v.VehicleRegistrationNumber, ' ', '')) = ?
   `, [plateNumber, cleanPlateStr, spaceLessPlateStr]);
 
-  if (vehicles.length === 0) {
-    return null;
-  }
-
-  // Filter candidates strictly by PlateCode and Emirate if detected in input
+  // Filter candidates strictly by PlateCode and Emirate
   const matchedVehicles = vehicles.filter(v => {
-    // If input has plateCode, candidate's PlateCode must match
+    const vCode = (v.PlateCode || '').toString().trim().toUpperCase();
+    const vEmirate = (v.Emirate || v.cust_province || '').toString().trim().toUpperCase();
+
+    // If input has plateCode, candidate's PlateCode must strictly match
     if (plateCode) {
-      const vCode = (v.PlateCode || '').toString().trim().toUpperCase();
-      if (vCode && vCode !== plateCode.toUpperCase()) {
-        return false;
+      if (!vCode || vCode !== plateCode.toUpperCase()) {
+        // Also check if cust_vehicle_plate has matching plateCode
+        const parsedCust = parsePlateComponents(v.cust_vehicle_plate);
+        if (!parsedCust.plateCode || parsedCust.plateCode !== plateCode.toUpperCase()) {
+          return false;
+        }
       }
     }
 
     // If input has emirate, candidate's Emirate must match
     if (emirate) {
-      const vEmirate = (v.Emirate || '').toString().trim().toUpperCase();
       const inputEmirate = emirate.toUpperCase();
-      if (vEmirate && !vEmirate.includes(inputEmirate) && !inputEmirate.includes(vEmirate)) {
-        return false;
+      if (!vEmirate || (!vEmirate.includes(inputEmirate) && !inputEmirate.includes(vEmirate))) {
+        const parsedCust = parsePlateComponents(v.cust_vehicle_plate);
+        if (!parsedCust.emirate || (!parsedCust.emirate.toUpperCase().includes(inputEmirate) && !inputEmirate.includes(parsedCust.emirate.toUpperCase()))) {
+          return false;
+        }
       }
     }
 
@@ -269,6 +273,28 @@ async function findMatchingCustomer(pool, plateStr) {
     const matchedCustId = matchedVehicles[0].cust_id;
     const [custRows] = await pool.query('SELECT * FROM customers WHERE id = ?', [matchedCustId]);
     return custRows[0] || null;
+  }
+
+  // 3. Fallback: Search customers table directly by parsing customers.vehicle_plate
+  const [allCustomers] = await pool.query(`
+    SELECT * FROM customers 
+    WHERE vehicle_plate LIKE ? OR vehicle_plate LIKE ?
+  `, [`%${plateNumber}%`, `%${spaceLessPlateStr}%`]);
+
+  const candidateCustomers = allCustomers.filter(c => {
+    const parsed = parsePlateComponents(c.vehicle_plate || '');
+    if (parsed.plateNumber !== plateNumber) return false;
+    if (plateCode && parsed.plateCode && parsed.plateCode !== plateCode.toUpperCase()) return false;
+    if (emirate && parsed.emirate) {
+      const inputEmirate = emirate.toUpperCase();
+      const cEmirate = (parsed.emirate || c.province || '').toUpperCase();
+      if (!cEmirate.includes(inputEmirate) && !inputEmirate.includes(cEmirate)) return false;
+    }
+    return true;
+  });
+
+  if (candidateCustomers.length === 1) {
+    return candidateCustomers[0];
   }
 
   return null;

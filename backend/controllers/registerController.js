@@ -273,9 +273,11 @@ const closeRegister = asyncHandler(async (req, res) => {
        )
        AND DATE(o.created_at) = DATE(?)
        AND (
-         EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
-         OR
-         EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
+         EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status IN ('pending', 'in_progress'))
+         OR (
+           EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
+           AND NOT EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status = 'completed')
+         )
        )`,
     [register.opened_at]
   );

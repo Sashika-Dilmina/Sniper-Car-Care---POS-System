@@ -168,20 +168,24 @@ const CustomersContent = () => {
     }
   };
 
-  const filteredCustomers = customers.filter(customer => {
-    if (!customer) return false;
+  const filteredCustomers = (customers || []).filter(customer => {
+    if (!customer || typeof customer !== 'object') return false;
     if (!searchTerm || typeof searchTerm !== 'string' || !searchTerm.trim()) return true;
 
     try {
       const rawSearch = String(searchTerm).trim().toLowerCase();
-      const cleanSearch = rawSearch.replace(/[\s\-_]+/g, '');
+      const cleanSearch = rawSearch.replace(/[^a-z0-9]/g, '');
 
       const name = String(customer.name || '').toLowerCase();
       const phone = String(customer.phone || '').toLowerCase();
       const phoneClean = phone.replace(/[^0-9]/g, '');
       const plate = String(customer.vehicle_plate || '').toLowerCase();
-      const plateClean = plate.replace(/[\s\-_]+/g, '');
+      const plateClean = plate.replace(/[^a-z0-9]/g, '');
       const province = String(customer.province || '').toLowerCase();
+      const custId = String(customer.id || '');
+
+      // Check customer ID match
+      if (custId === rawSearch || custId.includes(rawSearch)) return true;
 
       // Check name match
       if (name.includes(rawSearch)) return true;
@@ -786,7 +790,7 @@ const CustomersContent = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredCustomers.map((customer, index) => (
-                  <tr key={`${customer.id || index}-${searchTerm || 'all'}`} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
+                  <tr key={customer.id ? `cust-${customer.id}` : `cust-idx-${index}`} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
                       <span>{String(customer.name || '')}</span>
                       {customer.is_deleted === 1 && (

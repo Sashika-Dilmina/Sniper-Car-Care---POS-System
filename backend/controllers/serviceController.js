@@ -134,7 +134,18 @@ const updateServiceStatus = asyncHandler(async (req, res) => {
       [status, id]
     );
   } else {
-    await pool.query('UPDATE services SET status = ? WHERE id = ?', [status, id]);
+  // Sync parent order status if all services are completed
+  if (status === 'completed' && service.order_id) {
+    const [uncompletedServices] = await pool.query(
+      'SELECT id FROM services WHERE order_id = ? AND status NOT IN ("completed", "cancelled")',
+      [service.order_id]
+    );
+    if (uncompletedServices.length === 0) {
+      await pool.query(
+        'UPDATE orders SET status = "completed", service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) WHERE id = ? AND status IN ("pending", "processing")',
+        [service.order_id]
+      );
+    }
   }
 
   // If service completed, send notification and award loyalty points

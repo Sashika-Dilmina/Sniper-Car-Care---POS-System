@@ -16,10 +16,10 @@ const ANPR = () => {
   const [assignSearch, setAssignSearch] = useState('');
   const [assigning, setAssigning] = useState(false);
 
-  // Poll for latest detections every 1 second (instant live feed)
+  // Poll for latest detections every 4 seconds (live feed)
   useEffect(() => {
     fetchDetections();
-    const interval = setInterval(fetchDetections, 1000);
+    const interval = setInterval(fetchDetections, 4000);
     return () => clearInterval(interval);
   }, []);
 
