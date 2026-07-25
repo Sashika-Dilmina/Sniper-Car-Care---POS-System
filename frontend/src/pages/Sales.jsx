@@ -634,7 +634,7 @@ const Sales = () => {
                     {/* Saloon Services Group */}
                     <div className="space-y-3">
                       <h3 className="text-sm font-black text-gray-700 flex items-center gap-2 border-b pb-1">
-                        <span>🚗 Saloon Services</span>
+                        <span className="notranslate" translate="no">🚗 Saloon Services</span>
                         <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold">
                           {filteredProducts.filter(p => p.vehicle_type === 'Saloon' || p.vehicle_type === 'Both').length} items
                         </span>
@@ -782,7 +782,8 @@ const Sales = () => {
                     <select
                       value={newCustomer.vehicle_type}
                       onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_type: e.target.value })}
-                      className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                      className="w-full px-3 py-1.5 border rounded-lg text-sm notranslate"
+                      translate="no"
                     >
                       <option value="Saloon">Saloon</option>
                       <option value="4x4">4x4</option>

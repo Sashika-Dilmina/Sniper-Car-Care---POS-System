@@ -196,7 +196,8 @@ const CustomerEdit = () => {
                 name="vehicle_type"
                 value={formData.vehicle_type}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none notranslate"
+                translate="no"
                 required
               >
                 <option value="Saloon">Saloon</option>

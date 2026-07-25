@@ -1393,7 +1393,7 @@ const LandingPage = () => {
             <Reveal key={testimonial.name} delay={index * 100}>
               <div className="template-card p-6 h-full">
                 <div className="text-amber-500 text-sm mb-3">{'★'.repeat(testimonial.rating)}</div>
-                <p className="text-sm text-gray-600 leading-relaxed">&ldquo;{testimonial.quote}&rdquo;</p>
+                <p className="text-sm text-gray-600 leading-relaxed notranslate" translate="no">&ldquo;{testimonial.quote}&rdquo;</p>
                 <div className="mt-4 text-sm font-bold text-gray-900">{testimonial.name}</div>
                 <div className="text-[10px] uppercase tracking-widest text-gray-400">{testimonial.location}</div>
               </div>
@@ -1453,7 +1453,7 @@ const LandingPage = () => {
                 
                 {item.step === 1 && quickBookOpen && (
                   <div className="hidden sm:flex absolute top-full left-1/2 -translate-x-1/2 mt-4 w-[250px] max-w-[250px] p-4 bg-white rounded-xl border border-gray-200 shadow-2xl flex-col gap-3 z-50 before:content-[''] before:absolute before:-top-2 before:left-1/2 before:-translate-x-1/2 before:border-8 before:border-transparent before:border-b-white" onClick={(e) => e.stopPropagation()}>
-                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
+                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 notranslate" translate="no" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
                       <option value="">Select Service</option>
                       {packages.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
                     </select>
@@ -1518,7 +1518,7 @@ const LandingPage = () => {
             </button>
 
             <div className="shrink-0 mb-2">
-              <h3 className="text-2xl font-bold text-gray-900 mb-1">Book {selectedService.name}</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-1">Book <span className="notranslate" translate="no">{selectedService.name}</span></h3>
               <p className="text-lg text-red-600 font-semibold">{selectedService.price}</p>
             </div>
 
@@ -1550,7 +1550,8 @@ const LandingPage = () => {
                 <select
                   value={bookingForm.vehicle_type}
                   onChange={(e) => setBookingForm({ ...bookingForm, vehicle_type: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm notranslate"
+                  translate="no"
                 >
                   <option value="Saloon">Saloon</option>
                   <option value="4x4">4x4</option>
@@ -1688,7 +1689,8 @@ const LandingPage = () => {
                   required
                   value={vipBookingForm.vehicle_type}
                   onChange={(e) => setVipBookingForm({ ...vipBookingForm, vehicle_type: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm notranslate"
+                  translate="no"
                 >
                   <option value="Saloon">Saloon</option>
                   <option value="4x4">4x4</option>
@@ -1800,7 +1802,7 @@ const LandingPage = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Service Type</label>
-                <select className="w-full p-3.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
+                <select className="w-full p-3.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 notranslate" translate="no" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
                   <option value="">Select Service</option>
                   {packages.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
                 </select>

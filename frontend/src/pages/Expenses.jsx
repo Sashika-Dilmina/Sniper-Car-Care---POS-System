@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const Expenses = () => {
+  const { user } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -238,13 +240,15 @@ const Expenses = () => {
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Category</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Payment Method</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Amount</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                {user?.role === 'admin' && (
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">Loading expenses log...</td>
+                  <td colSpan={user?.role === 'admin' ? 6 : 5} className="px-6 py-12 text-center text-gray-500">Loading expenses log...</td>
                 </tr>
               ) : filteredExpenses.length > 0 ? (
                 filteredExpenses.map((e) => (
@@ -267,25 +271,27 @@ const Expenses = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-gray-900 text-right">
                       AED {parseFloat(e.amount).toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleOpenEditModal(e)}
-                        className="text-primary-600 hover:text-primary-950 font-bold mr-3"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(e.id)}
-                        className="text-red-600 hover:text-red-800 font-bold"
-                      >
-                        Delete
-                      </button>
-                    </td>
+                    {user?.role === 'admin' && (
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleOpenEditModal(e)}
+                          className="text-primary-600 hover:text-primary-950 font-bold mr-3"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(e.id)}
+                          className="text-red-600 hover:text-red-800 font-bold"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-gray-400">
+                  <td colSpan={user?.role === 'admin' ? 6 : 5} className="px-6 py-12 text-center text-gray-400">
                     No expense records registered for this filter.
                   </td>
                 </tr>

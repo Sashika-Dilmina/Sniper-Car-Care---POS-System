@@ -790,7 +790,7 @@ const Reports = () => {
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Saloon Free Washes</p>
+                  <p className="text-sm text-gray-600 notranslate" translate="no">Saloon Free Washes</p>
                   <p className="text-2xl font-bold text-indigo-600">
                     AED {parseFloat(dailyReport.orders?.saloon_free_washes_value || 0).toLocaleString()}
                   </p>

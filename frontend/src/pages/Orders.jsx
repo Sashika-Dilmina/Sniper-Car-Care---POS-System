@@ -121,7 +121,7 @@ const Orders = () => {
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          Saloon Orders ({orders.filter(o => {
+          <span className="notranslate" translate="no">Saloon</span> Orders ({orders.filter(o => {
             const vt = (o.vehicle_type || '').toLowerCase();
             const src = (o.source || '').toLowerCase();
             return !(vt === '4x4' || src.includes('4x4') || (o.notes && o.notes.toLowerCase().includes('4x4')));
