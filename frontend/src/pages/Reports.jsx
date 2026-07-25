@@ -67,6 +67,18 @@ const Reports = () => {
   const [stockReport, setStockReport] = useState(null);
   const [stockLoading, setStockLoading] = useState(false);
 
+  // Commission Report State
+  const [commissionStartDate, setCommissionStartDate] = useState('');
+  const [commissionEndDate, setCommissionEndDate] = useState('');
+  const [commissionReport, setCommissionReport] = useState(null);
+  const [commissionLoading, setCommissionLoading] = useState(false);
+
+  // Service Sales Report State
+  const [serviceSalesStartDate, setServiceSalesStartDate] = useState('');
+  const [serviceSalesEndDate, setServiceSalesEndDate] = useState('');
+  const [serviceSalesReport, setServiceSalesReport] = useState(null);
+  const [serviceSalesLoading, setServiceSalesLoading] = useState(false);
+
   // Cash Register Sessions State
   const [registers, setRegisters] = useState([]);
   const [loadingRegisters, setLoadingRegisters] = useState(false);
@@ -313,6 +325,48 @@ const Reports = () => {
     }
   };
 
+  // Commission Report
+  const fetchCommissionReport = async () => {
+    if (!commissionStartDate || !commissionEndDate) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+    setCommissionLoading(true);
+    try {
+      const response = await axios.get(`/api/analytics/reports/commission?start_date=${commissionStartDate}&end_date=${commissionEndDate}`);
+      if (response.data.success) {
+        setCommissionReport(response.data);
+      } else {
+        toast.error('Failed to generate commission report');
+      }
+    } catch (error) {
+      toast.error('Failed to generate commission report');
+    } finally {
+      setCommissionLoading(false);
+    }
+  };
+
+  // Service Sales Report
+  const fetchServiceSalesReport = async () => {
+    if (!serviceSalesStartDate || !serviceSalesEndDate) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+    setServiceSalesLoading(true);
+    try {
+      const response = await axios.get(`/api/analytics/reports/service-sales?start_date=${serviceSalesStartDate}&end_date=${serviceSalesEndDate}`);
+      if (response.data.success) {
+        setServiceSalesReport(response.data);
+      } else {
+        toast.error('Failed to generate service sales report');
+      }
+    } catch (error) {
+      toast.error('Failed to generate service sales report');
+    } finally {
+      setServiceSalesLoading(false);
+    }
+  };
+
   // Excel Download Functions
   const downloadDailyExcel = async () => {
     try {
@@ -431,6 +485,8 @@ const Reports = () => {
     { id: 'purchases', label: 'Purchase of Items' },
     { id: 'credit', label: 'Credit Report' },
     { id: 'registers', label: 'Cash Register Sessions' },
+    { id: 'commission', label: 'Commission Report' },
+    { id: 'service_sales', label: 'Service Sales Report' },
   ] : [
     { id: 'registers', label: 'Cash Register Sessions' },
   ];
@@ -500,6 +556,22 @@ const Reports = () => {
           return;
         }
         params.append('register_id', selectedRegisterReport.register_id);
+      } else if (activeTab === 'commission') {
+        if (!commissionStartDate || !commissionEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', commissionStartDate);
+        params.append('end_date', commissionEndDate);
+      } else if (activeTab === 'service_sales') {
+        if (!serviceSalesStartDate || !serviceSalesEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', serviceSalesStartDate);
+        params.append('end_date', serviceSalesEndDate);
       }
 
       const response = await axios.get(`/api/analytics/reports/pdf?${params.toString()}`);
@@ -1376,6 +1448,288 @@ const Reports = () => {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Commission Report */}
+      {activeTab === 'commission' && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-bold mb-4">Commission Report</h2>
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <input
+                type="date"
+                value={commissionStartDate}
+                onChange={(e) => setCommissionStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <input
+                type="date"
+                value={commissionEndDate}
+                onChange={(e) => setCommissionEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={fetchCommissionReport}
+                disabled={commissionLoading}
+                className="w-full px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+              >
+                {commissionLoading ? 'Loading...' : 'Generate Report'}
+              </button>
+            </div>
+          </div>
+
+          {commissionReport && (
+            <div className="space-y-0 print-full-width">
+              <div className="overflow-x-auto border border-gray-200 rounded-lg mt-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-4 py-3 text-left font-bold">Service Name</th>
+                      <th className="px-4 py-3 text-right font-bold">Quantity</th>
+                      <th className="px-4 py-3 text-right font-bold">Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Saloon Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={3}>Saloon</td>
+                    </tr>
+                    {commissionReport.saloon && commissionReport.saloon.length > 0 ? (
+                      commissionReport.saloon.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.commission).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={3}>No Saloon services found</td>
+                      </tr>
+                    )}
+                    {/* Saloon Total Row */}
+                    {commissionReport.saloon && commissionReport.saloon.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.saloon.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.saloon.reduce((s, r) => s + parseFloat(r.commission), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={3} className="py-1"></td>
+                    </tr>
+
+                    {/* 4x4 Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={3}>4x4</td>
+                    </tr>
+                    {commissionReport.fourx4 && commissionReport.fourx4.length > 0 ? (
+                      commissionReport.fourx4.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.commission).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={3}>No 4x4 services found</td>
+                      </tr>
+                    )}
+                    {/* 4x4 Total Row */}
+                    {commissionReport.fourx4 && commissionReport.fourx4.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.fourx4.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.fourx4.reduce((s, r) => s + parseFloat(r.commission), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={3} className="py-1"></td>
+                    </tr>
+
+                    {/* VIP Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={3}>VIP</td>
+                    </tr>
+                    {commissionReport.vip && commissionReport.vip.length > 0 ? (
+                      commissionReport.vip.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.vehicle_type}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.commission).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={3}>No VIP services found</td>
+                      </tr>
+                    )}
+                    {/* VIP Total Row */}
+                    {commissionReport.vip && commissionReport.vip.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.vip.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.vip.reduce((s, r) => s + parseFloat(r.commission), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Service Sales Report */}
+      {activeTab === 'service_sales' && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-bold mb-4">Service Sales Report</h2>
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <input
+                type="date"
+                value={serviceSalesStartDate}
+                onChange={(e) => setServiceSalesStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <input
+                type="date"
+                value={serviceSalesEndDate}
+                onChange={(e) => setServiceSalesEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={fetchServiceSalesReport}
+                disabled={serviceSalesLoading}
+                className="w-full px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+              >
+                {serviceSalesLoading ? 'Loading...' : 'Generate Report'}
+              </button>
+            </div>
+          </div>
+
+          {serviceSalesReport && (
+            <div className="space-y-0 print-full-width">
+              <div className="overflow-x-auto border border-gray-200 rounded-lg mt-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-4 py-3 text-left font-bold">Service Name</th>
+                      <th className="px-4 py-3 text-right font-bold">Quantity</th>
+                      <th className="px-4 py-3 text-right font-bold">Selling Price (AED)</th>
+                      <th className="px-4 py-3 text-right font-bold">Net Price (AED)</th>
+                      <th className="px-4 py-3 text-right font-bold">Cost Price (AED)</th>
+                      <th className="px-4 py-3 text-right font-bold">Profit (AED)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Saloon Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>Saloon</td>
+                    </tr>
+                    {serviceSalesReport.saloon && serviceSalesReport.saloon.length > 0 ? (
+                      serviceSalesReport.saloon.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.selling_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.net_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.cost_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.profit).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No Saloon services found</td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={6} className="py-1"></td>
+                    </tr>
+
+                    {/* 4x4 Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>4x4</td>
+                    </tr>
+                    {serviceSalesReport.fourx4 && serviceSalesReport.fourx4.length > 0 ? (
+                      serviceSalesReport.fourx4.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.selling_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.net_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.cost_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.profit).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No 4x4 services found</td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={6} className="py-1"></td>
+                    </tr>
+
+                    {/* VIP Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>VIP</td>
+                    </tr>
+                    {serviceSalesReport.vip && serviceSalesReport.vip.length > 0 ? (
+                      serviceSalesReport.vip.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.selling_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.net_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.cost_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.profit).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No VIP services found</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
