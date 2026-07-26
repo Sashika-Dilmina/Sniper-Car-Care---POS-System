@@ -78,7 +78,8 @@ const getRegisterReport = asyncHandler(async (req, res) => {
      JOIN orders o ON p.order_id = o.id 
      WHERE p.created_at >= ? AND p.created_at <= ? 
        AND p.method = 'cash' 
-       AND p.status IN ('completed', 'pending') 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
@@ -99,7 +100,8 @@ const getRegisterReport = asyncHandler(async (req, res) => {
      JOIN orders o ON p.order_id = o.id 
      WHERE p.created_at >= ? AND p.created_at <= ? 
        AND (p.method = 'card' OR p.method = 'visa') 
-       AND p.status IN ('completed', 'pending') 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
@@ -120,7 +122,8 @@ const getRegisterReport = asyncHandler(async (req, res) => {
      JOIN orders o ON p.order_id = o.id 
      WHERE p.created_at >= ? AND p.created_at <= ? 
        AND p.method = 'cheque' 
-       AND p.status IN ('completed', 'pending') 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
@@ -133,7 +136,8 @@ const getRegisterReport = asyncHandler(async (req, res) => {
      JOIN orders o ON p.order_id = o.id 
      WHERE p.created_at >= ? AND p.created_at <= ? 
        AND p.method = 'bank_transfer' 
-       AND p.status IN ('completed', 'pending') 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
@@ -146,7 +150,8 @@ const getRegisterReport = asyncHandler(async (req, res) => {
      JOIN orders o ON p.order_id = o.id 
      WHERE p.created_at >= ? AND p.created_at <= ? 
        AND p.method IN ('apple_pay', 'samsung_pay', 'tap') 
-       AND p.status IN ('completed', 'pending') 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
@@ -159,7 +164,7 @@ const getRegisterReport = asyncHandler(async (req, res) => {
      INNER JOIN orders o ON p.order_id = o.id 
      WHERE p.created_at >= ? AND p.created_at <= ? 
        AND p.method = 'free' 
-       AND p.status IN ('completed', 'pending') 
+       AND o.payment_status = 'free' 
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
@@ -297,7 +302,8 @@ const closeRegister = asyncHandler(async (req, res) => {
      JOIN orders o ON p.order_id = o.id 
      WHERE p.created_at >= ? AND p.created_at <= ? 
        AND p.method = 'cash' 
-       AND p.status IN ('completed', 'pending') 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
