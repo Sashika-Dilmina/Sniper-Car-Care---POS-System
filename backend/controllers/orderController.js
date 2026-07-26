@@ -658,7 +658,6 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
           }
         }
       }
-    }
 
     await connection.commit();
     connection.release();
