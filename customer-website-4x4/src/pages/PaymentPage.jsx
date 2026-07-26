@@ -24,9 +24,10 @@ const PaymentPage = () => {
         if (status === 'success') {
             toast.success('Payment completed successfully!');
             setPaid(true);
-            // Clean up the URL
-            const cleanUrl = window.location.pathname + `?order_id=${orderId}&plate=${plate || ''}`;
-            window.history.replaceState({}, document.title, cleanUrl);
+            setTimeout(() => {
+                navigate(`/feedback?order_id=${orderId}&plate=${encodeURIComponent(plate || '')}`);
+            }, 1000);
+            return;
         } else if (status === 'failed') {
             toast.error(`Payment failed: ${decodeURIComponent(err || 'Unknown error')}`);
             const cleanUrl = window.location.pathname + `?order_id=${orderId}&plate=${plate || ''}`;
@@ -134,8 +135,11 @@ const PaymentPage = () => {
                 order_id: activeOrder.id,
                 payment_method: method
             });
-            toast.success(`Booking confirmed with ${method === 'card' ? 'card' : 'cash'} payment!`);
+            toast.success(`Booking confirmed with ${method === 'card' ? 'card' : 'cash'} payment! Redirecting...`);
             setPaid(true);
+            setTimeout(() => {
+                navigate(`/feedback?order_id=${activeOrder.id}&plate=${encodeURIComponent(plate || activeOrder.vehicle_plate || '')}`);
+            }, 1200);
         } catch (err) {
             toast.error(err.response?.data?.message || `Failed to confirm ${method} booking`);
         } finally {

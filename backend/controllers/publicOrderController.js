@@ -148,6 +148,26 @@ const createOrder = asyncHandler(async (req, res) => {
       orderNotes = orderNotes ? `${customerInfo}\n${orderNotes}` : customerInfo;
     }
 
+    // Deduplication check: prevent creating duplicate order within 10 seconds
+    const [recentOrders] = await connection.query(`
+      SELECT id FROM orders 
+      WHERE ((customer_id IS NOT NULL AND customer_id = ?) OR (notes IS NOT NULL AND notes LIKE ?))
+        AND total = ? 
+        AND created_at >= TIMESTAMPADD(SECOND, -10, CURRENT_TIMESTAMP)
+      ORDER BY id DESC LIMIT 1
+    `, [finalCustomerId || 0, `%${vehicle_plate || 'NOMATCH'}%`, total]);
+
+    if (recentOrders.length > 0) {
+      const [existing] = await connection.query('SELECT * FROM orders WHERE id = ?', [recentOrders[0].id]);
+      await connection.commit();
+      connection.release();
+      return res.status(200).json({
+        message: 'Order created successfully',
+        order: existing[0],
+        deduplicated: true
+      });
+    }
+
     // Create order with notes
     const [orderResult] = await connection.query(
       'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',

@@ -20,6 +20,8 @@ const OrderDetail = () => {
   const [scheduleData, setScheduleData] = useState({ appointment_date: '', appointment_time: '' });
   const [bookingUpdate, setBookingUpdate] = useState({ status: '', notes: '', staff_notes: '', assigned_staff_id: '' });
   const [paymentDiscount, setPaymentDiscount] = useState(0);
+  const [selectedOrderMethod, setSelectedOrderMethod] = useState('cash');
+  const [orderSplitPayments, setOrderSplitPayments] = useState({ card: 0, cash: 0, bank_transfer: 0 });
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -345,12 +347,10 @@ const OrderDetail = () => {
                     👑 Manage VIP Booking
                   </button>
                 ) : (
-                  (order.status === 'processing' || order.status === 'pending') && (order.payment_status === 'paid' || order.payment_status === 'free' || order.credit_status === 'unpaid' || order.credit_status === 'partially_paid') && (
+                  (order.status === 'processing' || order.status === 'pending') && (
                     <button
                       onClick={() => handleStatusUpdate('completed')}
-                      disabled={registerStatus !== 'open'}
-                      className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={registerStatus !== 'open' ? "Please open the cash register first to complete orders" : ""}
+                      className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98]"
                     >
                       ✓ Done / Completed
                     </button>
@@ -385,7 +385,11 @@ const OrderDetail = () => {
             )}
             <div>
               <p className="text-sm text-gray-600">Payment Status</p>
-              {order.credit_status ? (
+              {order.status === 'cancelled' || order.payment_status === 'cancelled' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold border border-red-200">
+                  cancelled
+                </span>
+              ) : order.credit_status ? (
                 order.credit_status === 'unpaid' ? (
                   <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold">
                     Credit / Unpaid
@@ -496,66 +500,136 @@ const OrderDetail = () => {
             {showPayment ? (
               <div className="w-full bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <h3 className="font-semibold mb-3">Record Manual Payment</h3>
-                <div className="flex gap-4 items-end">
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Method</label>
-                    <select id="manual_method" className="w-full p-2 border rounded-lg bg-white">
-                      <option value="cash">Cash</option>
-                      <option value="card">Card</option>
-                      <option value="bank_transfer">Bank Transfer</option>
-                    </select>
+                <div className="w-full space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Method</label>
+                      <select 
+                        value={selectedOrderMethod}
+                        onChange={(e) => setSelectedOrderMethod(e.target.value)}
+                        className="w-full p-2 border rounded-lg bg-white font-bold"
+                      >
+                        <option value="cash">💵 Cash</option>
+                        <option value="card">💳 Card</option>
+                        <option value="bank_transfer">🏦 Bank Transfer</option>
+                        <option value="multiple">🔀 Multiple Payments (Split)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Add Discount (AED)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={remainingAmount}
+                        value={paymentDiscount}
+                        onChange={(e) => setPaymentDiscount(parseFloat(e.target.value) || 0)}
+                        className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-primary-500 text-sm font-bold"
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Add Discount (AED)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max={remainingAmount}
-                      value={paymentDiscount}
-                      onChange={(e) => setPaymentDiscount(parseFloat(e.target.value) || 0)}
-                      className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                    />
+
+                  {selectedOrderMethod === 'multiple' && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-left">
+                      <p className="text-[11px] font-bold uppercase text-gray-500">Split Payment Amounts</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-700">Card (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderSplitPayments.card || ''}
+                            onChange={(e) => setOrderSplitPayments({ ...orderSplitPayments, card: parseFloat(e.target.value) || 0 })}
+                            className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-700">Cash (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderSplitPayments.cash || ''}
+                            onChange={(e) => setOrderSplitPayments({ ...orderSplitPayments, cash: parseFloat(e.target.value) || 0 })}
+                            className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-700">Bank Transfer (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderSplitPayments.bank_transfer || ''}
+                            onChange={(e) => setOrderSplitPayments({ ...orderSplitPayments, bank_transfer: parseFloat(e.target.value) || 0 })}
+                            className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-4 items-center pt-2 border-t">
+                    <button
+                      onClick={async () => {
+                        const finalAmount = Math.max(0, remainingAmount - paymentDiscount);
+                        try {
+                          const payload = {
+                            order_id: order.id,
+                            amount: finalAmount,
+                            method: selectedOrderMethod,
+                            discount: paymentDiscount
+                          };
+
+                          if (selectedOrderMethod === 'multiple') {
+                            payload.splits = [
+                              { method: 'card', amount: parseFloat(orderSplitPayments.card || 0) },
+                              { method: 'cash', amount: parseFloat(orderSplitPayments.cash || 0) },
+                              { method: 'bank_transfer', amount: parseFloat(orderSplitPayments.bank_transfer || 0) }
+                            ].filter(s => s.amount > 0);
+                          }
+
+                          await axios.post('/api/payments/manual', payload);
+                          toast.success('Payment recorded successfully');
+                          setShowPayment(false);
+                          setPaymentDiscount(0);
+                          fetchOrder();
+                        } catch (err) {
+                          toast.error('Failed to record payment');
+                        }
+                      }}
+                      className="px-6 py-2.5 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700 transition text-sm shadow-md"
+                    >
+                      Confirm Amount: AED {Math.max(0, remainingAmount - paymentDiscount).toLocaleString()}
+                    </button>
+                    <button onClick={() => setShowPayment(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
                   </div>
-                  <button
-                    onClick={async () => {
-                      const method = document.getElementById('manual_method').value;
-                      const finalAmount = Math.max(0, remainingAmount - paymentDiscount);
-                      try {
-                        await axios.post('/api/payments/manual', {
-                          order_id: order.id,
-                          amount: finalAmount,
-                          method: method,
-                          discount: paymentDiscount
-                        });
-                        toast.success('Payment recorded successfully');
-                        setShowPayment(false);
-                        setPaymentDiscount(0);
-                        fetchOrder();
-                      } catch (err) {
-                        toast.error('Failed to record payment');
-                      }
-                    }}
-                    className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700 transition"
-                  >
-                    Confirm Amount: AED {Math.max(0, remainingAmount - paymentDiscount).toLocaleString()}
-                  </button>
-                  <button onClick={() => setShowPayment(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700">Cancel</button>
                 </div>
               </div>
             ) : (
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <button
                   onClick={() => setShowPayment(true)}
                   className="px-6 py-3 border-2 border-primary-600 text-primary-600 font-bold rounded-full hover:bg-primary-50 transition flex items-center gap-2"
                 >
-                  Record Cash/Manual Payment
+                  <span>💵</span> Record Manual Payment
                 </button>
                 <button
-                  onClick={handleTapCheckout}
+                  onClick={async () => {
+                    try {
+                      setLoadingTap(true);
+                      const response = await axios.post(`/api/orders/${order.id}/send-tap-link`);
+                      toast.success(response.data.message || 'Tap Payment link sent via SMS!');
+                    } catch (error) {
+                      toast.error(error.response?.data?.message || 'Failed to send Tap Payment link via Reson8');
+                    } finally {
+                      setLoadingTap(false);
+                    }
+                  }}
                   disabled={loadingTap}
-                  className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-full hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50"
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-full hover:from-blue-700 hover:to-indigo-700 transition flex items-center gap-2 shadow-md active:scale-95 disabled:opacity-50"
                 >
-                  💳 {loadingTap ? 'Redirecting...' : 'Pay Online via Tap'}
+                  <span>📲</span> {loadingTap ? 'Sending SMS...' : 'Send Tap Link via Reson8'}
                 </button>
               </div>
             )}
@@ -793,9 +867,11 @@ const OrderDetail = () => {
                   <div>
                     <p className="text-xs text-gray-400 font-bold uppercase text-right">Payment Status</p>
                     <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded-full ${
-                      order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      order.status === 'cancelled' || vipBooking?.status === 'cancelled' || order.payment_status === 'cancelled'
+                        ? 'bg-red-100 text-red-800 border border-red-200'
+                        : order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                     }`}>
-                      {order.payment_status || 'pending'}
+                      {(order.status === 'cancelled' || vipBooking?.status === 'cancelled') ? 'cancelled' : (order.payment_status || 'pending')}
                     </span>
                   </div>
                 </div>

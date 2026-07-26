@@ -2,8 +2,12 @@ const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { getWashStamps } = require('../utils/loyaltyStamps');
 
-// Helper to resolve customer by plate with fallback matching
-async function resolveCustomerByPlate(plate) {
+// Helper to resolve customer by plate or ID with fallback matching
+async function resolveCustomerByPlate(plate, customerId) {
+  if (customerId) {
+    const [custById] = await pool.query('SELECT * FROM customers WHERE id = ?', [customerId]);
+    if (custById.length > 0) return custById[0];
+  }
   if (!plate) return null;
 
   const cleanPlate = plate.replace(/\s+/g, '');
@@ -68,17 +72,17 @@ async function resolveCustomerByPlate(plate) {
   return null;
 }
 
-// @desc    Get customer by vehicle plate (public)
+// @desc    Get customer by vehicle plate or ID (public)
 // @route   GET /api/public/customer/by-plate
 // @access  Public
 const getCustomerByPlate = asyncHandler(async (req, res) => {
-  const { plate } = req.query;
+  const { plate, customer_id } = req.query;
 
-  if (!plate) {
-    return res.status(400).json({ message: 'Vehicle plate is required' });
+  if (!plate && !customer_id) {
+    return res.status(400).json({ message: 'Vehicle plate or customer_id is required' });
   }
 
-  const customer = await resolveCustomerByPlate(plate);
+  const customer = await resolveCustomerByPlate(plate, customer_id);
 
   if (!customer) {
     return res.status(404).json({ message: 'Customer not found' });

@@ -595,55 +595,21 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
       [serviceStatus, id]
     );
 
-    // If order status is set to 'completed', automatically handle payment status and record cash payments if unpaid
-    if (status === 'completed') {
-      // Check if this order is linked to a customer credit
-      const [creditRecords] = await connection.query(
-        'SELECT id FROM customer_credits WHERE order_id = ?',
+    if (status === 'cancelled') {
+      await connection.query(
+        'UPDATE orders SET payment_status = "cancelled" WHERE id = ?',
         [id]
       );
-      const hasCredit = creditRecords.length > 0;
-
-      if (!hasCredit && order.payment_status !== 'paid' && order.payment_status !== 'free') {
-        const [payments] = await connection.query(
-          'SELECT SUM(amount) as total_paid FROM payments WHERE order_id = ? AND status = "completed"',
-          [id]
+      if (order.vip_booking_id) {
+        await connection.query(
+          'UPDATE vip_bookings SET status = "cancelled" WHERE id = ?',
+          [order.vip_booking_id]
         );
-        const totalPaid = parseFloat(payments[0].total_paid || 0);
-        const remaining = parseFloat(order.total) - totalPaid;
-
-        if (remaining > 0) {
-          // Check if there is a pending cash or card payment record we can complete
-          const [pendingPayments] = await connection.query(
-            'SELECT id, method FROM payments WHERE order_id = ? AND status = "pending"',
-            [id]
-          );
-
-          if (pendingPayments.length > 0) {
-            // Update existing pending payment record
-            await connection.query(
-              'UPDATE payments SET status = "completed", amount = ? WHERE id = ?',
-              [order.total, pendingPayments[0].id]
-            );
-          } else {
-            // Insert a new completed cash payment record
-            await connection.query(
-              'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
-              [id, remaining, 'cash', 'completed']
-            );
-          }
-
-          // Update order payment status to paid
-          await connection.query(
-            'UPDATE orders SET payment_status = "paid" WHERE id = ?',
-            [id]
-          );
-          order.payment_status = 'paid';
-        }
       }
+    }
 
-      // Handle Loyalty Stamps for Completed Orders
-      const targetCustomerId = order.customer_id || order.customer_id_ref;
+    // Handle Loyalty Stamps for Completed Orders
+    const targetCustomerId = order.customer_id || order.customer_id_ref;
       if (targetCustomerId && parseFloat(order.total) > 0) {
         const [servicesList] = await connection.query(
           'SELECT service_name FROM services WHERE order_id = ?',
@@ -697,56 +663,32 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     await connection.commit();
     connection.release();
 
-    // Send SMS notifications (Thank You & Feedback URL) when order is marked as completed
+    // Send SMS notification with Checkout link when service is completed (Done button pressed)
     if (status === 'completed') {
       const rawPhone = order.customer_phone;
       const formattedPhone = formatPhoneNumber(rawPhone);
 
       if (formattedPhone) {
-        // Build the feedback URL for customer reviews
-        const feedbackUrl = buildFeedbackUrl({
+        const checkoutUrl = buildPaymentUrl({
           vehicleType: order.vehicle_type || 'Saloon',
-          customerId: order.customer_id_ref || order.customer_id,
           plate: order.vehicle_plate,
           orderId: order.id
         });
 
-        /*
-        let stampsMsg = "";
-        const targetCustId = order.customer_id || order.customer_id_ref;
-        if (targetCustId) {
-          try {
-            const { getWashStamps } = require('../utils/loyaltyStamps');
-            const currentStamps = await getWashStamps(pool, targetCustId);
-            if (currentStamps === 0) {
-              if (order.payment_status === 'free') {
-                stampsMsg = " تهانينا! لقد حصلت على غسيل مجاني لزيارتك القادمة!";
-              } else {
-                stampsMsg = " لقد أكملت 5/5 من الغسلات. تهانينا! لقد حصلت على غسيل مجاني لزيارتك القادمة!";
-              }
-            } else {
-              stampsMsg = ` لقد أكملت ${currentStamps}/5 من الغسلات. متبقي ${5 - currentStamps} غسلات فقط للحصول على غسيلك المجاني!`;
-            }
-          } catch (err) {
-            console.error('Error fetching stamps for SMS message:', err);
-          }
-        }
-        */
-
-        const thankYouMessage = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nتقييمك يساعدنا نقدم خدمة أفضل\n${feedbackUrl}`;
+        const checkoutMessage = `شكراً لزيارتك لـ Sniper Car Care!\nتم إكمال الخدمة لسيارتك 🚗\nالرجاء إختيار طريقة الدفع وإستكمال العملية عبر الرابط:\n${checkoutUrl}`;
 
         try {
           await sendReson8Message({
             to: formattedPhone,
-            message: thankYouMessage,
-            campaignName: 'ORDER_COMPLETED_THANK_YOU_FEEDBACK',
+            message: checkoutMessage,
+            campaignName: 'ORDER_COMPLETED_CHECKOUT_LINK',
           });
-          console.log(`[SMS] Thank You & Feedback SMS sent to ${formattedPhone} for order ${id}`);
+          console.log(`[SMS] Checkout link SMS sent to ${formattedPhone} for order ${id}`);
         } catch (err) {
-          console.error('[SMS] Thank You & Feedback SMS failed:', err.message);
+          console.error('[SMS] Checkout link SMS failed:', err.message);
         }
       } else {
-        console.warn(`[SMS] Skipping feedback SMS for order ${id} – no valid phone number.`);
+        console.warn(`[SMS] Skipping checkout SMS for order ${id} – no valid phone number.`);
       }
     }
 
@@ -897,12 +839,75 @@ const getOrderInvoicePDF = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Send Tap Payment link via Reson8 SMS/WhatsApp
+// @route   POST /api/orders/:id/send-tap-link
+// @access  Private
+const sendTapPaymentLink = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const tapService = require('../services/tapService');
+
+  const [orders] = await pool.query(`
+    SELECT o.*, 
+           COALESCE(c.name, vc.name) as customer_name,
+           COALESCE(c.phone, vc.phone) as customer_phone
+    FROM orders o
+    LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+    LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+    WHERE o.id = ?
+  `, [id]);
+
+  if (orders.length === 0) {
+    return res.status(404).json({ message: 'Order not found' });
+  }
+
+  const order = orders[0];
+  const phone = order.customer_phone;
+  if (!phone) {
+    return res.status(400).json({ message: 'No phone number linked to this customer.' });
+  }
+
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.headers['x-forwarded-host'] || req.get('host');
+  const redirect_url = `${protocol}://${host}/orders?status=success&order_id=${id}`;
+
+  const charge = await tapService.createCharge({
+    amount: parseFloat(order.total),
+    currency: 'AED',
+    customer_name: order.customer_name || 'Valued Customer',
+    customer_phone: phone,
+    order_id: id,
+    redirect_url: redirect_url
+  });
+
+  const tapUrl = charge?.transaction?.url;
+  if (!tapUrl) {
+    return res.status(400).json({ message: 'Failed to generate Tap Payment link' });
+  }
+
+  const formattedPhone = formatPhoneNumber(phone);
+  const message = `Hello ${order.customer_name || 'Valued Customer'}! Please use the link below to pay AED ${parseFloat(order.total).toFixed(2)} for your Sniper Car Care Order #${id}: ${tapUrl}`;
+
+  await sendReson8Message({
+    to: formattedPhone,
+    message: message,
+    campaignName: `Tap_Payment_Link_${id}`
+  });
+
+  res.json({
+    success: true,
+    message: `Tap Payment link sent to ${formattedPhone} via Reson8 successfully!`,
+    payment_url: tapUrl
+  });
+});
+
 module.exports = {
   getOrders,
   getOrder,
   createOrder,
   updateOrderStatus,
   deleteOrder,
-  getOrderInvoicePDF
+  getOrderInvoicePDF,
+  sendTapPaymentLink
 };
 

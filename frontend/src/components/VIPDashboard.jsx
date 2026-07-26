@@ -590,9 +590,11 @@ const VIPDashboard = () => {
                     <div>
                       <p className="text-xs text-gray-400 font-bold uppercase text-right">Payment Status</p>
                       <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded-full ${
-                        selectedBooking.order_payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        selectedBooking.status === 'cancelled' || selectedBooking.order_status === 'cancelled' || selectedBooking.order_payment_status === 'cancelled'
+                          ? 'bg-red-100 text-red-800 border border-red-200'
+                          : selectedBooking.order_payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
-                        {selectedBooking.order_payment_status || 'pending'}
+                        {(selectedBooking.status === 'cancelled' || selectedBooking.order_status === 'cancelled') ? 'cancelled' : (selectedBooking.order_payment_status || 'pending')}
                       </span>
                     </div>
                   </div>

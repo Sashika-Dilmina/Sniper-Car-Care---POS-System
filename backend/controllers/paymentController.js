@@ -141,7 +141,7 @@ const getOrderPayments = asyncHandler(async (req, res) => {
 // @route   POST /api/payments/manual
 // @access  Private
 const processManualPayment = asyncHandler(async (req, res) => {
-  const { order_id, amount, method, status = 'completed', discount = 0 } = req.body;
+  const { order_id, amount, method, status = 'completed', discount = 0, splits } = req.body;
 
   if (!order_id || amount === undefined || !method) {
     return res.status(400).json({ message: 'Order ID, amount, and method are required' });
@@ -170,24 +170,54 @@ const processManualPayment = asyncHandler(async (req, res) => {
         );
       }
     }
-    // Check if there is an existing pending payment record
-    const [pendingPayments] = await connection.query(
-      'SELECT id FROM payments WHERE order_id = ? AND status = "pending" LIMIT 1',
-      [order_id]
-    );
 
-    if (pendingPayments.length > 0 && status === 'completed') {
-      // Update the existing pending payment to completed
-      await connection.query(
-        'UPDATE payments SET amount = ?, method = ?, status = "completed" WHERE id = ?',
-        [amount, method, pendingPayments[0].id]
-      );
+    if (method === 'multiple' && Array.isArray(splits) && splits.length > 0) {
+      // Process multiple split payments
+      for (const split of splits) {
+        const splitAmt = parseFloat(split.amount || 0);
+        if (splitAmt > 0 && split.method) {
+          // Check for duplicate insert in last 10 seconds
+          const [recentDup] = await connection.query(
+            'SELECT id FROM payments WHERE order_id = ? AND method = ? AND amount = ? AND status = "completed" AND created_at >= TIMESTAMPADD(SECOND, -10, CURRENT_TIMESTAMP) LIMIT 1',
+            [order_id, split.method, splitAmt]
+          );
+
+          if (recentDup.length === 0) {
+            await connection.query(
+              'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
+              [order_id, splitAmt, split.method, status]
+            );
+          }
+        }
+      }
     } else {
-      // Record payment
-      await connection.query(
-        'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
-        [order_id, amount, method, status]
+      // Check for duplicate single payment insert in last 10 seconds
+      const [recentDup] = await connection.query(
+        'SELECT id FROM payments WHERE order_id = ? AND method = ? AND amount = ? AND status = "completed" AND created_at >= TIMESTAMPADD(SECOND, -10, CURRENT_TIMESTAMP) LIMIT 1',
+        [order_id, method, amount]
       );
+
+      if (recentDup.length === 0) {
+        // Check if there is an existing pending payment record
+        const [pendingPayments] = await connection.query(
+          'SELECT id FROM payments WHERE order_id = ? AND status = "pending" LIMIT 1',
+          [order_id]
+        );
+
+        if (pendingPayments.length > 0 && status === 'completed') {
+          // Update existing pending payment to completed
+          await connection.query(
+            'UPDATE payments SET amount = ?, method = ?, status = "completed" WHERE id = ?',
+            [amount, method, pendingPayments[0].id]
+          );
+        } else {
+          // Record payment
+          await connection.query(
+            'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
+            [order_id, amount, method, status]
+          );
+        }
+      }
     }
 
     // Update order payment status

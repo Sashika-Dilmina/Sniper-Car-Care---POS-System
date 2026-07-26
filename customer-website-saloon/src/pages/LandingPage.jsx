@@ -337,7 +337,21 @@ const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const vehiclePlate = searchParams.get('plate') || '';
+  const vehiclePlate = searchParams.get('plate') || localStorage.getItem('sniper_customer_plate') || '';
+  const customerIdParam = searchParams.get('customer_id') || localStorage.getItem('sniper_customer_id') || '';
+
+  useEffect(() => {
+    const urlPlate = searchParams.get('plate');
+    const urlCustId = searchParams.get('customer_id');
+    if (urlPlate) {
+      localStorage.setItem('sniper_customer_plate', urlPlate);
+    } else if (vehiclePlate) {
+      localStorage.setItem('sniper_customer_plate', vehiclePlate);
+    }
+    if (urlCustId) {
+      localStorage.setItem('sniper_customer_id', urlCustId);
+    }
+  }, [searchParams, vehiclePlate]);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showVIPModal, setShowVIPModal] = useState(false);
   const [vipStep, setVipStep] = useState(1);
@@ -375,6 +389,8 @@ const LandingPage = () => {
   const [freeWashCap, setFreeWashCap] = useState(0);
   const [packages, setPackages] = useState([]);
   const [dbProducts, setDbProducts] = useState([]);
+  const [realFeedbacks, setRealFeedbacks] = useState([]);
+  const [bookingSuccessData, setBookingSuccessData] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productForm, setProductForm] = useState({
@@ -445,6 +461,18 @@ const LandingPage = () => {
     };
     fetchServices();
     fetchDbProducts();
+
+    const fetchLatestFeedbacks = async () => {
+      try {
+        const response = await axios.get('/api/feedback/public/latest');
+        if (response.data.success && Array.isArray(response.data.feedback) && response.data.feedback.length > 0) {
+          setRealFeedbacks(response.data.feedback);
+        }
+      } catch (err) {
+        console.log('Error fetching latest feedback:', err.message);
+      }
+    };
+    fetchLatestFeedbacks();
   }, []);
 
   // Real-time order status notifications
@@ -551,13 +579,17 @@ const LandingPage = () => {
     }
   }, [location]);
 
-  // Fetch customer info by plate number
+  // Fetch customer info by plate number or customer_id
   useEffect(() => {
     const fetchCustomerInfo = async () => {
-      if (!vehiclePlate) return;
+      if (!vehiclePlate && !customerIdParam) return;
 
       try {
-        const response = await axios.get(`/api/public/customer/by-plate?plate=${vehiclePlate}`);
+        const params = new URLSearchParams();
+        if (customerIdParam) params.append('customer_id', customerIdParam);
+        if (vehiclePlate) params.append('plate', vehiclePlate);
+
+        const response = await axios.get(`/api/public/customer/by-plate?${params.toString()}`);
         if (response.data.customer) {
           setCustomerInfo(response.data.customer);
           setWashStamps(
@@ -570,7 +602,7 @@ const LandingPage = () => {
             name: response.data.customer.name || '',
             phone: response.data.customer.phone || '+9715',
             vehicle_type: response.data.customer.vehicle_type || 'Saloon',
-            vehicle_plate: vehiclePlate,
+            vehicle_plate: response.data.customer.vehicle_plate || vehiclePlate,
             notes: ''
           });
         }
@@ -580,7 +612,7 @@ const LandingPage = () => {
     };
 
     fetchCustomerInfo();
-  }, [vehiclePlate]);
+  }, [vehiclePlate, customerIdParam]);
 
   // Fetch plate codes dynamically based on selected Emirate
   useEffect(() => {
@@ -777,24 +809,24 @@ const LandingPage = () => {
           notes: ''
         });
       } else {
-        // Paid booking: Defer order creation until payment method selection!
-        const tempBooking = {
+        // Paid booking: Create order directly in database!
+        const orderData = {
           customer_id: customerInfo?.id || null,
           customer_name: form.name,
           customer_phone: form.phone,
           vehicle_plate: form.vehicle_plate || null,
           vehicle_type: form.vehicle_type,
-          service_id: service.id,
-          service_name: service.name,
+          items: [],
           total: servicePrice,
           source: 'customer_website_saloon',
+          status: 'pending',
+          payment_status: 'pending',
           notes: form.notes || `One-Tap Booking via Website - ${service.name}`
         };
 
-        sessionStorage.setItem('temp_booking', JSON.stringify(tempBooking));
-        sessionStorage.removeItem('current_order_id');
+        await axios.post('/api/public/orders', orderData);
 
-        toast.success('Redirecting to payment...');
+        toast.success('Thank you! Your booking has been received successfully! 🚗', { duration: 5000 });
         setShowBookingModal(false);
         setSelectedService(null);
         setBookingForm({
@@ -807,9 +839,15 @@ const LandingPage = () => {
           notes: ''
         });
 
-        setTimeout(() => {
-          navigate(`/payment?plate=${encodeURIComponent(form.vehicle_plate || '')}`);
-        }, 1500);
+        const savedPlate = form.vehicle_plate || vehiclePlate || localStorage.getItem('sniper_customer_plate') || '';
+        if (savedPlate) {
+          localStorage.setItem('sniper_customer_plate', savedPlate);
+        }
+
+        setBookingSuccessData({
+          serviceName: service.name,
+          vehiclePlate: savedPlate
+        });
       }
     } catch (error) {
       console.error('Booking error:', error);
@@ -1036,26 +1074,21 @@ const LandingPage = () => {
   };
 
   const handleServiceClick = (service) => {
-    // If we have customer info from the plate, do ONE-TAP BOOKING
+    setSelectedService(service);
+
     if (customerInfo) {
-      const autoForm = {
-        name: customerInfo.name || 'Existing Customer',
-        phone: customerInfo.phone || '',
-        vehicle_plate: vehiclePlate || customerInfo.vehicle_plate || '',
-        notes: `One-Tap Booking via Website - ${service.name} (Quick Book via Plate Link: ${vehiclePlate})`
-      };
-
-      // Show a loading toast for immediate feedback
-      const loadingToast = toast.loading('Booking your service...');
-
-      submitBooking(service, autoForm).finally(() => {
-        toast.dismiss(loadingToast);
+      // Customer is recognized! Directly submit booking without showing registration modal
+      submitBooking(service, {
+        name: customerInfo.name,
+        phone: customerInfo.phone || '+9715',
+        vehicle_type: customerInfo.vehicle_type || 'Saloon',
+        vehicle_plate: customerInfo.vehicle_plate || vehiclePlate,
+        notes: ''
       });
       return;
     }
 
-    // Otherwise, show the manual booking modal
-    setSelectedService(service);
+    // Unrecognized customer -> show registration/booking modal
     setShowBookingModal(true);
 
     const parts = (vehiclePlate || '').trim().split(/\s+/);
@@ -1391,10 +1424,18 @@ const LandingPage = () => {
           </div>
         </Reveal>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {testimonials.map((testimonial, index) => (
-            <Reveal key={testimonial.name} delay={index * 100}>
+          {(realFeedbacks.length > 0 
+            ? realFeedbacks.map(f => ({
+                name: f.customer_name || 'Valued Customer',
+                location: f.vehicle_type ? `${f.vehicle_type} Client` : 'Verified Client',
+                quote: f.comment || 'Outstanding detailing and top-quality service!',
+                rating: f.rating || 5
+              }))
+            : testimonials
+          ).map((testimonial, index) => (
+            <Reveal key={testimonial.name + index} delay={index * 100}>
               <div className="template-card p-6 h-full">
-                <div className="text-amber-500 text-sm mb-3">{'★'.repeat(testimonial.rating)}</div>
+                <div className="text-amber-500 text-sm mb-3">{'★'.repeat(testimonial.rating || 5)}</div>
                 <p className="text-sm text-gray-600 leading-relaxed notranslate" translate="no">&ldquo;{testimonial.quote}&rdquo;</p>
                 <div className="mt-4 text-sm font-bold text-gray-900">{testimonial.name}</div>
                 <div className="text-[10px] uppercase tracking-widest text-gray-400">{testimonial.location}</div>
@@ -1960,6 +2001,44 @@ const LandingPage = () => {
         </div>
       )}
 
+      {/* Thank You Booking Confirmation Modal */}
+      {bookingSuccessData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl border border-gray-100 transform transition-all scale-100">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl shadow-inner animate-bounce">
+              🎉
+            </div>
+            <h2 className="text-2xl font-black text-gray-900 mb-2">Thank You for Your Booking!</h2>
+            <p className="text-gray-600 text-sm mb-6">
+              Your booking request for <span className="font-bold text-red-600">{bookingSuccessData.serviceName}</span> has been received successfully!
+            </p>
+
+            {bookingSuccessData.vehiclePlate && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-6">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Vehicle Plate</p>
+                <p className="text-lg font-black font-mono text-gray-800">{bookingSuccessData.vehiclePlate}</p>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  const plate = bookingSuccessData.vehiclePlate || localStorage.getItem('sniper_customer_plate');
+                  setBookingSuccessData(null);
+                  if (plate) {
+                    window.location.href = `/?plate=${encodeURIComponent(plate)}`;
+                  } else {
+                    window.location.href = '/';
+                  }
+                }}
+                className="w-full py-3.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-2xl transition shadow-lg shadow-red-500/20 active:scale-95 text-base flex items-center justify-center gap-2"
+              >
+                <span>🏠</span> Return to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -84,6 +84,13 @@ const Sales = () => {
   const [ledgerOrders, setLedgerOrders] = useState([]);
   const [loadingLedger, setLoadingLedger] = useState(false);
   const [ledgerSearchQuery, setLedgerSearchQuery] = useState('');
+  const [ledgerPaymentFilter, setLedgerPaymentFilter] = useState('all');
+
+  const [splitPayments, setSplitPayments] = useState({
+    card: 0,
+    cash: 0,
+    bank_transfer: 0
+  });
 
   // Force staff users to only access 'pos' sub-tab
   useEffect(() => {
@@ -283,8 +290,17 @@ const Sales = () => {
     }
   };
 
+  // Helper to safely parse numeric price strings like "20.00 AED" or 20
+  const parsePriceNum = (val) => {
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    if (!val) return 0;
+    const cleaned = String(val).replace(/[^0-9.]/g, '');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  };
+
   // Calculate Cart Totals
-  const subtotal = cart.reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => sum + (parsePriceNum(item.price) * (item.quantity || 1)), 0);
   const discountVal = parseFloat(discount) || 0;
   const total = Math.max(0, subtotal - discountVal);
 
@@ -329,11 +345,26 @@ const Sales = () => {
 
       // 2. Process payment based on method
       if (paymentMethod === 'cash' || paymentMethod === 'card') {
-        const hasService = cart.some(item => item.category === 'Services' || item.category === 'VIP');
+        const hasService = cart.some(item => item.category === 'Services' || item.category === 'VIP' || item.category === 'Extra Service');
         await axios.post('/api/payments/manual', {
           order_id: createdOrder.id,
           amount: total,
           method: total === 0 ? 'free' : paymentMethod,
+          status: hasService ? 'pending' : 'completed'
+        });
+      } else if (paymentMethod === 'multiple') {
+        const hasService = cart.some(item => item.category === 'Services' || item.category === 'VIP' || item.category === 'Extra Service');
+        const splitsArr = [
+          { method: 'card', amount: parseFloat(splitPayments.card || 0) },
+          { method: 'cash', amount: parseFloat(splitPayments.cash || 0) },
+          { method: 'bank_transfer', amount: parseFloat(splitPayments.bank_transfer || 0) }
+        ].filter(s => s.amount > 0);
+
+        await axios.post('/api/payments/manual', {
+          order_id: createdOrder.id,
+          amount: total,
+          method: 'multiple',
+          splits: splitsArr,
           status: hasService ? 'pending' : 'completed'
         });
       } else if (paymentMethod === 'tap') {
@@ -648,7 +679,7 @@ const Sales = () => {
               {/* Category tabs and Search bar */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex bg-gray-100 p-1.5 rounded-xl gap-1 overflow-x-auto">
-                  {['Services', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
+                  {['Services', 'Extra Service', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
@@ -980,10 +1011,11 @@ const Sales = () => {
                   {/* Payment Method */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       {[
                         { key: 'cash', label: '💵 Cash' },
                         { key: 'card', label: '💳 Card' },
+                        { key: 'multiple', label: '🔀 Multiple' },
                         { key: 'credit', label: '🏦 Credit' }
                       ].map(pm => (
                         <button
@@ -1002,6 +1034,53 @@ const Sales = () => {
                         </button>
                       ))}
                     </div>
+
+                    {paymentMethod === 'multiple' && (
+                      <div className="mt-3 p-3 bg-white border border-gray-200 rounded-xl space-y-2 text-left shadow-sm">
+                        <p className="text-[11px] font-bold uppercase text-gray-500">Split Payment Amounts</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[11px] font-bold text-gray-700">Card (AED)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={splitPayments.card || ''}
+                              onChange={(e) => setSplitPayments({ ...splitPayments, card: parseFloat(e.target.value) || 0 })}
+                              className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-bold text-gray-700">Cash (AED)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={splitPayments.cash || ''}
+                              onChange={(e) => setSplitPayments({ ...splitPayments, cash: parseFloat(e.target.value) || 0 })}
+                              className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[11px] font-bold text-gray-700">Bank Transfer (AED)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={splitPayments.bank_transfer || ''}
+                              onChange={(e) => setSplitPayments({ ...splitPayments, bank_transfer: parseFloat(e.target.value) || 0 })}
+                              className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="text-xs flex justify-between font-bold border-t pt-1.5 mt-1">
+                          <span>Split Total: AED {(splitPayments.card + splitPayments.cash + splitPayments.bank_transfer).toFixed(2)}</span>
+                          <span className={Math.abs((splitPayments.card + splitPayments.cash + splitPayments.bank_transfer) - total) < 0.01 ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                            Net Total: AED {total.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
 
@@ -1143,8 +1222,8 @@ const Sales = () => {
             </div>
           </div>
 
-          {/* Search ledger */}
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center no-print">
+          {/* Search & Filter ledger */}
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-center no-print">
             <input
               type="text"
               placeholder="Filter ledger by customer name, phone, or plate/model..."
@@ -1152,6 +1231,17 @@ const Sales = () => {
               onChange={(e) => setLedgerSearchQuery(e.target.value)}
               className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-primary-500 border-gray-200"
             />
+            <select
+              value={ledgerPaymentFilter}
+              onChange={(e) => setLedgerPaymentFilter(e.target.value)}
+              className="px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-primary-500 border-gray-200 bg-white font-bold text-sm min-w-[180px]"
+            >
+              <option value="all">All Payment Methods</option>
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="tap">Tap</option>
+              <option value="bank_transfer">Bank Transfer</option>
+            </select>
           </div>
 
           {/* Printable Invoice Header (Hidden on Screen, Visible on Print) */}

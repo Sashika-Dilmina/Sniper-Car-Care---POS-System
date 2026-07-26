@@ -50,7 +50,7 @@ const Services = () => {
   const fetchServices = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/products?category=Services');
+      const response = await axios.get('/api/products');
       setServices(response.data.products || []);
     } catch (error) {
       toast.error('Failed to load services');
@@ -160,7 +160,7 @@ const Services = () => {
     const serviceData = {
       name: formData.name,
       description: formData.description,
-      category: 'Services',
+      category: activeTab === 'Extra Service' ? 'Extra Service' : 'Services',
       price: parseFloat(formData.price),
       purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0,
       stock: 0,
@@ -226,9 +226,12 @@ const Services = () => {
     });
   };
 
-  const filteredServices = services.filter(
-    (service) => service.vehicle_type === activeTab
-  );
+  const filteredServices = services.filter((service) => {
+    if (activeTab === 'Extra Service') {
+      return service.category === 'Extra Service';
+    }
+    return (service.category === 'Services' || !service.category) && (service.vehicle_type === activeTab || service.vehicle_type === 'Both');
+  });
 
   return (
     <div className="space-y-6">
@@ -280,6 +283,19 @@ const Services = () => {
           }`}
         >
           🚙 4x4 Services
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('Extra Service');
+            setFormData(prev => ({ ...prev, vehicle_type: 'Both' }));
+          }}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all duration-200 ${
+            activeTab === 'Extra Service'
+              ? 'border-primary-600 text-primary-600 bg-primary-50/50 rounded-t-lg'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          ⚡ Extra Services
         </button>
       </div>
 

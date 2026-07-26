@@ -424,6 +424,7 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
       }
     } else if (status === 'cancelled') {
       orderStatus = 'cancelled';
+      additionalSets += ", payment_status = 'cancelled'";
     }
 
     await db.query(

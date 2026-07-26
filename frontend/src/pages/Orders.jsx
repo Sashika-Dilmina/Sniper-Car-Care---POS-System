@@ -86,6 +86,16 @@ const Orders = () => {
     return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   };
 
+  const handleQuickComplete = async (orderId) => {
+    try {
+      await axios.put(`/api/orders/${orderId}/status`, { status: 'completed' });
+      toast.success('Order completed & Checkout SMS sent to customer!');
+      fetchOrders(true);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to complete order');
+    }
+  };
+
   const filteredOrders = orders.filter((order) => {
     const hasProducts = order.items && order.items.some(item => item.category === 'Accessories' || item.category === 'Spare Parts' || item.category === 'Car Freshner' || item.category === 'Acce');
     if (activeTab === 'products') return hasProducts;
@@ -222,7 +232,6 @@ const Orders = () => {
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle Plate</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items / Products</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service Time</th>
@@ -270,7 +279,6 @@ const Orders = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{order.customer_name || 'Walk-in'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap font-mono">{order.vehicle_plate || 'N/A'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {order.items && order.items.length > 0 ? (
                         <div className="flex flex-col gap-1 max-w-xs truncate">
@@ -324,7 +332,11 @@ const Orders = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {order.credit_status ? (
+                      {order.status === 'cancelled' || order.payment_status === 'cancelled' ? (
+                        <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-semibold border border-red-200">
+                          cancelled
+                        </span>
+                      ) : order.credit_status ? (
                         order.credit_status === 'unpaid' ? (
                           <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-semibold">
                             Credit / Unpaid
@@ -339,13 +351,15 @@ const Orders = () => {
                           </span>
                         )
                       ) : (
-                        <span className={`px-2 py-1 text-xs rounded-full ${
+                        <span className={`px-2 py-1 text-xs rounded-full font-semibold ${
                             order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
                             order.payment_status === 'free' ? 'bg-green-100 text-green-800 font-semibold uppercase' :
                             order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
                               'bg-red-100 text-red-800'
                           }`}>
-                          {order.payment_status}
+                          {order.payment_status === 'paid' 
+                            ? `Paid (${(order.payment_method || order.method || 'Cash').charAt(0).toUpperCase() + (order.payment_method || order.method || 'Cash').slice(1)})` 
+                            : order.payment_status}
                         </span>
                       )}
                     </td>
@@ -353,12 +367,23 @@ const Orders = () => {
                       {new Date(order.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Link
-                        to={`/orders/${order.id}`}
-                        className="text-primary-600 hover:underline"
-                      >
-                        View
-                      </Link>
+                      <div className="flex items-center gap-3">
+                        <Link
+                          to={`/orders/${order.id}`}
+                          className="text-primary-600 font-bold hover:underline"
+                        >
+                          View
+                        </Link>
+                        {order.status === 'processing' && (
+                          <button
+                            onClick={() => handleQuickComplete(order.id)}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded transition shadow-sm"
+                            title="Complete service & send checkout SMS link"
+                          >
+                            ✓ Done
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

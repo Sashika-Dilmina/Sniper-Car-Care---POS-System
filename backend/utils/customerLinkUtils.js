@@ -4,7 +4,7 @@ function isFourByFour(vehicleType = '') {
   return normalized.includes('4x4') || normalized.includes('4-wheel') || normalized.includes('4wheel');
 }
 
-function buildCustomerWebsiteUrl(vehicleType = 'Saloon', plateNumber) {
+function buildCustomerWebsiteUrl(vehicleType = 'Saloon', plateNumber, customerId) {
   const saloonBase =
     process.env.CUSTOMER_WEBSITE_SALOON_URL ||
     process.env.CUSTOMER_WEBSITE_URL ||
@@ -17,13 +17,19 @@ function buildCustomerWebsiteUrl(vehicleType = 'Saloon', plateNumber) {
     'http://localhost:4000';
 
   const baseUrl = isFourByFour(vehicleType) ? fourByFourBase : saloonBase;
-  if (!plateNumber) {
-    return baseUrl;
+  const params = new URLSearchParams();
+  if (plateNumber) {
+    params.append('plate', plateNumber.replace(/\s+/g, ''));
+  }
+  if (customerId) {
+    params.append('customer_id', customerId);
   }
 
-  const cleanPlate = plateNumber.replace(/\s+/g, '');
+  const queryString = params.toString();
+  if (!queryString) return baseUrl;
+
   const separator = baseUrl.includes('?') ? '&' : '?';
-  return `${baseUrl}${separator}plate=${encodeURIComponent(cleanPlate)}`;
+  return `${baseUrl}${separator}${queryString}`;
 }
 
 function buildFeedbackUrl({ vehicleType = 'Saloon', customerId, plate, orderId }) {
