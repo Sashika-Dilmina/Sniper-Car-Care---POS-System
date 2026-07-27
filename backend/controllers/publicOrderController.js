@@ -548,11 +548,49 @@ const confirmPayment = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Update order note from customer website Thank You page
+// @route   PATCH /api/public/orders/:id/note or PUT /api/public/orders/:id/note
+// @access  Public
+const updateOrderNote = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { notes, note } = req.body;
+  const noteText = (notes !== undefined ? notes : note) || '';
+
+  const [orders] = await pool.query('SELECT id, notes FROM orders WHERE id = ?', [id]);
+  if (orders.length === 0) {
+    return res.status(404).json({ message: 'Order not found' });
+  }
+
+  const existingNote = orders[0].notes || '';
+  let updatedNote = noteText.trim();
+
+  // If order already has initial notes, format nicely or replace empty note
+  if (existingNote && updatedNote) {
+    if (!existingNote.includes(updatedNote)) {
+      updatedNote = `${existingNote}\nCustomer Note: ${updatedNote}`;
+    } else {
+      updatedNote = existingNote;
+    }
+  } else if (!updatedNote) {
+    updatedNote = existingNote;
+  }
+
+  await pool.query('UPDATE orders SET notes = ? WHERE id = ?', [updatedNote, id]);
+
+  res.json({
+    success: true,
+    message: 'Note updated successfully',
+    notes: updatedNote
+  });
+});
+
 module.exports = {
   createOrder,
   getOrder,
   confirmOrder,
   createPaymentIntent,
-  confirmPayment
+  confirmPayment,
+  updateOrderNote
 };
+
 

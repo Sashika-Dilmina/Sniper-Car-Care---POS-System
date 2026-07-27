@@ -391,6 +391,10 @@ const LandingPage = () => {
   const [dbProducts, setDbProducts] = useState([]);
   const [realFeedbacks, setRealFeedbacks] = useState([]);
   const [bookingSuccessData, setBookingSuccessData] = useState(null);
+  const [customerNote, setCustomerNote] = useState('');
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productForm, setProductForm] = useState({
@@ -725,6 +729,9 @@ const LandingPage = () => {
   }, [vipBookingForm.appointment_date]);
 
   const submitBooking = async (service, form) => {
+    if (isSubmittingBooking) return;
+    setIsSubmittingBooking(true);
+
     const isVip = service.name.toLowerCase().includes('vip') || service.category === 'VIP';
     if (isVip) {
       try {
@@ -742,6 +749,8 @@ const LandingPage = () => {
       } catch (error) {
         console.error('VIP Booking error:', error);
         toast.error(error.response?.data?.message || 'Failed to book VIP service. Please try again.');
+      } finally {
+        setIsSubmittingBooking(false);
       }
       return;
     }
@@ -825,7 +834,8 @@ const LandingPage = () => {
           notes: form.notes || `One-Tap Booking via Website - ${service.name}`
         };
 
-        await axios.post('/api/public/orders', orderData);
+        const response = await axios.post('/api/public/orders', orderData);
+        const order = response.data.order;
 
         toast.success('Thank you! Your booking has been received successfully! 🚗', { duration: 5000 });
         setShowBookingModal(false);
@@ -845,7 +855,10 @@ const LandingPage = () => {
           localStorage.setItem('sniper_customer_plate', savedPlate);
         }
 
+        setCustomerNote('');
+        setNoteSaved(false);
         setBookingSuccessData({
+          orderId: order?.id,
           serviceName: service.name,
           vehiclePlate: savedPlate
         });
@@ -853,6 +866,8 @@ const LandingPage = () => {
     } catch (error) {
       console.error('Booking error:', error);
       toast.error(error.response?.data?.message || 'Failed to book service. Please try again.');
+    } finally {
+      setIsSubmittingBooking(false);
     }
   };
 
@@ -2016,11 +2031,56 @@ const LandingPage = () => {
             </p>
 
             {bookingSuccessData.vehiclePlate && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-6">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4">
                 <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Vehicle Plate</p>
                 <p className="text-lg font-black font-mono text-gray-800">{bookingSuccessData.vehiclePlate}</p>
               </div>
             )}
+
+            {/* Note Box for Staff */}
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 text-left shadow-sm">
+              <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <span>📝</span> Add a Note for Staff (Optional)
+              </label>
+              <p className="text-[11px] text-amber-700 mb-2">
+                Need any special instructions or preferences? Let our staff know:
+              </p>
+              <textarea
+                value={customerNote}
+                onChange={(e) => setCustomerNote(e.target.value)}
+                rows={2}
+                disabled={noteSaved}
+                className="w-full p-2.5 text-xs text-gray-900 bg-white border border-amber-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none disabled:bg-gray-100 disabled:text-gray-500"
+                placeholder="e.g. Please pay special attention to interior vacuuming..."
+              />
+              <button
+                type="button"
+                disabled={isSavingNote || noteSaved}
+                onClick={async () => {
+                  if (!bookingSuccessData?.orderId && !customerNote.trim()) return;
+                  setIsSavingNote(true);
+                  try {
+                    if (bookingSuccessData?.orderId) {
+                      await axios.patch(`/api/public/orders/${bookingSuccessData.orderId}/note`, { note: customerNote });
+                    }
+                    setNoteSaved(true);
+                    toast.success('Note sent to staff! Thank you.', { icon: '📝' });
+                  } catch (err) {
+                    console.error('Note update error:', err);
+                    toast.error('Could not save note. Please try again.');
+                  } finally {
+                    setIsSavingNote(false);
+                  }
+                }}
+                className={`w-full mt-2 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1 ${
+                  noteSaved 
+                    ? 'bg-green-600 text-white cursor-default' 
+                    : 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm active:scale-95'
+                }`}
+              >
+                {noteSaved ? '✓ Note Sent to Staff' : isSavingNote ? 'Saving...' : '💾 Send Note to Staff'}
+              </button>
+            </div>
 
             <div className="space-y-3">
               <button

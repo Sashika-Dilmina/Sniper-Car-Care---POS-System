@@ -278,7 +278,16 @@ const Orders = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{order.customer_name || 'Walk-in'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex flex-col gap-1">
+                        <span className="font-semibold text-gray-900">{order.customer_name || 'Walk-in'}</span>
+                        {order.notes && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md max-w-[220px] truncate" title={order.notes}>
+                            📝 Note: {order.notes}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {order.items && order.items.length > 0 ? (
                         <div className="flex flex-col gap-1 max-w-xs truncate">
@@ -321,14 +330,14 @@ const Orders = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
+                      <span className={`px-2.5 py-1 text-xs rounded-full font-bold uppercase tracking-wider ${
                         isProductOnly ? 'bg-green-100 text-green-800' :
-                        order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        order.status === 'completed' ? 'bg-green-600 text-white shadow-sm' :
                         order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
                         order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
-                        {isProductOnly ? 'Order Placed' : order.status}
+                        {isProductOnly ? 'Order Placed' : order.status === 'completed' ? 'Done' : order.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

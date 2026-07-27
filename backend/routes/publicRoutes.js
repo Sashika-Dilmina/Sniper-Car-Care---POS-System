@@ -22,6 +22,8 @@ router.post('/orders', publicOrderController.createOrder);
 router.get('/order/:id', publicOrderController.getOrder);
 router.get('/orders/:id', publicOrderController.getOrder);
 router.post('/orders/confirm', publicOrderController.confirmOrder);
+router.patch('/orders/:id/note', publicOrderController.updateOrderNote);
+router.put('/orders/:id/note', publicOrderController.updateOrderNote);
 
 // Public payment routes
 router.post('/payments/create-intent', publicOrderController.createPaymentIntent);
