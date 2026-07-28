@@ -151,6 +151,28 @@ const processManualPayment = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
+    // Safety check: If order is already fully paid and total payments cover order total, return early
+    const [existingOrder] = await connection.query(
+      'SELECT total, payment_status FROM orders WHERE id = ?',
+      [order_id]
+    );
+    if (existingOrder.length > 0 && existingOrder[0].payment_status === 'paid' && method !== 'free') {
+      const [existingPayments] = await connection.query(
+        'SELECT SUM(amount) as total_paid FROM payments WHERE order_id = ? AND status = "completed"',
+        [order_id]
+      );
+      const totalPaid = parseFloat(existingPayments[0].total_paid || 0);
+      const orderTotal = parseFloat(existingOrder[0].total || 0);
+      if (totalPaid >= orderTotal && orderTotal > 0) {
+        await connection.rollback();
+        connection.release();
+        return res.json({
+          message: 'Order is already fully paid',
+          deduplicated: true
+        });
+      }
+    }
+
     const discountVal = parseFloat(discount || 0);
     if (discountVal > 0) {
       const [orderRows] = await connection.query(
