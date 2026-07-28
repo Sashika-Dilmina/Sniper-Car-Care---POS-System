@@ -75,12 +75,13 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   }
 
   // Calculate totals for each payment method
-  const cardPayments = paymentBreakdown.find(item => item.method === 'card')?.total_amount || 0;
-  const cashPayments = paymentBreakdown.find(item => item.method === 'cash')?.total_amount || 0;
-  const creditPayments = paymentBreakdown.find(item => item.method === 'credit')?.total_amount || 0;
+  const cardPayments = parseFloat(paymentBreakdown.find(item => item.method === 'card')?.total_amount || 0);
+  const cashPayments = parseFloat(paymentBreakdown.find(item => item.method === 'cash')?.total_amount || 0);
+  const creditPayments = parseFloat(paymentBreakdown.find(item => item.method === 'credit')?.total_amount || 0);
+  const tapPayments = parseFloat(paymentBreakdown.find(item => item.method === 'tap')?.total_amount || 0);
   
-  // Total profit = sum of all completed payments (card + cash + credit)
-  const totalProfit = cardPayments + cashPayments + creditPayments;
+  // Total profit = sum of all completed payments (card + cash + credit + tap)
+  const totalProfit = cardPayments + cashPayments + creditPayments + tapPayments;
 
   // Orders by vehicle type
   let ordersByVehicleType;

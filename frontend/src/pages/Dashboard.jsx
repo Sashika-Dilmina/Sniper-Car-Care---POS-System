@@ -381,7 +381,7 @@ const Dashboard = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Card Payments</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  AED {(summary.total_card_payments || 0).toLocaleString()}
+                  AED {(summary.total_card_payments || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -390,7 +390,7 @@ const Dashboard = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Cash Payments</p>
                 <p className="text-2xl font-bold text-green-600">
-                  AED {(summary.total_cash_payments || 0).toLocaleString()}
+                  AED {(summary.total_cash_payments || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -399,7 +399,7 @@ const Dashboard = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Profit</p>
                 <p className="text-2xl font-bold text-gray-800">
-                  AED {(summary.total_profit || 0).toLocaleString()}
+                  AED {(summary.total_profit || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
