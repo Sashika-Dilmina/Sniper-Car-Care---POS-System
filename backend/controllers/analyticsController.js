@@ -80,8 +80,38 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   const creditPayments = parseFloat(paymentBreakdown.find(item => item.method === 'credit')?.total_amount || 0);
   const tapPayments = parseFloat(paymentBreakdown.find(item => item.method === 'tap')?.total_amount || 0);
   
-  // Total profit = sum of all completed payments (card + cash + credit + tap)
-  const totalProfit = cardPayments + cashPayments + creditPayments + tapPayments;
+  const netSales = cardPayments + cashPayments + creditPayments + tapPayments;
+
+  // Calculate Cost of Goods / Services for date range
+  let totalCost = 0;
+  try {
+    const [itemsCostResult] = await pool.query(
+      `SELECT COALESCE(SUM(oi.quantity * COALESCE(p.purchase_price, 0)), 0) as total
+       FROM order_items oi
+       JOIN products p ON oi.product_id = p.id
+       JOIN orders o ON oi.order_id = o.id
+       WHERE o.status != 'cancelled' AND ${dateFilter.replace(/created_at/g, 'o.created_at')}`
+    );
+    const itemsCost = parseFloat(itemsCostResult[0]?.total || 0);
+
+    const [servicesCostResult] = await pool.query(
+      `SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total
+       FROM services s
+       JOIN orders o ON s.order_id = o.id
+       JOIN products p ON s.service_name = p.name
+       WHERE o.status != 'cancelled' 
+         AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id)
+         AND ${dateFilter.replace(/created_at/g, 'o.created_at')}`
+    );
+    const servicesCost = parseFloat(servicesCostResult[0]?.total || 0);
+
+    totalCost = itemsCost + servicesCost;
+  } catch (err) {
+    console.error('Cost calculation error on dashboard:', err);
+  }
+
+  // Total profit = Net Sales - Cost of Goods/Services (Matches Business Summary Report P&L)
+  const totalProfit = netSales - totalCost;
 
   // Orders by vehicle type
   let ordersByVehicleType;
