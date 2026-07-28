@@ -211,7 +211,7 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
         SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as date, COALESCE(SUM(total), 0) as sales
         FROM orders
         WHERE ${dateFilter} AND payment_status IN ('paid', 'free') AND status != 'cancelled'
-        GROUP BY DATE(created_at)
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
         ORDER BY date ASC
       `),
       // 14. Category revenue
