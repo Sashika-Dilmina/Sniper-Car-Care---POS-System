@@ -668,8 +668,7 @@ const Dashboard = () => {
               <thead>
                 <tr className="border-b">
                   <th className="text-left p-2">Order ID</th>
-                  <th className="text-left p-2">Customer</th>
-                  <th className="text-left p-2">Vehicle Plate</th>
+                  <th className="text-left p-2">Number Plate</th>
                   <th className="text-left p-2">Items</th>
                   <th className="text-right p-2">Total</th>
                   <th className="text-left p-2">Status</th>
@@ -693,8 +692,7 @@ const Dashboard = () => {
                             </span>
                           )}
                         </td>
-                        <td className="p-2">{order.customer_name || 'Walk-in'}</td>
-                        <td className="p-2 font-mono notranslate" translate="no">{order.vehicle_plate || 'N/A'}</td>
+                        <td className="p-2 font-bold font-mono notranslate text-gray-900" translate="no">{order.vehicle_plate || 'N/A'}</td>
                         <td className="p-2">
                           {order.items && order.items.length > 0 ? (
                             <div className="flex flex-col gap-1 max-w-xs truncate">

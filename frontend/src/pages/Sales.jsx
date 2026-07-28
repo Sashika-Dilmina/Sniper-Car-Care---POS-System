@@ -1281,8 +1281,7 @@ const Sales = () => {
                 <thead className="bg-gray-50 border-b border-gray-100 print:bg-gray-100">
                   <tr>
                     <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Sale ID</th>
-                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Customer</th>
-                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Vehicle / Plate</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Number Plate</th>
                     <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Source</th>
                     <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Status</th>
                     <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Payment</th>
@@ -1292,7 +1291,7 @@ const Sales = () => {
                 <tbody className="divide-y divide-gray-100">
                   {loadingLedger ? (
                     <tr>
-                      <td colSpan="7" className="px-6 py-12 text-center text-gray-500 no-print">Loading ledger...</td>
+                      <td colSpan="6" className="px-6 py-12 text-center text-gray-500 no-print">Loading ledger...</td>
                     </tr>
                   ) : filteredLedgerOrders.length > 0 ? (
                     filteredLedgerOrders.map((order) => {
@@ -1302,13 +1301,7 @@ const Sales = () => {
                           <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-700">
                             #{order.id}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="font-bold text-gray-800">{order.customer_name || 'Walk-in'}</div>
-                            {order.customer_phone && (
-                              <div className="text-xs text-gray-500 print:text-gray-600 mt-0.5">{order.customer_phone}</div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700">
+                          <td className="px-6 py-4 whitespace-nowrap font-mono font-bold text-sm text-gray-900 notranslate" translate="no">
                             {order.vehicle_plate || 'N/A'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">

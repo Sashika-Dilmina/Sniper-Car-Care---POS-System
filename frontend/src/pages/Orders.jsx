@@ -231,7 +231,7 @@ const Orders = () => {
           <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Number Plate</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items / Products</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service Time</th>
@@ -280,7 +280,7 @@ const Orders = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col gap-1">
-                        <span className="font-semibold text-gray-900">{order.customer_name || 'Walk-in'}</span>
+                        <span className="font-bold font-mono text-gray-900 notranslate" translate="no">{order.vehicle_plate || 'N/A'}</span>
                         {order.notes && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md max-w-[220px] truncate" title={order.notes}>
                             📝 Note: {order.notes}
