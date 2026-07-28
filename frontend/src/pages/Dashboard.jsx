@@ -218,17 +218,21 @@ const Dashboard = () => {
     }
   };
 
+  const currentFetchIdRef = useRef(0);
+
   const fetchAnalytics = async (silent = false, start = startDate, end = endDate) => {
+    const requestId = ++currentFetchIdRef.current;
     if (!silent) setLoading(true);
     try {
       const response = await axios.get(`/api/analytics/dashboard?start_date=${start}&end_date=${end}`);
-      console.log('Analytics response:', response.data);
+      if (requestId !== currentFetchIdRef.current) return;
       if (response.data) {
         setAnalytics(response.data);
       } else {
         if (!silent) toast.error('No analytics data received');
       }
     } catch (error) {
+      if (requestId !== currentFetchIdRef.current) return;
       console.error('Analytics error:', error);
       if (!silent) {
         if (error.response?.status === 401) {
@@ -239,7 +243,6 @@ const Dashboard = () => {
           toast.error(error.response?.data?.message || 'Failed to load analytics');
         }
       }
-      // Set default empty data structure so page still renders
       setAnalytics({
         summary: { total_card_payments: 0, total_cash_payments: 0, total_profit: 0, four_wheel_orders: 0, saloon_orders: 0, completed_services: 0, total_customers: 0, pending_amount: 0, pending_count: 0 },
         top_customers: [],
@@ -250,7 +253,9 @@ const Dashboard = () => {
         recent_feedback: []
       });
     } finally {
-      if (!silent) setLoading(false);
+      if (requestId === currentFetchIdRef.current) {
+        if (!silent) setLoading(false);
+      }
     }
   };
 

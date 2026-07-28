@@ -1,8 +1,6 @@
--- Performance Optimization Indexes
-CREATE INDEX idx_orders_created_at ON orders(created_at);
-CREATE INDEX idx_orders_status_created ON orders(status, created_at);
-CREATE INDEX idx_payments_created_at ON payments(created_at);
-CREATE INDEX idx_payments_method_status ON payments(method, status);
-CREATE INDEX idx_anpr_logs_created_at ON anpr_logs(created_at);
-CREATE INDEX idx_anpr_logs_plate_created ON anpr_logs(plate_number, created_at);
-CREATE INDEX idx_services_created_at ON services(created_at);
+-- Performance Optimization Indexes for Sniper POS
+ALTER TABLE orders ADD INDEX idx_orders_created_status (created_at, status, payment_status);
+ALTER TABLE payments ADD INDEX idx_payments_created_status_method (created_at, status, method);
+ALTER TABLE order_items ADD INDEX idx_order_items_order_product (order_id, product_id);
+ALTER TABLE services ADD INDEX idx_services_order_status_created (order_id, status, created_at);
+ALTER TABLE customer_credits ADD INDEX idx_customer_credits_order (order_id);
