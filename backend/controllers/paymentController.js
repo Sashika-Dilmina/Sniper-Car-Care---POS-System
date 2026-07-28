@@ -60,7 +60,7 @@ const confirmPayment = asyncHandler(async (req, res) => {
 
         // Update order payment status
         const [orders] = await connection.query(
-          'SELECT total, vip_booking_id FROM orders WHERE id = ?',
+          'SELECT total, status, vip_booking_id FROM orders WHERE id = ?',
           [order_id]
         );
 
@@ -79,8 +79,8 @@ const confirmPayment = asyncHandler(async (req, res) => {
             [newPaymentStatus, order_id]
           );
 
-          // If payment status becomes "paid", automatically start VIP service if it's a VIP booking
-          if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined) {
+          // If payment status becomes "paid", automatically start VIP service if it's a VIP booking (only if order is not completed)
+          if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined && orders[0].status !== 'completed') {
             await connection.query(
               `UPDATE orders 
                SET status = 'processing', 
@@ -222,7 +222,7 @@ const processManualPayment = asyncHandler(async (req, res) => {
 
     // Update order payment status
     const [orders] = await connection.query(
-      'SELECT total, vip_booking_id FROM orders WHERE id = ?',
+      'SELECT total, status, vip_booking_id FROM orders WHERE id = ?',
       [order_id]
     );
 
@@ -242,8 +242,8 @@ const processManualPayment = asyncHandler(async (req, res) => {
         [newPaymentStatus, order_id]
       );
 
-      // If payment status becomes "paid", automatically start VIP service if it's a VIP booking
-      if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined) {
+      // If payment status becomes "paid", automatically start VIP service if it's a VIP booking (only if order is not completed)
+      if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined && orders[0].status !== 'completed') {
         await connection.query(
           `UPDATE orders 
            SET status = 'processing', 

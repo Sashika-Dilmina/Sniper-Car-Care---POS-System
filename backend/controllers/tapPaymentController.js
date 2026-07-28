@@ -100,23 +100,25 @@ const handleTapCallback = asyncHandler(async (req, res) => {
           [order_id, amount, method, 'completed', tap_id]
         );
 
-        // 4. Determine items and status (Services vs Products)
-        const [items] = await connection.query(
-          'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
-          [order_id]
-        );
-        const hasService = items.length === 0 || items.some(item => item.category === 'Services');
-        const targetStatus = hasService ? 'processing' : 'completed';
-        const serviceCompletedAt = hasService ? null : new Date();
-
-        // 5. Update order details
+        // 4. Fetch current order details
         const [orders] = await connection.query(
-          'SELECT total, vip_booking_id, customer_id, source FROM orders WHERE id = ?',
+          'SELECT status, service_completed_at, total, vip_booking_id, customer_id, source FROM orders WHERE id = ?',
           [order_id]
         );
 
         if (orders.length > 0) {
           const order = orders[0];
+          const isAlreadyCompleted = order.status === 'completed';
+
+          // 5. Determine items and status (Services vs Products)
+          const [items] = await connection.query(
+            'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
+            [order_id]
+          );
+          const hasService = items.length === 0 || items.some(item => item.category === 'Services');
+          const targetStatus = isAlreadyCompleted ? 'completed' : (hasService ? 'processing' : 'completed');
+          const serviceCompletedAt = targetStatus === 'completed' ? (order.service_completed_at || new Date()) : null;
+
           const orderTotal = parseFloat(order.total);
 
           // Calculate total paid
@@ -128,12 +130,12 @@ const handleTapCallback = asyncHandler(async (req, res) => {
           const newPaymentStatus = totalPaid >= orderTotal ? 'paid' : 'partial';
 
           await connection.query(
-            'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+            'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = COALESCE(?, service_completed_at) WHERE id = ?',
             [newPaymentStatus, targetStatus, serviceCompletedAt, order_id]
           );
 
-          // Update service status if order has services
-          if (hasService) {
+          // Update service status if order has services and is not already completed
+          if (hasService && !isAlreadyCompleted) {
             await connection.query(
               'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
               [order_id]
@@ -147,7 +149,7 @@ const handleTapCallback = asyncHandler(async (req, res) => {
               [newPaymentStatus === 'paid' ? 'confirmed' : 'pending', order.vip_booking_id]
             );
 
-            if (newPaymentStatus === 'paid') {
+            if (newPaymentStatus === 'paid' && !isAlreadyCompleted) {
               await connection.query(
                 `UPDATE orders 
                  SET status = 'processing', 

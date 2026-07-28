@@ -381,23 +381,27 @@ const confirmOrder = asyncHandler(async (req, res) => {
     const isPendingPayment = payment_method === 'cash' || payment_method === 'card';
     const paymentStatus = isPendingPayment ? 'pending' : 'paid';
 
+    // Fetch existing order status
+    const [existingOrders] = await connection.query('SELECT status, service_completed_at FROM orders WHERE id = ?', [order_id]);
+    const isAlreadyCompleted = existingOrders.length > 0 && existingOrders[0].status === 'completed';
+
     // Check if order contains only products
     const [items] = await connection.query(
       'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
       [order_id]
     );
     const hasService = items.length === 0 || items.some(item => item.category === 'Services');
-    const targetStatus = hasService ? 'processing' : 'completed';
-    const serviceCompletedAt = hasService ? null : new Date();
+    const targetStatus = isAlreadyCompleted ? 'completed' : (hasService ? 'processing' : 'completed');
+    const serviceCompletedAt = targetStatus === 'completed' ? (existingOrders[0]?.service_completed_at || new Date()) : null;
 
     // Update order status and set service_started_at / service_completed_at
     await connection.query(
-      'UPDATE orders SET status = ?, payment_status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+      'UPDATE orders SET status = ?, payment_status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = COALESCE(?, service_completed_at) WHERE id = ?',
       [targetStatus, paymentStatus, serviceCompletedAt, order_id]
     );
 
-    // Also update associated services to 'in_progress' if the order has service items
-    if (hasService) {
+    // Also update associated services to 'in_progress' if the order has service items and is not already completed
+    if (hasService && !isAlreadyCompleted) {
       await connection.query(
         'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
         [order_id]
@@ -488,23 +492,27 @@ const confirmPayment = asyncHandler(async (req, res) => {
           [order_id, amount, method || 'card', 'completed', payment_intent_id]
         );
 
+        // Fetch existing order status
+        const [existingOrders] = await connection.query('SELECT status, service_completed_at FROM orders WHERE id = ?', [order_id]);
+        const isAlreadyCompleted = existingOrders.length > 0 && existingOrders[0].status === 'completed';
+
         // Check if order contains only products
         const [items] = await connection.query(
           'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
           [order_id]
         );
         const hasService = items.length === 0 || items.some(item => item.category === 'Services');
-        const targetStatus = hasService ? 'processing' : 'completed';
-        const serviceCompletedAt = hasService ? null : new Date();
+        const targetStatus = isAlreadyCompleted ? 'completed' : (hasService ? 'processing' : 'completed');
+        const serviceCompletedAt = targetStatus === 'completed' ? (existingOrders[0]?.service_completed_at || new Date()) : null;
 
         // Update order payment status and set status
         await connection.query(
-          'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+          'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = COALESCE(?, service_completed_at) WHERE id = ?',
           ['paid', targetStatus, serviceCompletedAt, order_id]
         );
 
-        // Also update associated services to 'in_progress' if the order has service items
-        if (hasService) {
+        // Also update associated services to 'in_progress' if the order has service items and is not already completed
+        if (hasService && !isAlreadyCompleted) {
           await connection.query(
             'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
             [order_id]

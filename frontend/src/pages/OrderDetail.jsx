@@ -614,23 +614,6 @@ const OrderDetail = () => {
                 >
                   <span>💵</span> Record Manual Payment
                 </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      setLoadingTap(true);
-                      const response = await axios.post(`/api/orders/${order.id}/send-tap-link`);
-                      toast.success(response.data.message || 'Tap Payment link sent via SMS!');
-                    } catch (error) {
-                      toast.error(error.response?.data?.message || 'Failed to send Tap Payment link via Reson8');
-                    } finally {
-                      setLoadingTap(false);
-                    }
-                  }}
-                  disabled={loadingTap}
-                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-full hover:from-blue-700 hover:to-indigo-700 transition flex items-center gap-2 shadow-md active:scale-95 disabled:opacity-50"
-                >
-                  <span>📲</span> {loadingTap ? 'Sending SMS...' : 'Send Tap Link via Reson8'}
-                </button>
               </div>
             )}
           </div>
