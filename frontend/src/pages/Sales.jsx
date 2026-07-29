@@ -511,8 +511,38 @@ const Sales = () => {
     const customer = (order.customer_name || 'Walk-in').toLowerCase();
     const plate = (order.vehicle_plate || '').toLowerCase();
     const phone = (order.customer_phone || '').toLowerCase();
-    const query = ledgerSearchQuery.toLowerCase();
-    return customer.includes(query) || plate.includes(query) || phone.includes(query);
+    const query = ledgerSearchQuery.toLowerCase().trim();
+    
+    const matchesSearch = !query || customer.includes(query) || plate.includes(query) || phone.includes(query);
+    if (!matchesSearch) return false;
+
+    if (ledgerPaymentFilter && ledgerPaymentFilter !== 'all') {
+      const pmStr = String(order.payment_methods || order.payment_method || order.method || '').toLowerCase();
+      const pStatus = String(order.payment_status || '').toLowerCase();
+      const cStatus = String(order.credit_status || '').toLowerCase();
+
+      if (ledgerPaymentFilter === 'cash') {
+        const matches = pmStr.includes('cash') || pStatus === 'cash';
+        if (!matches) return false;
+      } else if (ledgerPaymentFilter === 'card') {
+        const matches = pmStr.includes('card') || pmStr.includes('mastercard') || pmStr.includes('visa') || pStatus === 'card';
+        if (!matches) return false;
+      } else if (ledgerPaymentFilter === 'tap') {
+        const matches = pmStr.includes('tap') || pmStr.includes('apple_pay') || pmStr.includes('samsung_pay');
+        if (!matches) return false;
+      } else if (ledgerPaymentFilter === 'bank_transfer') {
+        const matches = pmStr.includes('bank') || pmStr.includes('transfer');
+        if (!matches) return false;
+      } else if (ledgerPaymentFilter === 'credit') {
+        const matches = cStatus === 'unpaid' || cStatus === 'partially_paid' || pmStr.includes('credit') || pStatus === 'credit';
+        if (!matches) return false;
+      } else if (ledgerPaymentFilter === 'free') {
+        const matches = pStatus === 'free' || pmStr.includes('free');
+        if (!matches) return false;
+      }
+    }
+
+    return true;
   });
 
   // Ledger stats (excluding cancelled orders)
@@ -1241,6 +1271,7 @@ const Sales = () => {
               <option value="card">Card</option>
               <option value="tap">Tap</option>
               <option value="bank_transfer">Bank Transfer</option>
+              <option value="credit">Credit / Unpaid</option>
             </select>
           </div>
 
