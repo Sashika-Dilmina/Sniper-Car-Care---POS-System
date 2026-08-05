@@ -233,10 +233,12 @@ const PaymentPage = () => {
                             </button>
                             <button
                                 onClick={() => setPaymentMethod('tap')}
-                                className={`flex flex-col items-center justify-center gap-1.5 p-3.5 rounded-xl border-2 transition ${paymentMethod === 'tap' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-800 bg-gray-950/40 hover:bg-gray-800'}`}
+                                className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border-2 transition ${paymentMethod === 'tap' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-800 bg-gray-950/40 hover:bg-gray-800'}`}
                             >
-                                <span className="text-2xl">📱</span>
-                                <span className="font-bold text-xs">Tap</span>
+                                <svg className="h-6 w-auto fill-current text-white" viewBox="0 0 100 42" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M14.618 14.86c-0.895 1.054-2.188 1.83-3.562 1.724-0.177-1.396 0.443-2.825 1.28-3.799 0.906-1.042 2.298-1.782 3.528-1.701 0.177 1.419-0.388 2.859-1.246 3.776zm1.189 2.001c-1.956-0.117-3.633 1.088-4.568 1.088-0.957 0-2.368-1.042-3.914-1.018-2.025 0.035-3.889 1.182-4.935 3.014-2.112 3.666-0.542 9.076 1.516 12.052 1.006 1.454 2.2 3.082 3.773 3.023 1.516-0.059 2.091-0.978 3.926-0.978 1.835 0 2.356 0.978 3.938 0.943 1.621-0.035 2.646-1.477 3.639-2.929 1.151-1.677 1.621-3.3 1.644-3.382-0.035-0.024-3.15-1.21-3.185-4.805-0.035-2.999 2.457-4.437 2.574-4.519-1.402-2.049-3.575-2.283-4.327-2.333l-0.082 0.023zM32.8 12.3h-4.3v18.4h3.1v-6.9h1.2c4.1 0 6.6-2.3 6.6-5.8 0-3.6-2.5-5.7-6.6-5.7zm-1.2 8.7h-1.9v-6h1.9c2.3 0 3.7 1.1 3.7 3 0 1.9-1.4 3-3.7 3zm17.9-3.2c-1.8 0-3.1 0.9-3.7 2.1l-0.1-1.8h-2.8v12.6h3.1v-4.8c0-2.2 1.1-3.4 2.7-3.4 1.4 0 2.2 0.8 2.2 2.3v5.9h3.1v-6.5c0-3.9-1.9-6.4-4.5-6.4zm-14.7 0c-4 0-6.8 2.9-6.8 6.6 0 3.6 2.7 6.5 6.7 6.5 1.8 0 3.3-0.6 4.3-1.6l-1.3-1.8c-0.8 0.8-1.8 1.1-2.9 1.1-2.2 0-3.8-1.5-3.8-3.7h8.4c0.1-0.4 0.1-0.9 0.1-1.2 0-3.6-2.1-5.9-4.7-5.9zm-3.6 5.2c0.2-1.6 1.4-2.7 3.2-2.7 1.7 0 2.8 1.1 2.9 2.7h-6.1z"/>
+                                </svg>
+                                <span className="font-bold text-xs">Apple Pay</span>
                             </button>
                             <button
                                 onClick={() => setPaymentMethod('card')}
@@ -251,14 +253,21 @@ const PaymentPage = () => {
                         {paymentMethod === 'tap' && (
                             <div className="space-y-4 pt-2">
                                 <p className="text-xs text-gray-400 leading-relaxed text-center">
-                                    Express pay using Tap Payments. You will be redirected to Tap Payments' secure billing page.
+                                    Express pay using Apple Pay. You will be redirected to the secure billing page.
                                 </p>
                                 <button
                                     onClick={handleTapCheckout}
                                     disabled={loadingTap}
                                     className="w-full py-4 bg-white text-black font-black text-lg rounded-xl hover:bg-gray-100 transition flex items-center justify-center gap-2 disabled:opacity-50"
                                 >
-                                    {loadingTap ? 'Redirecting...' : <><span>📱</span> Pay with Tap Payments</>}
+                                    {loadingTap ? 'Redirecting...' : (
+                                        <>
+                                            <svg className="h-6 w-auto fill-current" viewBox="0 0 100 42" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M14.618 14.86c-0.895 1.054-2.188 1.83-3.562 1.724-0.177-1.396 0.443-2.825 1.28-3.799 0.906-1.042 2.298-1.782 3.528-1.701 0.177 1.419-0.388 2.859-1.246 3.776zm1.189 2.001c-1.956-0.117-3.633 1.088-4.568 1.088-0.957 0-2.368-1.042-3.914-1.018-2.025 0.035-3.889 1.182-4.935 3.014-2.112 3.666-0.542 9.076 1.516 12.052 1.006 1.454 2.2 3.082 3.773 3.023 1.516-0.059 2.091-0.978 3.926-0.978 1.835 0 2.356 0.978 3.938 0.943 1.621-0.035 2.646-1.477 3.639-2.929 1.151-1.677 1.621-3.3 1.644-3.382-0.035-0.024-3.15-1.21-3.185-4.805-0.035-2.999 2.457-4.437 2.574-4.519-1.402-2.049-3.575-2.283-4.327-2.333l-0.082 0.023zM32.8 12.3h-4.3v18.4h3.1v-6.9h1.2c4.1 0 6.6-2.3 6.6-5.8 0-3.6-2.5-5.7-6.6-5.7zm-1.2 8.7h-1.9v-6h1.9c2.3 0 3.7 1.1 3.7 3 0 1.9-1.4 3-3.7 3zm17.9-3.2c-1.8 0-3.1 0.9-3.7 2.1l-0.1-1.8h-2.8v12.6h3.1v-4.8c0-2.2 1.1-3.4 2.7-3.4 1.4 0 2.2 0.8 2.2 2.3v5.9h3.1v-6.5c0-3.9-1.9-6.4-4.5-6.4zm-14.7 0c-4 0-6.8 2.9-6.8 6.6 0 3.6 2.7 6.5 6.7 6.5 1.8 0 3.3-0.6 4.3-1.6l-1.3-1.8c-0.8 0.8-1.8 1.1-2.9 1.1-2.2 0-3.8-1.5-3.8-3.7h8.4c0.1-0.4 0.1-0.9 0.1-1.2 0-3.6-2.1-5.9-4.7-5.9zm-3.6 5.2c0.2-1.6 1.4-2.7 3.2-2.7 1.7 0 2.8 1.1 2.9 2.7h-6.1z"/>
+                                            </svg>
+                                            <span>Pay with Apple Pay</span>
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         )}

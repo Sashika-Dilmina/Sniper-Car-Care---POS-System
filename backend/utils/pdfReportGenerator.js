@@ -590,6 +590,158 @@ function generatePDFReport(tab, data, params, outputPath) {
   });
 }
 
+/**
+ * Generates an Invoice PDF for an order.
+ * @param {object} order - The order object with items, customer details, and totals
+ * @param {string} outputPath - Path to write the PDF file
+ */
+function generateInvoicePDF(order, outputPath) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 40, size: 'A4' });
+      const writeStream = fs.createWriteStream(outputPath);
+      doc.pipe(writeStream);
+
+      const primaryColor = '#1e3a8a'; // Deep blue
+      const secondaryColor = '#eab308'; // Amber/Gold
+      const darkColor = '#1f2937'; // Dark charcoal
+      const lightBg = '#f9fafb'; // Light gray background
+      const white = '#ffffff';
+
+      // Header Banner
+      doc.rect(0, 0, 595.28, 85).fill(darkColor);
+
+      doc.fillColor(secondaryColor)
+         .fontSize(22)
+         .font('Helvetica-Bold')
+         .text('SNIPER CAR CARE', 40, 20);
+
+      doc.fillColor(white)
+         .fontSize(10)
+         .font('Helvetica')
+         .text('AUTO DETAILING & CAR CARE CENTER', 40, 48);
+
+      doc.fillColor(white)
+         .fontSize(18)
+         .font('Helvetica-Bold')
+         .text('INVOICE / RECEIPT', 380, 25, { align: 'right', width: 175 });
+
+      doc.fillColor(secondaryColor)
+         .fontSize(12)
+         .font('Helvetica-Bold')
+         .text(`#${order.id}`, 380, 48, { align: 'right', width: 175 });
+
+      let currentY = 105;
+
+      // Meta Info Box (Customer & Vehicle Info + Order Info)
+      doc.rect(40, currentY, 515, 95).fill(lightBg).stroke('#e5e7eb');
+
+      // Left Column: Customer & Vehicle Details
+      doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text('CUSTOMER & VEHICLE DETAILS', 55, currentY + 12);
+      doc.fillColor(darkColor).fontSize(9).font('Helvetica');
+      doc.text(`Customer Name: ${order.customer_name || 'Walk-in Customer'}`, 55, currentY + 30);
+      doc.text(`Phone: ${order.customer_phone || 'N/A'}`, 55, currentY + 45);
+      doc.text(`Plate Number: ${order.vehicle_plate || 'N/A'}`, 55, currentY + 60);
+      doc.text(`Vehicle Type: ${order.vehicle_type || 'N/A'}`, 55, currentY + 75);
+
+      // Right Column: Invoice Info
+      doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text('ORDER INFORMATION', 320, currentY + 12);
+      doc.fillColor(darkColor).fontSize(9).font('Helvetica');
+      const orderDate = order.created_at ? new Date(order.created_at).toLocaleString() : new Date().toLocaleString();
+      doc.text(`Date: ${orderDate}`, 320, currentY + 30);
+      doc.text(`Order Status: ${(order.status || 'completed').toUpperCase()}`, 320, currentY + 45);
+      doc.text(`Payment Status: ${(order.payment_status || 'paid').toUpperCase()}`, 320, currentY + 60);
+      doc.text(`Payment Method: ${(order.payment_method || order.method || 'Cash').toUpperCase()}`, 320, currentY + 75);
+
+      currentY += 115;
+
+      // Items Table Header
+      doc.rect(40, currentY, 515, 25).fill(primaryColor);
+      doc.fillColor(white).fontSize(10).font('Helvetica-Bold');
+      doc.text('ITEM / SERVICE', 50, currentY + 7);
+      doc.text('CATEGORY', 270, currentY + 7);
+      doc.text('QTY', 370, currentY + 7, { width: 40, align: 'center' });
+      doc.text('PRICE (AED)', 420, currentY + 7, { width: 60, align: 'right' });
+      doc.text('TOTAL (AED)', 485, currentY + 7, { width: 60, align: 'right' });
+
+      currentY += 25;
+
+      // Items Rows
+      const items = order.items || [];
+      if (items.length === 0) {
+        doc.rect(40, currentY, 515, 25).fill(white).stroke('#e5e7eb');
+        doc.fillColor(darkColor).fontSize(9).font('Helvetica').text('No item details recorded', 50, currentY + 8);
+        currentY += 25;
+      } else {
+        items.forEach((item, index) => {
+          const rowBg = index % 2 === 0 ? white : lightBg;
+          doc.rect(40, currentY, 515, 24).fill(rowBg).stroke('#f3f4f6');
+
+          const qty = item.quantity || 1;
+          const unitPrice = parseFloat(item.price || item.unit_price || 0);
+          const lineTotal = unitPrice * qty;
+
+          doc.fillColor(darkColor).fontSize(9).font('Helvetica');
+          doc.text(item.product_name || item.name || 'Service', 50, currentY + 7, { width: 210, ellipsis: true });
+          doc.text(item.category || 'Service', 270, currentY + 7, { width: 90, ellipsis: true });
+          doc.text(String(qty), 370, currentY + 7, { width: 40, align: 'center' });
+          doc.text(unitPrice.toFixed(2), 420, currentY + 7, { width: 60, align: 'right' });
+          doc.font('Helvetica-Bold').text(lineTotal.toFixed(2), 485, currentY + 7, { width: 60, align: 'right' });
+
+          currentY += 24;
+        });
+      }
+
+      currentY += 15;
+
+      // Summary Section
+      const itemsTotal = items.reduce((acc, i) => acc + (parseFloat(i.price || i.unit_price || 0) * (i.quantity || 1)), 0);
+      const discount = parseFloat(order.discount || 0);
+      const grandTotal = parseFloat(order.total !== undefined && order.total !== null ? order.total : itemsTotal - discount);
+      const subtotal = grandTotal + discount;
+
+      // Summary Box on Right Side
+      doc.rect(330, currentY, 225, 75).fill(lightBg).stroke('#d1d5db');
+      let summaryY = currentY + 10;
+
+      doc.fillColor(darkColor).fontSize(9).font('Helvetica');
+      doc.text('Subtotal:', 345, summaryY);
+      doc.text(`AED ${subtotal.toFixed(2)}`, 450, summaryY, { width: 90, align: 'right' });
+      summaryY += 16;
+
+      if (discount > 0) {
+        doc.fillColor('#dc2626').text('Discount:', 345, summaryY);
+        doc.text(`- AED ${discount.toFixed(2)}`, 450, summaryY, { width: 90, align: 'right' });
+        summaryY += 16;
+      }
+
+      doc.font('Helvetica-Bold').fontSize(11).fillColor(primaryColor);
+      doc.text('Grand Total:', 345, summaryY);
+      doc.text(`AED ${grandTotal.toFixed(2)}`, 450, summaryY, { width: 90, align: 'right' });
+
+      // Notes if available
+      if (order.notes) {
+        doc.fillColor(darkColor).fontSize(9).font('Helvetica-Bold').text('Notes:', 40, currentY + 10);
+        doc.font('Helvetica-Oblique').fontSize(8).fillColor('#4b5563').text(String(order.notes), 40, currentY + 24, { width: 270 });
+      }
+
+      currentY += 90;
+
+      // Footer Banner
+      doc.rect(40, currentY, 515, 30).fill('#1f2937');
+      doc.fillColor(secondaryColor).fontSize(10).font('Helvetica-Bold')
+         .text('Thank you for choosing Sniper Car Care!', 40, currentY + 10, { align: 'center', width: 515 });
+
+      doc.end();
+      writeStream.on('finish', () => resolve(outputPath));
+      writeStream.on('error', err => reject(err));
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 module.exports = {
-  generatePDFReport
+  generatePDFReport,
+  generateInvoicePDF
 };

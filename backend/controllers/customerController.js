@@ -13,21 +13,17 @@ const getCustomers = asyncHandler(async (req, res) => {
            COALESCE(SUM(o.total), 0) as total_spent,
            COALESCE(l.points, 0) as loyalty_points,
            COALESCE(l.wash_stamps, 0) as wash_stamps,
-           MAX(lp.method) as last_payment_method
+           (
+             SELECT p2.method 
+             FROM payments p2 
+             JOIN orders o2 ON p2.order_id = o2.id 
+             WHERE o2.customer_id = c.id 
+             ORDER BY p2.id DESC 
+             LIMIT 1
+           ) as last_payment_method
     FROM customers c
     LEFT JOIN orders o ON c.id = o.customer_id
     LEFT JOIN loyalty l ON c.id = l.customer_id
-    LEFT JOIN (
-      SELECT o2.customer_id, p2.method
-      FROM payments p2
-      JOIN orders o2 ON p2.order_id = o2.id
-      JOIN (
-        SELECT o3.customer_id, MAX(p3.id) as max_pay_id
-        FROM payments p3
-        JOIN orders o3 ON p3.order_id = o3.id
-        GROUP BY o3.customer_id
-      ) latest ON latest.max_pay_id = p2.id
-    ) lp ON c.id = lp.customer_id
     WHERE 1=1
   `;
   const params = [];

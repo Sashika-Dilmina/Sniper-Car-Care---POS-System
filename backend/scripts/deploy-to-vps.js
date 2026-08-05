@@ -71,9 +71,12 @@ conn.on('ready', async () => {
     const pullRes = await executeCommand(conn, `cd ${repoPath} && git fetch --all && git reset --hard origin/ravix`);
     if (pullRes.code !== 0) throw new Error('Git pull failed');
 
-    // 2. Install backend dependencies, run migrations, and restart Node app
-    console.log('\n⚙️ Updating backend dependencies, running migrations & restarting...');
-    const backendRes = await executeCommand(conn, `cd ${repoPath} && mysql -u root -p123456 sniper_car_care < database/migration_fix_ghost_order_477.sql || true && mysql -u root -p123456 sniper_car_care < database/migration_performance_indexes.sql || true && cd backend && npm install && pm2 restart all`);
+    // 2. Install backend dependencies, run performance migrations, update Nginx & restart Node app
+    console.log('\n⚙️ Updating backend dependencies, running DB performance indexes & updating server settings...');
+    const backendRes = await executeCommand(
+      conn, 
+      `cd ${repoPath} && mysql -u root -p123456 sniper_car_care < database/migration_performance_indexes.sql || true && mysql -u root -p123456 sniper_car_care < database/migration_performance_v3.sql || true && cp nginx-sites.conf /etc/nginx/sites-available/default && nginx -t && systemctl reload nginx || true && cd backend && npm install && pm2 restart all`
+    );
     if (backendRes.code !== 0) throw new Error('Backend update/restart failed');
 
     // 3. Build frontends locally

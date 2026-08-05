@@ -24,26 +24,26 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   if (start_date && end_date) {
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (dateRegex.test(start_date) && dateRegex.test(end_date)) {
-      dateFilter = `DATE(created_at) BETWEEN '${start_date}' AND '${end_date}'`;
+      dateFilter = `created_at >= '${start_date} 00:00:00' AND created_at <= '${end_date} 23:59:59'`;
     } else {
-      dateFilter = "DATE(created_at) = CURDATE()";
+      dateFilter = "created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY";
     }
   } else {
     switch (period) {
       case 'today':
-        dateFilter = 'DATE(created_at) = CURDATE()';
+        dateFilter = 'created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY';
         break;
       case 'week':
-        dateFilter = 'YEARWEEK(created_at) = YEARWEEK(CURDATE())';
+        dateFilter = 'created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)';
         break;
       case 'month':
-        dateFilter = 'YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())';
+        dateFilter = "created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
         break;
       case 'year':
-        dateFilter = 'YEAR(created_at) = YEAR(CURDATE())';
+        dateFilter = "created_at >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-01-01'), INTERVAL 1 YEAR)";
         break;
       default:
-        dateFilter = 'DATE(created_at) = CURDATE()';
+        dateFilter = 'created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY';
     }
   }
 

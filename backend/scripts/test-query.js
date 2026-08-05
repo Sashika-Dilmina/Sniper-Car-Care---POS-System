@@ -4,14 +4,14 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const conn = new Client();
 conn.on('ready', () => {
-  conn.exec('pm2 logs sniper-backend --lines 50 --nostream', (err, stream) => {
+  conn.exec(`curl -s "http://localhost:5000/api/analytics/dashboard?start_date=2026-07-28&end_date=2026-07-28"`, (err, stream) => {
     if (err) throw err;
     stream.on('close', () => {
       conn.end();
     }).on('data', (data) => {
-      console.log(data.toString());
+      console.log('STDOUT:\n' + data.toString());
     }).stderr.on('data', (data) => {
-      console.error(data.toString());
+      console.error('STDERR:\n' + data.toString());
     });
   });
 }).connect({

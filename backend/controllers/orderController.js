@@ -93,8 +93,8 @@ const getOrders = asyncHandler(async (req, res) => {
       query += ' AND o.created_at >= ? AND o.created_at <= ?';
       params.push(startTime, endTime);
     } else {
-      query += ' AND DATE(o.created_at) = ?';
-      params.push(date);
+      query += ' AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY';
+      params.push(date, date);
     }
   } else if (req.user && req.user.role === 'staff') {
     const [active] = await pool.query("SELECT DATE_FORMAT(opened_at, '%Y-%m-%d %H:%i:%s') as opened_at FROM cash_registers WHERE status = 'open' LIMIT 1");
@@ -102,7 +102,7 @@ const getOrders = asyncHandler(async (req, res) => {
       query += ' AND o.created_at >= ?';
       params.push(active[0].opened_at);
     } else {
-      query += ' AND DATE(o.created_at) = CURDATE()';
+      query += ' AND o.created_at >= CURDATE() AND o.created_at < CURDATE() + INTERVAL 1 DAY';
     }
   }
 
