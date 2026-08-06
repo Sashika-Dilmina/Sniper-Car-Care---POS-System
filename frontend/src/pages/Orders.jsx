@@ -90,6 +90,7 @@ const Orders = () => {
   const getCleanNote = (rawNotes) => {
     if (!rawNotes) return '';
     let cleaned = rawNotes.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim();
+    cleaned = cleaned.replace(/^Customer Note:\s*/i, '').trim();
     return cleaned;
   };
 

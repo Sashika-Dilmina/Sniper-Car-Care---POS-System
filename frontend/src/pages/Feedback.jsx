@@ -74,7 +74,7 @@ const Feedback = () => {
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center">
         <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Rating</label>
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Rating Filter</label>
           <select
             value={filterRating}
             onChange={(e) => setFilterRating(e.target.value)}
@@ -89,29 +89,12 @@ const Feedback = () => {
           </select>
         </div>
 
-        <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Status</label>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
-          >
-            <option value="">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </div>
-
-        {(filterRating || filterStatus) && (
+        {filterRating && (
           <button
-            onClick={() => {
-              setFilterRating('');
-              setFilterStatus('');
-            }}
+            onClick={() => setFilterRating('')}
             className="self-end px-3 py-2 text-xs font-bold text-gray-600 hover:text-gray-800 transition"
           >
-            Reset Filters
+            Reset Filter
           </button>
         )}
       </div>
@@ -123,15 +106,13 @@ const Feedback = () => {
       ) : feedbackList.length > 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[800px]">
+            <table className="w-full text-left border-collapse min-w-[700px]">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Customer</th>
                   <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Rating</th>
                   <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Comment</th>
                   <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Date</th>
-                  <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -155,39 +136,6 @@ const Feedback = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">
                       {new Date(fb.created_at).toLocaleDateString()} {new Date(fb.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
-                        fb.status === 'approved' ? 'bg-green-100 text-green-800 border border-green-200' :
-                        fb.status === 'rejected' ? 'bg-red-100 text-red-800 border border-red-200' :
-                        'bg-amber-100 text-amber-800 border border-amber-200'
-                      }`}>
-                        {fb.status || 'pending'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap space-x-2">
-                      {fb.status !== 'approved' && (
-                        <button
-                          onClick={() => handleStatusChange(fb.id, 'approved')}
-                          className="px-2.5 py-1 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-bold rounded transition"
-                        >
-                          Approve
-                        </button>
-                      )}
-                      {fb.status !== 'rejected' && (
-                        <button
-                          onClick={() => handleStatusChange(fb.id, 'rejected')}
-                          className="px-2.5 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-bold rounded transition"
-                        >
-                          Reject
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDelete(fb.id)}
-                        className="px-2.5 py-1 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-bold rounded transition"
-                      >
-                        Delete
-                      </button>
                     </td>
                   </tr>
                 ))}

@@ -52,6 +52,13 @@ const OrderDetail = () => {
     return `${hrs}h ${mins}m`;
   };
 
+  const getCleanNote = (rawNotes) => {
+    if (!rawNotes) return '';
+    let cleaned = rawNotes.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim();
+    cleaned = cleaned.replace(/^Customer Note:\s*/i, '').trim();
+    return cleaned;
+  };
+
   const fetchVipBooking = async (bookingId) => {
     try {
       const response = await axios.get(`/api/vip/bookings/${bookingId}`);
@@ -326,10 +333,10 @@ const OrderDetail = () => {
                 <p className="text-lg font-mono">{order.vehicle_plate}</p>
               </div>
             )}
-            {order.notes && order.notes.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim() && (
+            {getCleanNote(order.notes) && (
               <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-xs font-bold text-red-800 uppercase tracking-wider mb-0.5">📝 Customer Note</p>
-                <p className="text-sm text-red-900 font-semibold">{order.notes.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim()}</p>
+                <p className="text-xs font-bold text-red-800 uppercase tracking-wider mb-0.5">📝 CUSTOMER NOTE</p>
+                <p className="text-sm text-red-900 font-semibold">{getCleanNote(order.notes)}</p>
               </div>
             )}
             <div>
@@ -437,14 +444,6 @@ const OrderDetail = () => {
                   }`}>
                   {order.source === 'customer_website' ? '🌐 Customer Website' : '🖥️ POS System'}
                 </span>
-              </div>
-            )}
-            {order.notes && (
-              <div>
-                <p className="text-sm text-gray-600">Customer Notes</p>
-                <div className="mt-1 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-gray-700">{order.notes}</p>
-                </div>
               </div>
             )}
           </div>
