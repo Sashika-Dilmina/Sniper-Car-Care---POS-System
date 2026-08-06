@@ -158,17 +158,22 @@ const Products = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    const reason = window.prompt('Please enter the reason for deleting this product:');
-    if (reason === null) return; // Cancelled
-    if (reason.trim() === '') {
-      toast.error('Deletion cancelled. A reason is required.');
-      return;
+  const handleToggleActive = async (product) => {
+    try {
+      await axios.patch(`/api/products/${product.id}/toggle-active`);
+      toast.success(`Product ${product.is_active === 0 ? 'activated' : 'deactivated'}`);
+      fetchProducts();
+    } catch (error) {
+      toast.error('Failed to toggle active status');
     }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to permanently delete this product?')) return;
 
     try {
-      await axios.delete(`/api/products/${id}`, { data: { reason } });
-      toast.success('Product deleted successfully');
+      await axios.delete(`/api/products/${id}`);
+      toast.success('Product permanently deleted successfully');
       fetchProducts();
     } catch (error) {
       toast.error('Failed to delete product');
@@ -396,26 +401,31 @@ const Products = () => {
                       )}
                     </div>
                   </td>
-                  {user?.role === 'admin' && (
                     <td className="px-6 py-4 whitespace-nowrap space-x-2">
-                      {product.is_deleted !== 1 && (
-                        <>
-                          <button
-                            onClick={() => handleEdit(product)}
-                            className="text-primary-600 hover:underline"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(product.id)}
-                            className="text-red-600 hover:underline"
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
+                      <button
+                        onClick={() => handleToggleActive(product)}
+                        className={`text-xs font-semibold px-2 py-1 rounded transition ${
+                          product.is_active !== 0
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                        title={product.is_active !== 0 ? 'Visible on website (Click to hide)' : 'Hidden from website (Click to show)'}
+                      >
+                        {product.is_active !== 0 ? '👁️ Active' : '👁️‍🗨️ Inactive'}
+                      </button>
+                      <button
+                        onClick={() => handleEdit(product)}
+                        className="text-primary-600 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(product.id)}
+                        className="text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
                     </td>
-                  )}
                 </tr>
               ))
             ) : (

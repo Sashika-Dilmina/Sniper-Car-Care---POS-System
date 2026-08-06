@@ -53,15 +53,15 @@ const getProduct = asyncHandler(async (req, res) => {
 // @route   POST /api/products
 // @access  Private
 const createProduct = asyncHandler(async (req, res) => {
-  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price } = req.body;
+  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price, is_active } = req.body;
 
   if (!name || !category || !price || stock === undefined) {
     return res.status(400).json({ message: 'Please provide all required fields' });
   }
 
   const [result] = await pool.query(
-    'INSERT INTO products (name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [name, description || null, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00]
+    'INSERT INTO products (name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [name, description || null, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00, is_active !== undefined ? (is_active ? 1 : 0) : 1]
   );
 
   const [newProduct] = await pool.query('SELECT * FROM products WHERE id = ?', [result.insertId]);
@@ -74,16 +74,18 @@ const createProduct = asyncHandler(async (req, res) => {
 // @access  Private
 const updateProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price } = req.body;
+  const { name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price, is_active } = req.body;
 
   const [products] = await pool.query('SELECT id FROM products WHERE id = ?', [id]);
   if (products.length === 0) {
     return res.status(404).json({ message: 'Product not found' });
   }
 
+  const activeVal = is_active !== undefined ? (is_active ? 1 : 0) : 1;
+
   await pool.query(
-    'UPDATE products SET name = ?, description = ?, category = ?, price = ?, stock = ?, image_url = ?, supplier_id = ?, vehicle_type = ?, purchase_price = ? WHERE id = ?',
-    [name, description, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00, id]
+    'UPDATE products SET name = ?, description = ?, category = ?, price = ?, stock = ?, image_url = ?, supplier_id = ?, vehicle_type = ?, purchase_price = ?, is_active = ? WHERE id = ?',
+    [name, description, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00, activeVal, id]
   );
 
   const [updated] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
@@ -91,24 +93,46 @@ const updateProduct = asyncHandler(async (req, res) => {
   res.json({ message: 'Product updated successfully', product: updated[0] });
 });
 
-// @desc    Delete product
+// @desc    Toggle product active status
+// @route   PATCH /api/products/:id/toggle-active
+// @access  Private
+const toggleActive = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const [products] = await pool.query('SELECT id, is_active FROM products WHERE id = ?', [id]);
+  if (products.length === 0) {
+    return res.status(404).json({ message: 'Product not found' });
+  }
+
+  const currentActive = products[0].is_active === 0 ? 0 : 1;
+  const newActive = currentActive === 1 ? 0 : 1;
+
+  await pool.query('UPDATE products SET is_active = ? WHERE id = ?', [newActive, id]);
+
+  const [updated] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
+
+  res.json({ message: `Product ${newActive ? 'activated' : 'deactivated'} successfully`, product: updated[0] });
+});
+
+// @desc    Delete product permanently
 // @route   DELETE /api/products/:id
 // @access  Private
 const deleteProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { reason } = req.body;
 
   const [products] = await pool.query('SELECT id FROM products WHERE id = ?', [id]);
   if (products.length === 0) {
     return res.status(404).json({ message: 'Product not found' });
   }
 
-  await pool.query(
-    'UPDATE products SET is_deleted = 1, delete_reason = ? WHERE id = ?',
-    [reason || 'No reason specified', id]
-  );
+  // Delete associated order_items or nullify foreign keys if required, then delete product
+  try {
+    await pool.query('DELETE FROM order_items WHERE product_id = ?', [id]);
+  } catch (e) {}
 
-  res.json({ message: 'Product deleted successfully' });
+  await pool.query('DELETE FROM products WHERE id = ?', [id]);
+
+  res.json({ message: 'Product permanently deleted successfully' });
 });
 
 // @desc    Update stock
@@ -178,6 +202,7 @@ module.exports = {
   getProduct,
   createProduct,
   updateProduct,
+  toggleActive,
   deleteProduct,
   updateStock,
   uploadImage

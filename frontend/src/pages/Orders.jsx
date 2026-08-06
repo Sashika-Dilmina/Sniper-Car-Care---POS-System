@@ -78,12 +78,19 @@ const Orders = () => {
 
   const formatServiceTime = (serviceTimeMinutes) => {
     if (serviceTimeMinutes === null || serviceTimeMinutes === undefined) return 'N/A';
-    if (serviceTimeMinutes < 60) {
-      return `${serviceTimeMinutes} min`;
+    const absMinutes = Math.abs(serviceTimeMinutes);
+    if (absMinutes < 60) {
+      return `${absMinutes} min`;
     }
-    const hours = Math.floor(serviceTimeMinutes / 60);
-    const minutes = serviceTimeMinutes % 60;
+    const hours = Math.floor(absMinutes / 60);
+    const minutes = absMinutes % 60;
     return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  };
+
+  const getCleanNote = (rawNotes) => {
+    if (!rawNotes) return '';
+    let cleaned = rawNotes.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim();
+    return cleaned;
   };
 
   const handleQuickComplete = async (orderId) => {
@@ -281,11 +288,11 @@ const Orders = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col gap-1">
                         <span className="font-bold font-mono text-gray-900 notranslate" translate="no">{order.vehicle_plate || 'N/A'}</span>
-                        {order.notes && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md max-w-[220px] truncate" title={order.notes}>
-                            📝 Note: {order.notes}
+                        {getCleanNote(order.notes) ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-800 bg-red-100 border border-red-300 px-2 py-0.5 rounded-md max-w-[220px] truncate" title={getCleanNote(order.notes)}>
+                            📝 Note: {getCleanNote(order.notes)}
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

@@ -326,6 +326,12 @@ const OrderDetail = () => {
                 <p className="text-lg font-mono">{order.vehicle_plate}</p>
               </div>
             )}
+            {order.notes && order.notes.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim() && (
+              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-xs font-bold text-red-800 uppercase tracking-wider mb-0.5">📝 Customer Note</p>
+                <p className="text-sm text-red-900 font-semibold">{order.notes.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim()}</p>
+              </div>
+            )}
             <div>
               <p className="text-sm text-gray-600">Status</p>
               <div className="mt-2 flex items-center flex-wrap gap-3">

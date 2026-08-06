@@ -562,28 +562,20 @@ const confirmPayment = asyncHandler(async (req, res) => {
 const updateOrderNote = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { notes, note } = req.body;
-  const noteText = (notes !== undefined ? notes : note) || '';
+  let noteText = (notes !== undefined ? notes : note) || '';
 
   const [orders] = await pool.query('SELECT id, notes FROM orders WHERE id = ?', [id]);
   if (orders.length === 0) {
     return res.status(404).json({ message: 'Order not found' });
   }
 
-  const existingNote = orders[0].notes || '';
   let updatedNote = noteText.trim();
-
-  // If order already has initial notes, format nicely or replace empty note
-  if (existingNote && updatedNote) {
-    if (!existingNote.includes(updatedNote)) {
-      updatedNote = `${existingNote}\nCustomer Note: ${updatedNote}`;
-    } else {
-      updatedNote = existingNote;
-    }
-  } else if (!updatedNote) {
-    updatedNote = existingNote;
+  // Strip old default prefix "One-Tap Booking via Website - ..."
+  if (updatedNote.includes('One-Tap Booking via Website - ')) {
+    updatedNote = updatedNote.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim();
   }
 
-  await pool.query('UPDATE orders SET notes = ? WHERE id = ?', [updatedNote, id]);
+  await pool.query('UPDATE orders SET notes = ? WHERE id = ?', [updatedNote || null, id]);
 
   res.json({
     success: true,
@@ -592,13 +584,92 @@ const updateOrderNote = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Add extra services to order from Thank You page dropdown
+// @route   POST /api/public/orders/:id/extra-services
+// @access  Public
+const addExtraServices = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { service_ids, items } = req.body; // array of product IDs or objects
+
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
+
+  try {
+    const [orders] = await connection.query('SELECT id, total FROM orders WHERE id = ?', [id]);
+    if (orders.length === 0) {
+      connection.release();
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    let productIds = [];
+    if (Array.isArray(service_ids)) {
+      productIds = service_ids;
+    } else if (Array.isArray(items)) {
+      productIds = items.map(i => typeof i === 'object' ? i.id || i.product_id : i);
+    }
+
+    let addedTotal = 0;
+    const addedItems = [];
+
+    if (productIds.length > 0) {
+      const [products] = await connection.query(
+        'SELECT id, name, price FROM products WHERE id IN (?)',
+        [productIds]
+      );
+
+      for (const p of products) {
+        // Prevent duplicate order items for same extra service
+        const [existing] = await connection.query(
+          'SELECT id FROM order_items WHERE order_id = ? AND product_id = ?',
+          [id, p.id]
+        );
+
+        if (existing.length === 0) {
+          const itemPrice = parseFloat(p.price) || 0;
+          await connection.query(
+            'INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, 1, ?)',
+            [id, p.id, itemPrice]
+          );
+          addedTotal += itemPrice;
+          addedItems.push({ product_id: p.id, product_name: p.name, price: itemPrice });
+        }
+      }
+
+      if (addedTotal > 0) {
+        await connection.query(
+          'UPDATE orders SET total = total + ? WHERE id = ?',
+          [addedTotal, id]
+        );
+      }
+    }
+
+    await connection.commit();
+    connection.release();
+
+    const [updatedOrder] = await pool.query('SELECT id, total FROM orders WHERE id = ?', [id]);
+
+    res.json({
+      success: true,
+      message: 'Extra services added successfully',
+      added_total: addedTotal,
+      new_total: updatedOrder[0]?.total,
+      items: addedItems
+    });
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+    throw error;
+  }
+});
+
 module.exports = {
   createOrder,
   getOrder,
   confirmOrder,
   createPaymentIntent,
   confirmPayment,
-  updateOrderNote
+  updateOrderNote,
+  addExtraServices
 };
 
 

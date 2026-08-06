@@ -709,7 +709,7 @@ const Sales = () => {
               {/* Category tabs and Search bar */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex bg-gray-100 p-1.5 rounded-xl gap-1 overflow-x-auto">
-                  {['Services', 'Extra Service', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
+                  {['Services', 'Saloon Extra Service', '4x4 Extra Service', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}

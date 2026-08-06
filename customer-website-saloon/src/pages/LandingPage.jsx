@@ -394,7 +394,18 @@ const LandingPage = () => {
   const [customerNote, setCustomerNote] = useState('');
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
+  const [extraServicesList, setExtraServicesList] = useState([]);
+  const [selectedExtraServices, setSelectedExtraServices] = useState([]);
+  const [isExtraServicesOpen, setIsExtraServicesOpen] = useState(false);
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+
+  useEffect(() => {
+    if (bookingSuccessData) {
+      axios.get('/api/public/extra-services?vehicle_type=Saloon')
+        .then(res => setExtraServicesList(res.data.products || []))
+        .catch(err => console.error('Extra services error:', err));
+    }
+  }, [bookingSuccessData]);
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productForm, setProductForm] = useState({
@@ -789,7 +800,7 @@ const LandingPage = () => {
           source: 'customer_website_saloon',
           status: 'pending',
           payment_status: 'free', 
-          notes: form.notes || `One-Tap Booking via Website - ${service.name}`
+          notes: form.notes ? form.notes.trim() : null
         };
 
         const response = await axios.post('/api/public/orders', orderData);
@@ -830,7 +841,7 @@ const LandingPage = () => {
           source: 'customer_website_saloon',
           status: 'pending',
           payment_status: 'pending',
-          notes: form.notes || `One-Tap Booking via Website - ${service.name}`
+          notes: form.notes ? form.notes.trim() : null
         };
 
         const response = await axios.post('/api/public/orders', orderData);
@@ -1483,8 +1494,8 @@ const LandingPage = () => {
                 
                 {item.title === 'CUSTOMER SUPPORT' && showSupportOptions && (
                   <div className="mt-3 flex gap-2 w-full justify-center" onClick={(e) => e.stopPropagation()}>
-                    <a href="tel:+971555371811" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">Call</a>
-                    <a href="https://wa.me/971555371811" target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">WhatsApp</a>
+                    <a href="tel:+971542655588" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">Call (054 265 5588)</a>
+                    <a href="https://wa.me/971542655588" target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">WhatsApp</a>
                   </div>
                 )}
               </div>
@@ -2036,7 +2047,7 @@ const LandingPage = () => {
             )}
 
             {/* Note Box for Staff */}
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 text-left shadow-sm">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 text-left shadow-sm">
               <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                 <span>📝</span> Add a Note for Staff (Optional)
               </label>
@@ -2078,6 +2089,69 @@ const LandingPage = () => {
               >
                 {noteSaved ? '✓ Note Sent to Staff' : isSavingNote ? 'Saving...' : '💾 Send Note to Staff'}
               </button>
+            </div>
+
+            {/* Extra Services Dropdown */}
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 mb-6 text-left shadow-sm">
+              <button
+                type="button"
+                onClick={() => setIsExtraServicesOpen(!isExtraServicesOpen)}
+                className="w-full flex items-center justify-between font-bold text-xs text-purple-900 uppercase tracking-wider focus:outline-none"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span>✨</span> Extra Services (Optional)
+                </span>
+                <span className="text-sm">{isExtraServicesOpen ? '▲' : '▼'}</span>
+              </button>
+
+              {isExtraServicesOpen && (
+                <div className="mt-3 space-y-2 pt-2 border-t border-purple-200">
+                  {extraServicesList.length > 0 ? (
+                    extraServicesList.map((service) => (
+                      <label key={service.id} className="flex items-center justify-between p-2 rounded-xl bg-white border border-purple-100 hover:border-purple-300 cursor-pointer transition">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedExtraServices.includes(service.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedExtraServices([...selectedExtraServices, service.id]);
+                              } else {
+                                setSelectedExtraServices(selectedExtraServices.filter(id => id !== service.id));
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                          />
+                          <span className="text-xs font-bold text-gray-800">{service.name}</span>
+                        </div>
+                        <span className="text-xs font-black text-purple-700">AED {parseFloat(service.price).toLocaleString()}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 text-center py-2">No extra services available right now.</p>
+                  )}
+
+                  {extraServicesList.length > 0 && (
+                    <button
+                      type="button"
+                      disabled={selectedExtraServices.length === 0}
+                      onClick={async () => {
+                        if (!bookingSuccessData?.orderId || selectedExtraServices.length === 0) return;
+                        try {
+                          await axios.post(`/api/public/orders/${bookingSuccessData.orderId}/extra-services`, { service_ids: selectedExtraServices });
+                          toast.success('Extra services added to your order! Total updated.', { icon: '✨' });
+                        } catch (err) {
+                          console.error('Error adding extra services:', err);
+                          toast.error('Failed to add extra services.');
+                        }
+                      }}
+                      className="w-full mt-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95"
+                    >
+                      ✓ Save Selected Extra Services
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">

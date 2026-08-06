@@ -7,6 +7,7 @@ const { getPlateCodesByEmirate } = require('../controllers/vehicleRegistrationCo
 
 // Public product routes (no authentication required)
 router.get('/products', publicProductController.getProducts);
+router.get('/extra-services', publicProductController.getExtraServices);
 router.get('/products/:id', publicProductController.getProduct);
 
 // Public customer routes
@@ -24,6 +25,8 @@ router.get('/orders/:id', publicOrderController.getOrder);
 router.post('/orders/confirm', publicOrderController.confirmOrder);
 router.patch('/orders/:id/note', publicOrderController.updateOrderNote);
 router.put('/orders/:id/note', publicOrderController.updateOrderNote);
+router.post('/orders/:id/extra-services', publicOrderController.addExtraServices);
+router.put('/orders/:id/extra-services', publicOrderController.addExtraServices);
 
 // Public payment routes
 router.post('/payments/create-intent', publicOrderController.createPaymentIntent);

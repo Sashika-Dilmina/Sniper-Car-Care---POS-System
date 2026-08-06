@@ -23,6 +23,7 @@ import Suppliers from './pages/Suppliers';
 import Purchases from './pages/Purchases';
 import Expenses from './pages/Expenses';
 import Credits from './pages/Credits';
+import Feedback from './pages/Feedback';
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
             <Route path="orders/:id" element={<OrderDetail />} />
             <Route path="services" element={<Services />} />
             <Route path="services/:id" element={<ServiceDetail />} />
+            <Route path="feedback" element={<Feedback />} />
             <Route 
               path="employees" 
               element={
