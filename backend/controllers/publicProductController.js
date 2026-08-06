@@ -6,7 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 // @access  Public
 const getProducts = asyncHandler(async (req, res) => {
   const { category, vehicle_type } = req.query;
-  let query = 'SELECT * FROM products WHERE (is_deleted = 0 OR is_deleted IS NULL) AND (is_active = 1 OR is_active IS NULL) AND category NOT IN ("Extra Service", "Saloon Extra Service", "4x4 Extra Service")';
+  let query = 'SELECT * FROM products WHERE (is_deleted = 0 OR is_deleted IS NULL) AND (is_active = 1 OR is_active IS NULL) AND category NOT IN ("Extra Service", "Saloon Extra Service", "4x4 Extra Service", "Car Freshner", "Acce")';
   const params = [];
 
   if (category) {

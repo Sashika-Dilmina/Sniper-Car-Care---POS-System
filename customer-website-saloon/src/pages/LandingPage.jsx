@@ -451,7 +451,7 @@ const LandingPage = () => {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        const response = await axios.get('/api/public/products?category=Services&vehicle_type=Saloon');
+        const response = await axios.get('/api/public/products?vehicle_type=Saloon');
         const mappedPackages = (response.data.products || []).map(p => ({
           id: p.id,
           name: p.name,

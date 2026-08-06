@@ -157,7 +157,7 @@ const Services = () => {
       return;
     }
 
-    let categoryVal = 'Services';
+    let categoryVal = formData.category || 'Services';
     if (activeTab === 'Saloon Extra Service') categoryVal = 'Saloon Extra Service';
     else if (activeTab === '4x4 Extra Service') categoryVal = '4x4 Extra Service';
 
@@ -194,6 +194,7 @@ const Services = () => {
     setFormData({
       name: service.name,
       description: service.description || '',
+      category: service.category || 'Services',
       price: service.price,
       purchase_price: service.purchase_price || '',
       vehicle_type: service.vehicle_type || 'Saloon',
@@ -229,6 +230,7 @@ const Services = () => {
     setFormData({
       name: '',
       description: '',
+      category: activeTab.includes('Extra Service') ? activeTab : 'Services',
       price: '',
       purchase_price: '',
       vehicle_type: activeTab.includes('4x4') ? '4x4' : 'Saloon',
@@ -243,7 +245,14 @@ const Services = () => {
     if (activeTab === '4x4 Extra Service') {
       return service.category === '4x4 Extra Service' || (service.category === 'Extra Service' && service.vehicle_type === '4x4');
     }
-    return (service.category === 'Services' || !service.category) && (service.vehicle_type === activeTab || service.vehicle_type === 'Both');
+    return (
+      service.category !== 'Saloon Extra Service' &&
+      service.category !== '4x4 Extra Service' &&
+      service.category !== 'Extra Service' &&
+      service.category !== 'Car Freshner' &&
+      service.category !== 'Acce' &&
+      (service.vehicle_type === activeTab || service.vehicle_type === 'Both' || !service.vehicle_type)
+    );
   });
 
   return (
@@ -469,7 +478,7 @@ const Services = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+                <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                     Vehicle Type
                   </label>
@@ -481,7 +490,21 @@ const Services = () => {
                   >
                     <option value="Saloon">Saloon</option>
                     <option value="4x4">4x4</option>
+                    <option value="Both">Both (Saloon & 4x4)</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Category
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
+                    placeholder="Services, Offer, VIP..."
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
