@@ -99,53 +99,6 @@ conn.on('ready', async () => {
       console.log('✨ Config patched successfully with privacy X-Robots-Tag header.');
     } else {
       console.log('✨ Nginx config is already fully patched (uploads & X-Robots-Tag).');
-    } else {
-      console.log('🔧 Patching Nginx config...');
-      
-      const targetStr = `    # Backend API (Node.js on port 5000)
-    location /api/ {
-        proxy_pass http://127.0.0.1:5000/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }`;
-
-      const replacementStr = `    client_max_body_size 50M;
-
-    # Backend API (Node.js on port 5000)
-    location /api/ {
-        proxy_pass http://127.0.0.1:5000/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    # Proxy uploads from the backend
-    location ^~ /uploads/ {
-        proxy_pass http://127.0.0.1:5000/uploads/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }`;
-
-      // We do a global replacement to patch all active server blocks
-      const patchedConfig = catResult.split(targetStr).join(replacementStr);
-      
-      // Write back using SFTP write
-      await new Promise((resolve, reject) => {
-        conn.sftp((err, sftp) => {
-          if (err) return reject(err);
-          const writeStream = sftp.createWriteStream(configPath);
-          writeStream.on('close', resolve);
-          writeStream.on('error', reject);
-          writeStream.write(patchedConfig);
-          writeStream.end();
-        });
-      });
-      console.log('✨ Config written successfully.');
     }
 
     // 3. Verify configuration
