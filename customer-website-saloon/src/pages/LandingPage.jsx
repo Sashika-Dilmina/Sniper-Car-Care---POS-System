@@ -1309,6 +1309,14 @@ const LandingPage = () => {
                     className={`w-full h-full ${isFullBody ? 'object-cover' : 'object-contain'} group-hover:scale-105 transition-transform duration-500 ease-out`}
                   />
                   <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2.5 sm:p-3 text-white flex justify-between items-end pointer-events-none">
+                    <div className="min-w-0 flex-1 pr-1">
+                      <p className="font-extrabold text-xs sm:text-sm leading-tight text-white drop-shadow truncate">{pkg.name}</p>
+                    </div>
+                    <span className="text-xs font-black bg-red-600 px-2 py-0.5 rounded text-white shadow shrink-0">
+                      AED {pkg.price}
+                    </span>
+                  </div>
                 </div>
               </Reveal>
             );
@@ -1316,37 +1324,39 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <section id="vip" className="mx-auto max-w-6xl px-4 pb-10">
-        <Reveal>
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
-              if (vipPkg) {
-                handleServiceClick(vipPkg);
-              } else {
-                openVIPModal();
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+      {packages.some(p => p.name.toLowerCase().includes('vip')) && (
+        <section id="vip" className="mx-auto max-w-6xl px-4 pb-10">
+          <Reveal>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
                 const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
-                if (vipPkg) handleServiceClick(vipPkg);
-                else openVIPModal();
-              }
-            }}
-            className="group relative w-full rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
-          >
-            <img 
-              src={images.vip} 
-              alt="VIP Service" 
-              className="w-full h-auto object-contain group-hover:scale-[1.02] transition-transform duration-500 ease-out" 
-            />
-            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          </div>
-        </Reveal>
-      </section>
+                if (vipPkg) {
+                  handleServiceClick(vipPkg);
+                } else {
+                  openVIPModal();
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
+                  if (vipPkg) handleServiceClick(vipPkg);
+                  else openVIPModal();
+                }
+              }}
+              className="group relative w-full rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
+            >
+              <img 
+                src={images.vip} 
+                alt="VIP Service" 
+                className="w-full h-auto object-contain group-hover:scale-[1.02] transition-transform duration-500 ease-out" 
+              />
+              <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </div>
+          </Reveal>
+        </section>
+      )}
 
       <section id="products" className="mx-auto max-w-6xl px-4 pb-10 bg-gray-50 py-10 -mx-0">
         <Reveal>
