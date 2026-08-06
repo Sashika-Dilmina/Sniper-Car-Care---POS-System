@@ -64,13 +64,27 @@ conn.on('ready', async () => {
       throw new Error(`Failed to read config from ${configPath} or file is empty.`);
     }
 
-    // 2. Check if already fully patched
-    if (catResult.includes('location ^~ /uploads/')) {
-      console.log('✨ Nginx config is already fully patched with ^~ /uploads/ location block.');
-    } else if (catResult.includes('location /uploads/')) {
+    let patchedConfig = catResult;
+    let needsUpdate = false;
+
+    // Check if X-Robots-Tag is missing for POS Dashboard
+    if (!patchedConfig.includes('X-Robots-Tag')) {
+      console.log('🔒 Adding X-Robots-Tag noindex header to Admin & Staff POS Dashboard...');
+      patchedConfig = patchedConfig.replace(
+        'server_name snipercarcare.com www.snipercarcare.com;',
+        'server_name snipercarcare.com www.snipercarcare.com;\n    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet" always;'
+      );
+      needsUpdate = true;
+    }
+
+    // Check if location ^~ /uploads/ is missing
+    if (patchedConfig.includes('location /uploads/')) {
       console.log('🔧 Upgrading Nginx config to use prefix override (^~) for /uploads/...');
-      const patchedConfig = catResult.split('location /uploads/').join('location ^~ /uploads/');
-      
+      patchedConfig = patchedConfig.split('location /uploads/').join('location ^~ /uploads/');
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
       // Write back config
       await new Promise((resolve, reject) => {
         conn.sftp((err, sftp) => {
@@ -82,7 +96,9 @@ conn.on('ready', async () => {
           writeStream.end();
         });
       });
-      console.log('✨ Config upgraded successfully.');
+      console.log('✨ Config patched successfully with privacy X-Robots-Tag header.');
+    } else {
+      console.log('✨ Nginx config is already fully patched (uploads & X-Robots-Tag).');
     } else {
       console.log('🔧 Patching Nginx config...');
       
