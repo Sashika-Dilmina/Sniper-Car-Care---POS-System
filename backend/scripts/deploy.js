@@ -81,6 +81,7 @@ conn.on('ready', async () => {
     await uploadFile(conn, path.join(rootDir, 'database', 'migration_update_vip_prices_v3.sql'), '/tmp/migration_update_vip_prices_v3.sql');
     await uploadFile(conn, path.join(rootDir, 'database', 'migration_sync_local_db_v4.sql'), '/tmp/migration_sync_local_db_v4.sql');
     await uploadFile(conn, path.join(rootDir, 'database', 'migration_unique_stripe_payment_id.sql'), '/tmp/migration_unique_stripe_payment_id.sql');
+    await uploadFile(conn, path.join(rootDir, 'database', 'migration_restore_offer_services.sql'), '/tmp/migration_restore_offer_services.sql');
 
     // 2. Repo path
     const repoPath = '~/Sniper-Car-Care---POS-System';
@@ -107,6 +108,7 @@ conn.on('ready', async () => {
       `mysql -u root -p123456 < /tmp/migration_update_vip_prices_v3.sql || true`,
       `mysql -u root -p123456 < /tmp/migration_sync_local_db_v4.sql || true`,
       `mysql -u root -p123456 < /tmp/migration_unique_stripe_payment_id.sql || true`,
+      `mysql -u root -p123456 sniper_car_care < /tmp/migration_restore_offer_services.sql || true`,
       // `node scripts/seedNewServices.js`,
       // `node scripts/copyOriginalImages.js`,
       `pm2 restart all || pm2 start server.js`

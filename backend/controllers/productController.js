@@ -8,7 +8,7 @@ const path = require('path');
 // @access  Private
 const getProducts = asyncHandler(async (req, res) => {
   const { category, search, vehicle_type } = req.query;
-  let query = 'SELECT * FROM products WHERE 1=1';
+  let query = 'SELECT * FROM products WHERE (is_deleted = 0 OR is_deleted IS NULL)';
   const params = [];
 
   if (category) {
@@ -84,7 +84,7 @@ const updateProduct = asyncHandler(async (req, res) => {
   const activeVal = is_active !== undefined ? (is_active ? 1 : 0) : 1;
 
   await pool.query(
-    'UPDATE products SET name = ?, description = ?, category = ?, price = ?, stock = ?, image_url = ?, supplier_id = ?, vehicle_type = ?, purchase_price = ?, is_active = ? WHERE id = ?',
+    'UPDATE products SET name = ?, description = ?, category = ?, price = ?, stock = ?, image_url = ?, supplier_id = ?, vehicle_type = ?, purchase_price = ?, is_active = ?, is_deleted = 0 WHERE id = ?',
     [name, description, category, price, stock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00, activeVal, id]
   );
 
@@ -107,7 +107,7 @@ const toggleActive = asyncHandler(async (req, res) => {
   const currentActive = products[0].is_active === 0 ? 0 : 1;
   const newActive = currentActive === 1 ? 0 : 1;
 
-  await pool.query('UPDATE products SET is_active = ? WHERE id = ?', [newActive, id]);
+  await pool.query('UPDATE products SET is_active = ?, is_deleted = 0 WHERE id = ?', [newActive, id]);
 
   const [updated] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
 
