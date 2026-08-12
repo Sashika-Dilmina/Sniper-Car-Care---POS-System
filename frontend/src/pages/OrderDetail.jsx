@@ -41,11 +41,13 @@ const OrderDetail = () => {
     return apptDate === todayDate;
   };
 
-  const calculateElapsedTime = (startedAt, completedAt) => {
-    if (!startedAt) return 'Not started';
-    const start = new Date(startedAt);
+  const calculateElapsedTime = (startedAt, completedAt, createdAt) => {
+    const effectiveStart = startedAt || createdAt;
+    if (!effectiveStart) return 'Not started';
+    const start = new Date(effectiveStart);
     const end = completedAt ? new Date(completedAt) : new Date();
     const diffMs = end - start;
+    if (diffMs <= 0) return '0h 0m';
     const diffMins = Math.floor(diffMs / 60000);
     const hrs = Math.floor(diffMins / 60);
     const mins = diffMins % 60;

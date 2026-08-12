@@ -28,32 +28,25 @@ const getOrders = asyncHandler(async (req, res) => {
              WHERE p.order_id = o.id AND p.status = 'completed'
            ) as payment_methods,
            -- Service time: Duration from service start to service completion
-           -- Start: o.service_started_at
-           -- End: o.service_completed_at
-           -- Fallback: If service timestamps are null, use the difference between first payment completion and order completion
-            CASE 
-              -- Bypasses service time calculation for product-only orders
-              WHEN NOT EXISTS (
-                SELECT 1 FROM order_items oi 
-                JOIN products p ON oi.product_id = p.id 
-                WHERE oi.order_id = o.id AND p.category = 'Services'
-              ) AND EXISTS (
-                SELECT 1 FROM order_items oi2 WHERE oi2.order_id = o.id
-              ) THEN NULL
-              WHEN o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL THEN
-                TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at)
-              WHEN o.status = 'completed' AND EXISTS (
-                SELECT 1 FROM payments p 
-                WHERE p.order_id = o.id AND p.status = 'completed'
-              ) THEN 
-                TIMESTAMPDIFF(MINUTE, 
-                  (SELECT MIN(p.created_at) 
-                   FROM payments p 
-                   WHERE p.order_id = o.id AND p.status = 'completed'), 
-                  o.updated_at
-                )
-              ELSE NULL
-            END as service_time_minutes
+           -- Start: o.service_started_at (fallback: o.created_at)
+           -- End: o.service_completed_at (if completed) or CURRENT_TIMESTAMP (if in progress)
+             CASE 
+               -- Bypasses service time calculation for product-only orders
+               WHEN NOT EXISTS (
+                 SELECT 1 FROM order_items oi 
+                 JOIN products p ON oi.product_id = p.id 
+                 WHERE oi.order_id = o.id AND p.category = 'Services'
+               ) AND EXISTS (
+                 SELECT 1 FROM order_items oi2 WHERE oi2.order_id = o.id
+               ) THEN NULL
+               WHEN o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL THEN
+                 TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at)
+               WHEN o.status = 'completed' THEN
+                 TIMESTAMPDIFF(MINUTE, COALESCE(o.service_started_at, o.created_at), COALESCE(o.service_completed_at, o.updated_at))
+               WHEN o.status IN ('pending', 'processing') THEN
+                 TIMESTAMPDIFF(MINUTE, COALESCE(o.service_started_at, o.created_at), CURRENT_TIMESTAMP)
+               ELSE NULL
+             END as service_time_minutes
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
@@ -109,34 +102,10 @@ const getOrders = asyncHandler(async (req, res) => {
   // Filter by service time at SQL level
   if (service_time === 'fast') {
     query += ` AND o.status = 'completed' 
-               AND (
-                 (o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL AND TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at) < 30)
-                 OR
-                 (o.service_started_at IS NULL AND EXISTS (
-                   SELECT 1 FROM payments p 
-                   WHERE p.order_id = o.id AND p.status = 'completed'
-                 ) AND TIMESTAMPDIFF(MINUTE, 
-                   (SELECT MIN(p.created_at) 
-                    FROM payments p 
-                    WHERE p.order_id = o.id AND p.status = 'completed'), 
-                   o.updated_at
-                 ) < 30)
-               )`;
+               AND TIMESTAMPDIFF(MINUTE, COALESCE(o.service_started_at, o.created_at), COALESCE(o.service_completed_at, o.updated_at)) < 30`;
   } else if (service_time === 'slow') {
     query += ` AND o.status = 'completed' 
-               AND (
-                 (o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL AND TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at) >= 30)
-                 OR
-                 (o.service_started_at IS NULL AND EXISTS (
-                   SELECT 1 FROM payments p 
-                   WHERE p.order_id = o.id AND p.status = 'completed'
-                 ) AND TIMESTAMPDIFF(MINUTE, 
-                   (SELECT MIN(p.created_at) 
-                    FROM payments p 
-                    WHERE p.order_id = o.id AND p.status = 'completed'), 
-                   o.updated_at
-                 ) >= 30)
-               )`;
+               AND TIMESTAMPDIFF(MINUTE, COALESCE(o.service_started_at, o.created_at), COALESCE(o.service_completed_at, o.updated_at)) >= 30`;
   }
 
   query += ' ORDER BY o.created_at DESC';
@@ -495,7 +464,7 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     if (status === 'processing') {
       statusUpdateQuery = 'UPDATE orders SET status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) WHERE id = ?';
     } else if (status === 'completed') {
-      statusUpdateQuery = 'UPDATE orders SET status = ?, service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) WHERE id = ?';
+      statusUpdateQuery = 'UPDATE orders SET status = ?, service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP), service_started_at = COALESCE(service_started_at, created_at, CURRENT_TIMESTAMP) WHERE id = ?';
     } else if (status === 'cancelled') {
       statusUpdateQuery = 'UPDATE orders SET status = ?, payment_status = "cancelled" WHERE id = ?';
     }

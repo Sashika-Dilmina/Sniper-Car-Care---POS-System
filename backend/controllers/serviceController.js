@@ -123,6 +123,12 @@ const updateServiceStatus = asyncHandler(async (req, res) => {
       'UPDATE services SET status = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE id = ?',
       [status, id]
     );
+    if (service.order_id) {
+      await pool.query(
+        'UPDATE orders SET status = "processing", service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) WHERE id = ?',
+        [service.order_id]
+      );
+    }
   } else if (status === 'completed') {
     await pool.query(
       'UPDATE services SET status = ?, completed_at = CURRENT_TIMESTAMP, started_at = COALESCE(started_at, created_at, CURRENT_TIMESTAMP) WHERE id = ?',
@@ -145,7 +151,7 @@ const updateServiceStatus = asyncHandler(async (req, res) => {
     );
     if (uncompletedServices.length === 0) {
       await pool.query(
-        'UPDATE orders SET status = "completed", service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) WHERE id = ? AND status IN ("pending", "processing")',
+        'UPDATE orders SET status = "completed", service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP), service_started_at = COALESCE(service_started_at, created_at, CURRENT_TIMESTAMP) WHERE id = ? AND status IN ("pending", "processing")',
         [service.order_id]
       );
     }

@@ -108,10 +108,13 @@ const Dashboard = () => {
   };
 
   const calculateDuration = (service) => {
-    if (!service.started_at || !service.completed_at) return null;
-    const start = new Date(service.started_at);
-    const end = new Date(service.completed_at);
+    const startedAt = service.started_at || service.service_started_at || service.created_at;
+    const completedAt = service.completed_at || service.service_completed_at;
+    if (!startedAt || !completedAt) return null;
+    const start = new Date(startedAt);
+    const end = new Date(completedAt);
     const diffMs = end - start;
+    if (diffMs <= 0) return 0;
     const diffMins = Math.round(diffMs / 60000);
     return diffMins;
   };
@@ -124,15 +127,16 @@ const Dashboard = () => {
     }
     const hours = Math.floor(mins / 60);
     const minutes = mins % 60;
-      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   };
 
-  const calculateElapsedTime = (startedAt, completedAt) => {
-    if (!startedAt) return '0 min';
-    const start = new Date(startedAt);
+  const calculateElapsedTime = (startedAt, completedAt, createdAt) => {
+    const effectiveStart = startedAt || createdAt;
+    if (!effectiveStart) return '0 min';
+    const start = new Date(effectiveStart);
     const end = completedAt ? new Date(completedAt) : new Date();
     const diffMs = end - start;
-    if (diffMs < 0) return '0 min';
+    if (diffMs <= 0) return '0 min';
     const diffMins = Math.floor(diffMs / 60000);
     
     if (diffMins < 60) {

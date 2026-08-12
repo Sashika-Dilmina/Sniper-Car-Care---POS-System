@@ -168,9 +168,9 @@ const createOrder = asyncHandler(async (req, res) => {
       });
     }
 
-    // Create order with notes
+    // Create order with notes and initial service_started_at timestamp
     const [orderResult] = await connection.query(
-      'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, notes, service_started_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
       [
         finalCustomerId || null,
         total,
