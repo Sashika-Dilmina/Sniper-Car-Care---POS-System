@@ -144,7 +144,9 @@ const POS = () => {
                 <p className="text-lg font-bold text-primary-600 mt-2">
                   AED {parseFloat(product.price).toLocaleString()}
                 </p>
-                <p className="text-xs text-gray-500">Stock: {product.stock}</p>
+                {product.category === 'Products' && (
+                  <p className="text-xs text-gray-500">Stock: {product.stock}</p>
+                )}
               </div>
             ))}
           </div>

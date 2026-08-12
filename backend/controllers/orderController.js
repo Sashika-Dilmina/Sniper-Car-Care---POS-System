@@ -241,7 +241,7 @@ const createOrder = asyncHandler(async (req, res) => {
       const [prodRows] = await connection.query('SELECT name, stock, category FROM products WHERE id = ?', [item.product_id]);
       if (prodRows.length > 0) {
         const prod = prodRows[0];
-        const isService = prod.category === 'Services' || prod.category === 'VIP';
+        const isService = prod.category !== 'Products';
         if (isService) {
           hasService = true;
         } else {
@@ -399,7 +399,7 @@ const createOrder = asyncHandler(async (req, res) => {
       );
 
       const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
-      const isService = prodRows.length > 0 && (prodRows[0].category === 'Services' || prodRows[0].category === 'VIP');
+      const isService = prodRows.length > 0 && prodRows[0].category !== 'Products';
 
       // Update product stock (only for non-service items)
       if (!isService) {

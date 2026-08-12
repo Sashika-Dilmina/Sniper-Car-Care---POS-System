@@ -68,9 +68,9 @@ const Products = () => {
   }, []);
 
   useEffect(() => {
-    // Check for low stock products and show alert
-    const lowStockProducts = products.filter(product => product.stock <= 5 && product.stock > 0);
-    const outOfStockProducts = products.filter(product => product.stock === 0);
+    // Check for low stock products and show alert (only for Products category)
+    const lowStockProducts = products.filter(product => product.category === 'Products' && product.stock <= 5 && product.stock > 0);
+    const outOfStockProducts = products.filter(product => product.category === 'Products' && product.stock === 0);
 
     if (lowStockProducts.length > 0) {
       toast.error(`⚠️ Low Stock Alert: ${lowStockProducts.length} product(s) have 5 or fewer items in stock!`, {
@@ -224,8 +224,8 @@ const Products = () => {
     product.category?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const lowStockProducts = filteredProducts.filter(product => product.stock <= 5 && product.stock > 0);
-  const outOfStockProducts = filteredProducts.filter(product => product.stock === 0);
+  const lowStockProducts = filteredProducts.filter(product => product.category === 'Products' && product.stock <= 5 && product.stock > 0);
+  const outOfStockProducts = filteredProducts.filter(product => product.category === 'Products' && product.stock === 0);
 
   return (
     <div className="space-y-6">

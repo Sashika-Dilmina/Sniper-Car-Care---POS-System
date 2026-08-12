@@ -554,7 +554,7 @@ const Sales = () => {
   console.log('DEBUG: totalRevenue =', totalRevenue);
 
   const renderCatalogCard = (product) => {
-    const isService = product.category === 'Services' || product.category === 'VIP';
+    const isService = product.category !== 'Products';
     const outOfStock = !isService && product.stock <= 0;
 
     return (
