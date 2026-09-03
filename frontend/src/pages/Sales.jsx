@@ -192,9 +192,17 @@ const Sales = () => {
     }
   }, [customerIdParam, customers]);
 
+  const isServiceItem = (item) => {
+    if (!item) return false;
+    const cat = (item.category || '').toLowerCase();
+    return cat.includes('service') || cat === 'vip' || item.type === 'service';
+  };
+
+  const hasServiceInCart = cart.some(item => isServiceItem(item));
+
   // Add Product/Service to Cart
   const addToCart = (product) => {
-    if (product.stock !== undefined && product.stock <= 0 && product.category !== 'Services' && product.category !== 'VIP') {
+    if (!isServiceItem(product) && product.stock !== undefined && product.stock <= 0) {
       toast.error('Item is out of stock!');
       return;
     }
@@ -203,7 +211,7 @@ const Sales = () => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
         // If not a service, check stock limits
-        if (product.category !== 'Services' && product.category !== 'VIP' && existing.quantity >= product.stock) {
+        if (!isServiceItem(product) && product.stock !== undefined && existing.quantity >= product.stock) {
           toast.error(`Only ${product.stock} items available in stock!`);
           return prev;
         }
@@ -224,7 +232,7 @@ const Sales = () => {
           if (newQty <= 0) return null;
           
           // Check stock limits for physical products
-          if (amount > 0 && item.category !== 'Services' && item.category !== 'VIP' && newQty > item.stock) {
+          if (amount > 0 && !isServiceItem(item) && item.stock !== undefined && newQty > item.stock) {
             toast.error(`Only ${item.stock} items available in stock!`);
             return item;
           }
@@ -312,12 +320,11 @@ const Sales = () => {
       return;
     }
 
-    if (paymentMethod === 'credit' && !selectedCustomer) {
+    if (!hasServiceInCart && paymentMethod === 'credit' && !selectedCustomer) {
       toast.error('Credit checkout requires selecting a registered customer.');
       return;
     }
 
-    const hasServiceInCart = cart.some(item => item.category === 'Services' || item.category === 'VIP');
     if (hasServiceInCart && !selectedCustomer) {
       toast.error('Booking a service requires selecting a customer.');
       return;
@@ -333,66 +340,72 @@ const Sales = () => {
         price: parseFloat(item.price)
       }));
 
+      const finalDiscountVal = hasServiceInCart ? 0 : discountVal;
+      const finalOrderTotal = hasServiceInCart ? subtotal : total;
+
       const orderData = {
         customer_id: selectedCustomer ? selectedCustomer.id : null,
         items: orderItems,
-        total: total,
-        discount: discountVal
+        total: finalOrderTotal,
+        discount: finalDiscountVal
       };
 
       const orderResponse = await axios.post('/api/orders', orderData);
       const createdOrder = orderResponse.data.order;
 
-      // 2. Process payment based on method
-      if (paymentMethod === 'cash' || paymentMethod === 'card') {
-        const hasService = cart.some(item => item.category === 'Services' || item.category === 'VIP' || item.category === 'Extra Service');
-        await axios.post('/api/payments/manual', {
-          order_id: createdOrder.id,
-          amount: total,
-          method: total === 0 ? 'free' : paymentMethod,
-          status: hasService ? 'pending' : 'completed'
-        });
-      } else if (paymentMethod === 'multiple') {
-        const hasService = cart.some(item => item.category === 'Services' || item.category === 'VIP' || item.category === 'Extra Service');
-        const splitsArr = [
-          { method: 'card', amount: parseFloat(splitPayments.card || 0) },
-          { method: 'cash', amount: parseFloat(splitPayments.cash || 0) },
-          { method: 'bank_transfer', amount: parseFloat(splitPayments.bank_transfer || 0) }
-        ].filter(s => s.amount > 0);
+      // 2. Process payment (Only for retail products; services are paid upon completion in Order View)
+      if (!hasServiceInCart) {
+        if (paymentMethod === 'cash' || paymentMethod === 'card') {
+          await axios.post('/api/payments/manual', {
+            order_id: createdOrder.id,
+            amount: finalOrderTotal,
+            method: finalOrderTotal === 0 ? 'free' : paymentMethod,
+            status: 'completed'
+          });
+        } else if (paymentMethod === 'multiple') {
+          const splitsArr = [
+            { method: 'card', amount: parseFloat(splitPayments.card || 0) },
+            { method: 'cash', amount: parseFloat(splitPayments.cash || 0) },
+            { method: 'bank_transfer', amount: parseFloat(splitPayments.bank_transfer || 0) }
+          ].filter(s => s.amount > 0);
 
-        await axios.post('/api/payments/manual', {
-          order_id: createdOrder.id,
-          amount: total,
-          method: 'multiple',
-          splits: splitsArr,
-          status: hasService ? 'pending' : 'completed'
-        });
-      } else if (paymentMethod === 'tap') {
-        const tapResponse = await axios.post('/api/payments/tap/create', {
-          order_id: createdOrder.id,
-          amount: total,
-          redirect_url: window.location.origin + '/sales?status=success&order_id=' + createdOrder.id
-        });
-        if (tapResponse.data?.transaction_url) {
-          window.location.href = tapResponse.data.transaction_url;
-          return; // Stop cart clearing since we redirect
-        } else {
-          throw new Error('Failed to retrieve Tap payment URL');
+          await axios.post('/api/payments/manual', {
+            order_id: createdOrder.id,
+            amount: finalOrderTotal,
+            method: 'multiple',
+            splits: splitsArr,
+            status: 'completed'
+          });
+        } else if (paymentMethod === 'tap') {
+          const tapResponse = await axios.post('/api/payments/tap/create', {
+            order_id: createdOrder.id,
+            amount: finalOrderTotal,
+            redirect_url: window.location.origin + '/sales?status=success&order_id=' + createdOrder.id
+          });
+          if (tapResponse.data?.transaction_url) {
+            window.location.href = tapResponse.data.transaction_url;
+            return; // Stop cart clearing since we redirect
+          } else {
+            throw new Error('Failed to retrieve Tap payment URL');
+          }
+        } else if (paymentMethod === 'credit') {
+          await axios.post('/api/credits', {
+            customer_id: selectedCustomer.id,
+            order_id: createdOrder.id,
+            amount: finalOrderTotal
+          });
         }
-      } else if (paymentMethod === 'credit') {
-        await axios.post('/api/credits', {
-          customer_id: selectedCustomer.id,
-          order_id: createdOrder.id,
-          amount: total
-        });
       }
 
-      // 3. Keep status as 'pending' to process in the Services/Orders queue
-
-      toast.success('Sale completed successfully! Receipt generated.', {
-        duration: 4000,
-        icon: '🛒'
-      });
+      toast.success(
+        hasServiceInCart
+          ? 'Service booked successfully! Added to service queue.'
+          : 'Sale completed successfully! Receipt generated.',
+        {
+          duration: 4000,
+          icon: hasServiceInCart ? '🚗' : '🛒'
+        }
+      );
 
       // 4. Reset Register State
       setCart([]);
@@ -465,12 +478,15 @@ const Sales = () => {
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name?.toLowerCase().includes(catalogSearch.toLowerCase()) || 
                           product.description?.toLowerCase().includes(catalogSearch.toLowerCase());
+    const prodCat = (product.category || '').trim();
+    const isProdExtra = prodCat === 'Extra Service' || prodCat === 'Saloon Extra Service' || prodCat === '4x4 Extra Service' || prodCat.toLowerCase().includes('extra');
     const matchesCategory = 
-      (selectedCategory === 'VIP' && (product.category === 'VIP' || product.name?.toLowerCase().includes('vip'))) ||
-      (selectedCategory === 'Services' && product.category === 'Services' && !product.name?.toLowerCase().includes('vip')) ||
-      (selectedCategory === 'Acce' && (product.category === 'Acce' || product.category === 'Accessories')) ||
-      (selectedCategory === 'Car Freshner' && (product.category === 'Car Freshner' || product.category === 'Car Freshener')) ||
-      (selectedCategory !== 'VIP' && selectedCategory !== 'Services' && selectedCategory !== 'Acce' && selectedCategory !== 'Car Freshner' && product.category === selectedCategory);
+      (selectedCategory === 'VIP' && (prodCat === 'VIP' || product.name?.toLowerCase().includes('vip'))) ||
+      (selectedCategory === 'Services' && prodCat === 'Services' && !product.name?.toLowerCase().includes('vip')) ||
+      (selectedCategory === 'Extra Service' && isProdExtra) ||
+      (selectedCategory === 'Acce' && (prodCat === 'Acce' || prodCat === 'Accessories')) ||
+      (selectedCategory === 'Car Freshner' && (prodCat === 'Car Freshner' || prodCat === 'Car Freshener')) ||
+      (selectedCategory !== 'VIP' && selectedCategory !== 'Services' && selectedCategory !== 'Extra Service' && selectedCategory !== 'Acce' && selectedCategory !== 'Car Freshner' && prodCat === selectedCategory);
     return matchesSearch && matchesCategory;
   });
 
@@ -709,7 +725,7 @@ const Sales = () => {
               {/* Category tabs and Search bar */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex bg-gray-100 p-1.5 rounded-xl gap-1 overflow-x-auto">
-                  {['Services', 'Saloon Extra Service', '4x4 Extra Service', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
+                  {['Services', 'Extra Service', 'Car Freshner', 'Acce', 'VIP'].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
@@ -1019,8 +1035,8 @@ const Sales = () => {
                 )}
               </div>
 
-              {/* Discount & Payment Method Selection */}
-              {cart.length > 0 && (
+              {/* Discount & Payment Method Selection (Only for retail products without services) */}
+              {cart.length > 0 && !hasServiceInCart && (
                 <div className="space-y-4 pt-4 border-t">
                   
                   {/* Discount */}
@@ -1112,9 +1128,20 @@ const Sales = () => {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
 
-
-
+              {/* Service booking informational flow message */}
+              {cart.length > 0 && hasServiceInCart && (
+                <div className="pt-4 border-t">
+                  <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 space-y-1">
+                    <p className="font-bold flex items-center gap-1.5 text-purple-800">
+                      <span>ℹ️</span> Service Order Flow
+                    </p>
+                    <p className="text-[11px] text-purple-700 leading-relaxed">
+                      This service order will be sent to the active queue. Payment method and discounts can be applied in <b>Order View</b> when the service is completed.
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -1124,13 +1151,15 @@ const Sales = () => {
                   <span>Subtotal:</span>
                   <span>AED {subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm text-red-600">
-                  <span>Discount:</span>
-                  <span>- AED {discountVal.toFixed(2)}</span>
-                </div>
+                {!hasServiceInCart && discountVal > 0 && (
+                  <div className="flex justify-between text-sm text-red-600">
+                    <span>Discount:</span>
+                    <span>- AED {discountVal.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-lg font-black text-gray-900 border-t pt-2 mt-1">
                   <span>Net Total:</span>
-                  <span>AED {total.toFixed(2)}</span>
+                  <span>AED {(hasServiceInCart ? subtotal : total).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -1158,10 +1187,18 @@ const Sales = () => {
                 className={`w-full py-4 rounded-xl font-bold text-white transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-primary-200 ${
                   isCheckingOut || cart.length === 0 || (!activeRegister && !loadingRegister)
                     ? 'bg-gray-300 cursor-not-allowed shadow-none'
+                    : hasServiceInCart
+                    ? 'bg-purple-600 hover:bg-purple-700'
                     : 'bg-primary-600 hover:bg-primary-700'
                 }`}
               >
-                {isCheckingOut ? 'Processing checkout...' : 'Complete POS Sale & Pay'}
+                {isCheckingOut ? (
+                  'Processing checkout...'
+                ) : hasServiceInCart ? (
+                  <>🚀 Book Service & Send to Queue (AED {subtotal.toFixed(2)})</>
+                ) : (
+                  <>Complete POS Sale & Pay (AED {total.toFixed(2)})</>
+                )}
               </button>
 
             </div>
@@ -1330,7 +1367,12 @@ const Sales = () => {
                       return (
                         <tr key={order.id} className="hover:bg-gray-50/50 transition">
                           <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-700">
-                            #{order.id}
+                            <div>#{order.id}</div>
+                            {order.created_at && (
+                              <div className="text-[11px] text-gray-400 font-normal">
+                                {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap font-mono font-bold text-sm text-gray-900 notranslate" translate="no">
                             {order.vehicle_plate || 'N/A'}

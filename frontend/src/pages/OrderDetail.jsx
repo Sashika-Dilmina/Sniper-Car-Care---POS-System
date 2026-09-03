@@ -47,11 +47,12 @@ const OrderDetail = () => {
     const start = new Date(effectiveStart);
     const end = completedAt ? new Date(completedAt) : new Date();
     const diffMs = end - start;
-    if (diffMs <= 0) return '0h 0m';
+    if (diffMs <= 0) return '0 min';
     const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 60) return `${diffMins} min`;
     const hrs = Math.floor(diffMins / 60);
     const mins = diffMins % 60;
-    return `${hrs}h ${mins}m`;
+    return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
   };
 
   const getCleanNote = (rawNotes) => {
@@ -518,7 +519,8 @@ const OrderDetail = () => {
                       >
                         <option value="cash">💵 Cash</option>
                         <option value="card">💳 Card</option>
-                        <option value="bank_transfer">🏦 Bank Transfer</option>
+                        <option value="credit">🏦 Credit</option>
+                        <option value="bank_transfer">🏛️ Bank Transfer</option>
                         <option value="multiple">🔀 Multiple Payments (Split)</option>
                       </select>
                     </div>
@@ -579,6 +581,10 @@ const OrderDetail = () => {
                   <div className="flex gap-4 items-center pt-2 border-t">
                     <button
                       onClick={async () => {
+                        if (selectedOrderMethod === 'credit' && !order.customer_id) {
+                          toast.error('Credit payment requires a registered customer on this order.');
+                          return;
+                        }
                         const finalAmount = Math.max(0, remainingAmount - paymentDiscount);
                         try {
                           const payload = {
@@ -716,7 +722,7 @@ const OrderDetail = () => {
           <div className="text-right">
             <h3 className="font-bold text-xs uppercase mb-1">Invoice Info:</h3>
             <p><span className="font-bold">Invoice #:</span> CC-{order.id}</p>
-            <p><span className="font-bold">Date:</span> {new Date(order.created_at).toLocaleDateString()}</p>
+            <p><span className="font-bold">Date & Time:</span> {new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             <p><span className="font-bold">Status:</span> {order.status === 'completed' ? 'Completed' : 'In Progress'}</p>
             {order.credit_status ? (
               <>

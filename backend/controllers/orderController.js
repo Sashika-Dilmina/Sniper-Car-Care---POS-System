@@ -40,11 +40,13 @@ const getOrders = asyncHandler(async (req, res) => {
                  SELECT 1 FROM order_items oi2 WHERE oi2.order_id = o.id
                ) THEN NULL
                WHEN o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL THEN
-                 TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at)
+                 GREATEST(0, TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at))
+               WHEN o.status = 'completed' AND o.service_completed_at IS NOT NULL THEN
+                 GREATEST(0, TIMESTAMPDIFF(MINUTE, COALESCE(o.service_started_at, o.created_at), o.service_completed_at))
                WHEN o.status = 'completed' THEN
-                 TIMESTAMPDIFF(MINUTE, COALESCE(o.service_started_at, o.created_at), COALESCE(o.service_completed_at, o.updated_at))
+                 GREATEST(0, TIMESTAMPDIFF(MINUTE, COALESCE(o.service_started_at, o.created_at), CURRENT_TIMESTAMP))
                WHEN o.status IN ('pending', 'processing') THEN
-                 TIMESTAMPDIFF(MINUTE, COALESCE(o.service_started_at, o.created_at), CURRENT_TIMESTAMP)
+                 GREATEST(0, TIMESTAMPDIFF(MINUTE, COALESCE(o.service_started_at, o.created_at), CURRENT_TIMESTAMP))
                ELSE NULL
              END as service_time_minutes
     FROM orders o
@@ -257,49 +259,7 @@ const createOrder = asyncHandler(async (req, res) => {
 
     let finalTotal = parseFloat(total);
     let finalDiscount = parseFloat(discount || 0);
-    let freeWashRedeemed = false;
-    let freeWashDiscount = 0;
-    
-    if (customer_id) {
-      try {
-        const { getWashStamps } = require('../utils/loyaltyStamps');
-        const currentStamps = await getWashStamps(connection, customer_id);
-        
-        if (currentStamps >= 5) {
-          const { calculateFreeWashCap } = require('../utils/freeWashCap');
-          const cap = await calculateFreeWashCap(connection, customer_id);
-          
-          const eligibleFreeServices = [
-            'full body service',
-            'full body wash',
-            'ceramic wash',
-            'double soap'
-          ];
-          
-          for (let item of items) {
-            const [prodRows] = await connection.query('SELECT name, category FROM products WHERE id = ?', [item.product_id]);
-            if (prodRows.length > 0) {
-              const prodName = prodRows[0].name.toLowerCase().trim();
-              const isEligible = eligibleFreeServices.some(s => prodName.includes(s)) && !prodName.includes('vip');
-              const itemPrice = parseFloat(item.price);
-              
-              if (isEligible && itemPrice <= cap) {
-                freeWashRedeemed = true;
-                freeWashDiscount = itemPrice * parseFloat(item.quantity || 1);
-                break;
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error checking free wash during POS checkout:', err);
-      }
-    }
-    
-    if (freeWashRedeemed) {
-      finalDiscount += freeWashDiscount;
-      finalTotal = Math.max(0, finalTotal - freeWashDiscount);
-    }
+    // Automatic full discount removed per user requirement - normal pricing applies to all vehicles
 
     let hasVip = false;
     let vipServiceName = '';
@@ -352,23 +312,23 @@ const createOrder = asyncHandler(async (req, res) => {
     }
 
     const orderStatus = hasService ? 'processing' : 'completed';
-    const serviceStartedAt = hasService ? new Date() : null;
-    const serviceCompletedAt = hasService ? null : new Date();
-    
     const paymentStatus = (finalTotal === 0) ? 'free' : 'pending';
 
-    // Create order
-    const [orderResult] = await connection.query(
-      'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at, service_completed_at, vip_booking_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [customer_id || null, finalTotal, finalDiscount, orderStatus, paymentStatus, serviceStartedAt, serviceCompletedAt, vipBookingId]
-    );
+    // Create order using MySQL CURRENT_TIMESTAMP for exact server time synchronization
+    let orderResult;
+    if (hasService) {
+      [orderResult] = await connection.query(
+        'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at, service_completed_at, vip_booking_id) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL, ?)',
+        [customer_id || null, finalTotal, finalDiscount, orderStatus, paymentStatus, vipBookingId]
+      );
+    } else {
+      [orderResult] = await connection.query(
+        'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at, service_completed_at, vip_booking_id) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)',
+        [customer_id || null, finalTotal, finalDiscount, orderStatus, paymentStatus, vipBookingId]
+      );
+    }
 
     const orderId = orderResult.insertId;
-
-    if (freeWashRedeemed) {
-      const { resetWashStamps } = require('../utils/loyaltyStamps');
-      await resetWashStamps(connection, customer_id);
-    }
 
     if (finalTotal === 0) {
       await connection.query(
@@ -399,9 +359,10 @@ const createOrder = asyncHandler(async (req, res) => {
       );
 
       const [prodRows] = await connection.query('SELECT category, name FROM products WHERE id = ?', [item.product_id]);
-      const isService = prodRows.length > 0 && prodRows[0].category !== 'Products';
+      const cat = prodRows.length > 0 ? (prodRows[0].category || '').toLowerCase() : '';
+      const isService = cat.includes('service') || cat === 'vip';
 
-      // Update product stock (only for non-service items)
+      // Update product stock (only for physical products, NEVER for services)
       if (!isService) {
         await connection.query(
           'UPDATE products SET stock = stock - ? WHERE id = ?',

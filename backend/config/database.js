@@ -15,7 +15,7 @@ const poolConfig = {
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000,
-  timezone: '+04:00'
+  timezone: 'Z'
 };
 
 // Only add password if it's not empty (some MySQL setups reject empty string in pools)

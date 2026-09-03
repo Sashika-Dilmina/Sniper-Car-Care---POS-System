@@ -159,6 +159,50 @@ function startFileWatcher() {
   });
 
   watcher.on('error', error => console.error(`[Watcher] Watcher error: ${error}`));
+
+  // Run cleanup once at start and then every hour
+  cleanOldAnprImages();
+  setInterval(cleanOldAnprImages, 60 * 60 * 1000);
 }
 
-module.exports = { startFileWatcher };
+/**
+ * Auto-delete ANPR camera images older than 24 hours (1 day)
+ * Preserves static service/product assets and subdirectories.
+ */
+function cleanOldAnprImages() {
+  const watchPath = path.resolve(process.cwd(), process.env.FTP_ROOT || './uploads');
+  if (!fs.existsSync(watchPath)) return;
+
+  const now = Date.now();
+  const maxAgeMs = 24 * 60 * 60 * 1000; // 24 hours
+
+  fs.readdir(watchPath, (err, files) => {
+    if (err) {
+      console.error('[ANPR Cleaner] Error reading uploads directory:', err);
+      return;
+    }
+
+    let deletedCount = 0;
+    files.forEach(fileName => {
+      // Skip non-image files or static application images
+      if (!/\.(jpg|jpeg|png)$/i.test(fileName)) return;
+      if (fileName.startsWith('service_') || fileName.startsWith('media__') || fileName.includes('-saloon') || fileName.includes('-4x4')) return;
+
+      const filePath = path.join(watchPath, fileName);
+      fs.stat(filePath, (statErr, stats) => {
+        if (statErr) return;
+        
+        // If file is older than 24 hours, delete it safely
+        if (now - stats.mtimeMs > maxAgeMs) {
+          fs.unlink(filePath, unlinkErr => {
+            if (!unlinkErr) {
+              deletedCount++;
+            }
+          });
+        }
+      });
+    });
+  });
+}
+
+module.exports = { startFileWatcher, cleanOldAnprImages };

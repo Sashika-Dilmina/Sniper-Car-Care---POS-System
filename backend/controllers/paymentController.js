@@ -193,6 +193,28 @@ const processManualPayment = asyncHandler(async (req, res) => {
       }
     }
 
+    if (method === 'credit') {
+      const [orderRow] = await connection.query('SELECT customer_id FROM orders WHERE id = ?', [order_id]);
+      const customerId = orderRow.length > 0 ? orderRow[0].customer_id : null;
+      if (!customerId) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ message: 'Credit payment requires a registered customer on this order.' });
+      }
+
+      const [existingCredit] = await connection.query('SELECT id FROM customer_credits WHERE order_id = ?', [order_id]);
+      if (existingCredit.length > 0) {
+        await connection.query('UPDATE customer_credits SET amount = ?, remaining_amount = ?, status = "unpaid" WHERE id = ?', [amount, amount, existingCredit[0].id]);
+      } else {
+        await connection.query('INSERT INTO customer_credits (customer_id, order_id, amount, remaining_amount, status) VALUES (?, ?, ?, ?, "unpaid")', [customerId, order_id, amount, amount]);
+      }
+
+      await connection.query('UPDATE orders SET payment_status = "credit" WHERE id = ?', [order_id]);
+      await connection.commit();
+      connection.release();
+      return res.json({ message: 'Credit payment recorded successfully' });
+    }
+
     if (method === 'multiple' && Array.isArray(splits) && splits.length > 0) {
       // Process multiple split payments
       for (const split of splits) {

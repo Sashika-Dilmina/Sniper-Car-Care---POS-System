@@ -67,8 +67,21 @@ const Orders = () => {
   };
 
   const calculateServiceTime = (order) => {
-    if (!order.service_time_minutes) return null;
-    return order.service_time_minutes;
+    if (order.service_time_minutes !== undefined && order.service_time_minutes !== null) {
+      return parseInt(order.service_time_minutes, 10);
+    }
+    const startTimeStr = order.service_started_at || order.created_at;
+    if (!startTimeStr) return null;
+    const start = new Date(startTimeStr);
+    if (order.status === 'completed') {
+      const endTimeStr = order.service_completed_at;
+      if (!endTimeStr) return null;
+      const end = new Date(endTimeStr);
+      return Math.max(0, Math.floor((end - start) / (1000 * 60)));
+    } else if (order.status === 'processing' || order.status === 'pending') {
+      return Math.max(0, Math.floor((new Date() - start) / (1000 * 60)));
+    }
+    return null;
   };
 
   const getServiceTimeColor = (serviceTimeMinutes) => {
@@ -259,29 +272,46 @@ const Orders = () => {
                 const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
 
                 const hasDiscount = order.discount && parseFloat(order.discount) > 0;
+                const hasExtraService = (order.items && order.items.some(item => 
+                  (item.category && item.category.toLowerCase().includes('extra')) ||
+                  (item.product_name && item.product_name.toLowerCase().includes('extra'))
+                )) || (order.notes && order.notes.toLowerCase().includes('extra service'));
 
                 return (
                   <tr
                     key={order.id}
-                    className={`hover:bg-gray-50 transition-colors ${
+                    className={`transition-colors ${
+                      hasExtraService ? 'bg-purple-100/70 hover:bg-purple-200/70 border-l-4 border-purple-500' :
                       hasDiscount ? 'bg-red-50/70 hover:bg-red-100/70 border-l-4 border-red-500' :
                       isVipOrder ? 'bg-purple-50/60 hover:bg-purple-100/60 border-l-4 border-purple-500' :
                       isCompleted && !isProductOnly && serviceTimeColor === 'green' ? 'bg-green-50/60' :
                       isCompleted && !isProductOnly && serviceTimeColor === 'red' ? 'bg-red-50/60' :
-                      ''
+                      'hover:bg-gray-50'
                     }`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        #{order.id}
-                        {isVipOrder && (
-                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded-full border border-purple-200" title="VIP Order">
-                            VIP ⭐
-                          </span>
-                        )}
-                        {order.source === 'customer_website' && !isVipOrder && (
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full" title="Customer Website Order">
-                            🌐
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2 font-bold text-gray-900">
+                          #{order.id}
+                          {hasExtraService && (
+                            <span className="px-2 py-0.5 bg-purple-200 text-purple-800 text-[10px] font-bold rounded-full border border-purple-300" title="Extra Service Included">
+                              Extra ⚡
+                            </span>
+                          )}
+                          {isVipOrder && (
+                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded-full border border-purple-200" title="VIP Order">
+                              VIP ⭐
+                            </span>
+                          )}
+                          {order.source === 'customer_website' && !isVipOrder && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full" title="Customer Website Order">
+                              🌐
+                            </span>
+                          )}
+                        </div>
+                        {order.created_at && (
+                          <span className="text-[11px] text-gray-500 font-normal mt-0.5">
+                            {new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         )}
                       </div>
@@ -332,8 +362,12 @@ const Orders = () => {
                           {formatServiceTime(serviceTime)}
                         </span>
                       ) : (
-                        <span className="px-3 py-1 text-xs rounded-full bg-gray-100 text-gray-600">
-                          {order.status === 'processing' ? 'In Progress' : 'N/A'}
+                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                          order.status === 'processing' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {order.status === 'processing' 
+                            ? (serviceTime !== null ? `⏳ ${formatServiceTime(serviceTime)}` : 'In Progress') 
+                            : 'Pending'}
                         </span>
                       )}
                     </td>

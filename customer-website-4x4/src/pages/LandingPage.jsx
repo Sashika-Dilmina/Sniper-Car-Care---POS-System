@@ -488,6 +488,8 @@ const LandingPage = () => {
       }
     };
     fetchLatestFeedbacks();
+    const feedbackInterval = setInterval(fetchLatestFeedbacks, 10000);
+    return () => clearInterval(feedbackInterval);
   }, []);
 
   // Real-time order status notifications
@@ -786,7 +788,7 @@ const LandingPage = () => {
         'double soap'
       ];
       const isServiceEligible = eligibleFreeServices.some(s => sNameLower.includes(s)) && !sNameLower.includes('vip');
-      const isFreeWashApplied = isEligibleForFreeWash && isServiceEligible && servicePrice <= freeWashCap;
+      const isFreeWashApplied = false; // Automatic free wash discount disabled per user requirement
 
       if (isFreeWashApplied) {
         // If it is a free wash, we create the order immediately (no payment needed)
@@ -1308,6 +1310,10 @@ const LandingPage = () => {
                   <img 
                     src={getServiceImage(pkg)} 
                     alt={pkg.name} 
+                    onError={(e) => {
+                      const cleanName = (pkg.name || '').replace(/\(Free Wash\)/i, '').trim();
+                      e.currentTarget.src = images.byServiceName[cleanName] || images.defaultService;
+                    }}
                     className={`w-full h-full ${isFullBody ? 'object-cover' : 'object-contain'} group-hover:scale-105 transition-transform duration-500 ease-out`}
                   />
                   <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

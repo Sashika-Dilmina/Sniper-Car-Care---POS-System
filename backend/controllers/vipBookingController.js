@@ -251,7 +251,7 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
 
     // Create corresponding order in the orders table
     const [orderResult] = await db.query(
-      'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, vip_booking_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, vip_booking_id, notes, service_started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
       [mainCustomerId, price, 0, 'pending', 'pending', 'vip_booking', bookingResult.insertId, notes || `VIP Booking - ${service_type}`]
     );
     
