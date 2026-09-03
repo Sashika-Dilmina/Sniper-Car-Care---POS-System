@@ -269,7 +269,12 @@ const Orders = () => {
                 const serviceTimeColor = getServiceTimeColor(serviceTime);
                 const isCompleted = order.status === 'completed';
                 const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
-                const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
+                const isServiceCategory = (cat, name) => {
+                  const c = (cat || '').toLowerCase();
+                  const n = (name || '').toLowerCase();
+                  return c.includes('service') || c === 'vip' || n.includes('service') || n.includes('wash');
+                };
+                const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => !isServiceCategory(item.category, item.product_name));
 
                 const hasDiscount = order.discount && parseFloat(order.discount) > 0;
                 const hasExtraService = (order.items && order.items.some(item => 
@@ -379,7 +384,7 @@ const Orders = () => {
                         order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
-                        {isProductOnly ? 'Order Placed' : order.status === 'completed' ? 'Done' : order.status}
+                        {isProductOnly ? 'Order Placed' : order.status === 'completed' ? 'Done' : (order.status === 'processing' ? 'In Progress' : order.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

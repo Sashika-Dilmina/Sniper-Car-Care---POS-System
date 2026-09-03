@@ -295,7 +295,12 @@ const OrderDetail = () => {
   const remainingAmount = parseFloat(order.total) - (order.payments?.reduce((sum, p) => sum + (p.status === 'completed' ? parseFloat(p.amount) : 0), 0) || 0);
   const isCashOrder = !order.payments || order.payments.length === 0 || order.payments.every(p => p.method === 'cash');
   const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
-  const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
+  const isServiceCategory = (cat, name) => {
+    const c = (cat || '').toLowerCase();
+    const n = (name || '').toLowerCase();
+    return c.includes('service') || c === 'vip' || n.includes('service') || n.includes('wash');
+  };
+  const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => !isServiceCategory(item.category, item.product_name));
 
   return (
     <div className="space-y-6">

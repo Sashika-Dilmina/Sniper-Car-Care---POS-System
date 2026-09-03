@@ -31,14 +31,14 @@ const getOrders = asyncHandler(async (req, res) => {
            -- Start: o.service_started_at (fallback: o.created_at)
            -- End: o.service_completed_at (if completed) or CURRENT_TIMESTAMP (if in progress)
              CASE 
-               -- Bypasses service time calculation for product-only orders
-               WHEN NOT EXISTS (
-                 SELECT 1 FROM order_items oi 
-                 JOIN products p ON oi.product_id = p.id 
-                 WHERE oi.order_id = o.id AND p.category = 'Services'
-               ) AND EXISTS (
-                 SELECT 1 FROM order_items oi2 WHERE oi2.order_id = o.id
-               ) THEN NULL
+                -- Bypasses service time calculation for product-only orders
+                WHEN NOT EXISTS (
+                  SELECT 1 FROM order_items oi 
+                  JOIN products p ON oi.product_id = p.id 
+                  WHERE oi.order_id = o.id AND (p.category LIKE '%Service%' OR p.category = 'VIP' OR p.name LIKE '%Service%' OR p.name LIKE '%Wash%')
+                ) AND EXISTS (
+                  SELECT 1 FROM order_items oi2 WHERE oi2.order_id = o.id
+                ) THEN NULL
                WHEN o.service_started_at IS NOT NULL AND o.service_completed_at IS NOT NULL THEN
                  GREATEST(0, TIMESTAMPDIFF(MINUTE, o.service_started_at, o.service_completed_at))
                WHEN o.status = 'completed' AND o.service_completed_at IS NOT NULL THEN
@@ -243,7 +243,9 @@ const createOrder = asyncHandler(async (req, res) => {
       const [prodRows] = await connection.query('SELECT name, stock, category FROM products WHERE id = ?', [item.product_id]);
       if (prodRows.length > 0) {
         const prod = prodRows[0];
-        const isService = prod.category !== 'Products';
+        const cat = (prod.category || '').toLowerCase();
+        const pName = (prod.name || '').toLowerCase();
+        const isService = cat.includes('service') || cat === 'vip' || pName.includes('service') || pName.includes('wash');
         if (isService) {
           hasService = true;
         } else {
