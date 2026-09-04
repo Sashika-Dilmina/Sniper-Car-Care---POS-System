@@ -94,7 +94,7 @@ conn.on('ready', async () => {
       `git fetch --all`,
       `git reset --hard origin/ravix`,
       `cd backend`,
-      `npm install --production`,
+      `npm install --production --no-audit --no-fund --prefer-offline || true`,
       `mysql -u root -p123456 < /tmp/migration_add_service_timestamps.sql || true`,
       `mysql -u root -p123456 < /tmp/migration_update_payment_methods_v2.sql || true`,
       `mysql -u root -p123456 < /tmp/migration_seed_vip_services_v2.sql || true`,
