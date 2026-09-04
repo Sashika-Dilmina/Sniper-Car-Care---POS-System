@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 right-6' }) => {
+const LanguageSelector = ({ variant = 'floating', positionClass = 'top-5 right-6' }) => {
   const [currentLang, setCurrentLang] = useState(localStorage.getItem('user_lang') || 'ar');
 
   // Apply document direction and language layout

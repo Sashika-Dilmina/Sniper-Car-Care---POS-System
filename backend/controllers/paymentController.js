@@ -183,6 +183,16 @@ const processManualPayment = asyncHandler(async (req, res) => {
         const currentTotal = parseFloat(orderRows[0].total);
         const currentDiscount = parseFloat(orderRows[0].discount || 0);
         
+        // Strictly enforce: No full 100% discount. Max discount allowed is currentTotal - 1
+        if (discountVal >= currentTotal) {
+          await connection.rollback();
+          connection.release();
+          const maxAllowed = Math.max(0, currentTotal - 1);
+          return res.status(400).json({ 
+            message: `Full discount is not allowed. Maximum discount allowed is AED ${maxAllowed.toFixed(2)}` 
+          });
+        }
+
         const newTotal = Math.max(0, currentTotal - discountVal);
         const newDiscount = currentDiscount + discountVal;
         

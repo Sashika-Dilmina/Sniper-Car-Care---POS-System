@@ -264,11 +264,18 @@ const closeRegister = asyncHandler(async (req, res) => {
 
   const register = rows[0];
 
-  // Check for any pending or processing saloon or 4x4 vehicles (excluding VIP) on the date when the register session was opened
-  const [pendingVehicles] = await pool.query(
-    `SELECT COUNT(*) as count 
+  // Check for any unsettled saloon or 4x4 vehicles / orders (excluding VIP bookings)
+  // Both service (status = 'completed') AND payment (payment_status IN ('paid', 'credit', 'free')) must be completed before closing register.
+  const [unsettledOrders] = await pool.query(
+    `SELECT o.id, o.status, o.payment_status, c.vehicle_plate
      FROM orders o
-     WHERE o.status IN ('pending', 'processing') 
+     LEFT JOIN customers c ON o.customer_id = c.id
+     WHERE o.status != 'cancelled' 
+       AND o.payment_status != 'cancelled'
+       AND (
+         o.status != 'completed' 
+         OR o.payment_status NOT IN ('paid', 'credit', 'free')
+       )
        AND o.vip_booking_id IS NULL
        AND NOT EXISTS (
          SELECT 1 
@@ -276,19 +283,19 @@ const closeRegister = asyncHandler(async (req, res) => {
          JOIN products p ON oi.product_id = p.id 
          WHERE oi.order_id = o.id AND (p.category = 'VIP' OR LOWER(p.name) LIKE '%vip%')
        )
-       AND DATE(o.created_at) = DATE(?)
-       AND (
-         EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status IN ('pending', 'in_progress'))
-         OR (
-           EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
-           AND NOT EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status = 'completed')
-         )
-       )`,
-    [register.opened_at]
+       AND (o.created_at >= ? OR DATE(o.created_at) = DATE(?))
+     ORDER BY o.id ASC`,
+    [register.opened_at, register.opened_at]
   );
-  if (pendingVehicles[0].count > 0) {
+
+  if (unsettledOrders.length > 0) {
+    const orderDetails = unsettledOrders
+      .slice(0, 5)
+      .map(o => `#${o.id}${o.vehicle_plate ? ` (${o.vehicle_plate})` : ''} [Service: ${o.status}, Payment: ${o.payment_status}]`)
+      .join(', ');
+    const moreCount = unsettledOrders.length > 5 ? ` and ${unsettledOrders.length - 5} more` : '';
     return res.status(400).json({ 
-      message: `Cannot close register. There are still ${pendingVehicles[0].count} pending/processing vehicles that must be completed first.` 
+      message: `Cannot close register. There are ${unsettledOrders.length} order(s) pending completion or payment: ${orderDetails}${moreCount}. Both service and payment must be completed before closing register.` 
     });
   }
 

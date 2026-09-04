@@ -330,6 +330,11 @@ const Sales = () => {
       return;
     }
 
+    if (subtotal > 0 && discountVal >= subtotal) {
+      toast.error(`Full discount is not allowed. Maximum discount allowed is AED ${Math.max(0, subtotal - 1)}.`);
+      return;
+    }
+
     isCheckingOutRef.current = true;
     setIsCheckingOut(true);
     try {
@@ -1041,16 +1046,30 @@ const Sales = () => {
                   
                   {/* Discount */}
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Apply Discount (AED)</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-sm font-bold text-gray-700">Apply Discount (AED)</label>
+                      {subtotal > 0 && (
+                        <span className="text-[11px] text-gray-500 font-semibold">Max: AED {Math.max(0, subtotal - 1)}</span>
+                      )}
+                    </div>
                     <input
                       type="number"
                       min="0"
-                      max={subtotal}
+                      max={Math.max(0, subtotal - 1)}
                       step="0.01"
                       placeholder="Enter discount amount"
                       value={discount}
-                      onChange={(e) => setDiscount(e.target.value)}
-                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const num = parseFloat(val) || 0;
+                        if (subtotal > 0 && num >= subtotal) {
+                          toast.error(`Full discount is not allowed. Maximum discount is AED ${Math.max(0, subtotal - 1)}`);
+                          setDiscount(String(Math.max(0, subtotal - 1)));
+                        } else {
+                          setDiscount(val);
+                        }
+                      }}
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-bold"
                     />
                   </div>
 

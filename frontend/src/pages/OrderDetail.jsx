@@ -530,13 +530,27 @@ const OrderDetail = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Add Discount (AED)</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs text-gray-500 uppercase font-bold">Add Discount (AED)</label>
+                        {remainingAmount > 0 && (
+                          <span className="text-[10px] text-gray-500 font-semibold">Max: AED {Math.max(0, remainingAmount - 1)}</span>
+                        )}
+                      </div>
                       <input
                         type="number"
                         min="0"
-                        max={remainingAmount}
+                        max={Math.max(0, remainingAmount - 1)}
                         value={paymentDiscount}
-                        onChange={(e) => setPaymentDiscount(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const maxAllowed = Math.max(0, remainingAmount - 1);
+                          if (remainingAmount > 0 && val >= remainingAmount) {
+                            toast.error(`Full discount is not allowed. Maximum discount is AED ${maxAllowed}`);
+                            setPaymentDiscount(maxAllowed);
+                          } else {
+                            setPaymentDiscount(val);
+                          }
+                        }}
                         className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-primary-500 text-sm font-bold"
                       />
                     </div>
@@ -590,6 +604,10 @@ const OrderDetail = () => {
                           toast.error('Credit payment requires a registered customer on this order.');
                           return;
                         }
+                        if (paymentDiscount > 0 && paymentDiscount >= remainingAmount) {
+                          toast.error(`Full discount is not allowed. Maximum discount is AED ${Math.max(0, remainingAmount - 1)}`);
+                          return;
+                        }
                         const finalAmount = Math.max(0, remainingAmount - paymentDiscount);
                         try {
                           const payload = {
@@ -613,7 +631,7 @@ const OrderDetail = () => {
                           setPaymentDiscount(0);
                           fetchOrder();
                         } catch (err) {
-                          toast.error('Failed to record payment');
+                          toast.error(err.response?.data?.message || 'Failed to record payment');
                         }
                       }}
                       className="px-6 py-2.5 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700 transition text-sm shadow-md"

@@ -37,6 +37,7 @@ const Dashboard = () => {
   const [openingBalanceInput, setOpeningBalanceInput] = useState('');
   const [closedAmountInput, setClosedAmountInput] = useState('');
   const [registerNotes, setRegisterNotes] = useState('');
+  const [registerCloseError, setRegisterCloseError] = useState('');
 
   const fetchRegisterStatus = async () => {
     try {
@@ -90,6 +91,7 @@ const Dashboard = () => {
     // Rely on backend register check which correctly filters pending orders by the active register open date
 
     try {
+      setRegisterCloseError('');
       const resp = await axios.post('/api/registers/close', {
         closed_amount: parseFloat(closedAmountInput),
         notes: registerNotes
@@ -98,12 +100,15 @@ const Dashboard = () => {
         toast.success('Register closed successfully.');
         setClosedAmountInput('');
         setRegisterNotes('');
+        setRegisterCloseError('');
         setShowCloseRegisterModal(false);
         fetchRegisterStatus();
         navigate(`/reports?tab=registers&print_register_id=${resp.data.register_id}`);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to close register');
+      const errMsg = err.response?.data?.message || 'Failed to close register';
+      setRegisterCloseError(errMsg);
+      toast.error(errMsg, { duration: 6000 });
     }
   };
 
@@ -364,7 +369,10 @@ const Dashboard = () => {
             <div className="flex gap-2">
               {activeRegister ? (
                 <button
-                  onClick={() => setShowCloseRegisterModal(true)}
+                  onClick={() => {
+                    setRegisterCloseError('');
+                    setShowCloseRegisterModal(true);
+                  }}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition"
                 >
                   🔒 Close Register
@@ -986,6 +994,11 @@ const Dashboard = () => {
           <div className="bg-white rounded-lg max-w-lg w-full p-6 shadow-xl overflow-y-auto max-h-[90vh]">
             <h3 className="text-lg font-bold text-gray-900 mb-4 font-black text-left">Close Cash Register</h3>
             
+            {registerCloseError && (
+              <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded text-red-800 text-xs font-bold leading-relaxed text-left">
+                ⚠️ {registerCloseError}
+              </div>
+            )}
             {registerReport && (
               <div className="bg-gray-50 p-4 rounded-lg border text-sm space-y-2 mb-4 text-left">
                 <div className="flex justify-between">

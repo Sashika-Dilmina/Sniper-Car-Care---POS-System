@@ -261,7 +261,19 @@ const createOrder = asyncHandler(async (req, res) => {
 
     let finalTotal = parseFloat(total);
     let finalDiscount = parseFloat(discount || 0);
-    // Automatic full discount removed per user requirement - normal pricing applies to all vehicles
+
+    // Calculate gross subtotal of items
+    const grossSubtotal = items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * (parseInt(item.quantity, 10) || 1)), 0);
+
+    // Strictly enforce: No full 100% discount. Max discount allowed is grossSubtotal - 1
+    if (grossSubtotal > 0 && finalDiscount >= grossSubtotal) {
+      await connection.rollback();
+      connection.release();
+      const maxAllowed = Math.max(0, grossSubtotal - 1);
+      return res.status(400).json({ 
+        message: `Full discount is not allowed. Maximum discount allowed is AED ${maxAllowed.toFixed(2)}` 
+      });
+    }
 
     let hasVip = false;
     let vipServiceName = '';

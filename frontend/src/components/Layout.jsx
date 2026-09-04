@@ -241,7 +241,7 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <LanguageSelector variant="floating" />
+      <LanguageSelector variant="floating" positionClass="top-5 right-6" />
       {/* Sidebar */}
       <aside className={`fixed left-0 top-0 h-screen bg-white shadow-lg z-50 transition-all duration-300 flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} no-print`}>
         <div className="p-6 border-b flex items-center justify-between flex-shrink-0">
