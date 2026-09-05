@@ -204,25 +204,58 @@ const processManualPayment = asyncHandler(async (req, res) => {
     }
 
     if (method === 'credit') {
-      const [orderRow] = await connection.query('SELECT customer_id FROM orders WHERE id = ?', [order_id]);
-      const customerId = orderRow.length > 0 ? orderRow[0].customer_id : null;
+      const [orderRow] = await connection.query('SELECT customer_id, vip_booking_id FROM orders WHERE id = ?', [order_id]);
+      let customerId = orderRow.length > 0 ? orderRow[0].customer_id : null;
+      if (!customerId && orderRow.length > 0 && orderRow[0].vip_booking_id) {
+        const [vipRow] = await connection.query('SELECT vip_customer_id FROM vip_bookings WHERE id = ?', [orderRow[0].vip_booking_id]);
+        if (vipRow.length > 0) customerId = vipRow[0].vip_customer_id;
+      }
       if (!customerId) {
         await connection.rollback();
         connection.release();
         return res.status(400).json({ message: 'Credit payment requires a registered customer on this order.' });
       }
 
+      const creditAmount = parseFloat(amount || 0);
+
+      // 1. Insert or update customer_credits
       const [existingCredit] = await connection.query('SELECT id FROM customer_credits WHERE order_id = ?', [order_id]);
       if (existingCredit.length > 0) {
-        await connection.query('UPDATE customer_credits SET amount = ?, remaining_amount = ?, status = "unpaid" WHERE id = ?', [amount, amount, existingCredit[0].id]);
+        await connection.query(
+          'UPDATE customer_credits SET customer_id = ?, amount = ?, remaining_amount = ?, status = "unpaid" WHERE id = ?',
+          [customerId, creditAmount, creditAmount, existingCredit[0].id]
+        );
       } else {
-        await connection.query('INSERT INTO customer_credits (customer_id, order_id, amount, remaining_amount, status) VALUES (?, ?, ?, ?, "unpaid")', [customerId, order_id, amount, amount]);
+        await connection.query(
+          'INSERT INTO customer_credits (customer_id, order_id, amount, remaining_amount, status) VALUES (?, ?, ?, ?, "unpaid")',
+          [customerId, order_id, creditAmount, creditAmount]
+        );
       }
 
-      await connection.query('UPDATE orders SET payment_status = "credit" WHERE id = ?', [order_id]);
+      // 2. Remove any prior pending payment rows for this order
+      await connection.query('DELETE FROM payments WHERE order_id = ? AND status = "pending"', [order_id]);
+
+      // 3. Record completed payment entry with method 'credit'
+      const [existingCreditPayment] = await connection.query('SELECT id FROM payments WHERE order_id = ? AND method = "credit"', [order_id]);
+      if (existingCreditPayment.length > 0) {
+        await connection.query('UPDATE payments SET amount = ?, status = "completed" WHERE id = ?', [creditAmount, existingCreditPayment[0].id]);
+      } else {
+        await connection.query('INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, "credit", "completed")', [order_id, creditAmount]);
+      }
+
+      // 4. Update order payment_status to 'credit' and ensure status is completed
+      await connection.query(
+        `UPDATE orders 
+         SET payment_status = 'credit', 
+             status = IF(status = 'cancelled', status, 'completed'),
+             service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) 
+         WHERE id = ?`,
+        [order_id]
+      );
+
       await connection.commit();
       connection.release();
-      return res.json({ message: 'Credit payment recorded successfully' });
+      return res.json({ success: true, message: 'Credit payment recorded successfully' });
     }
 
     if (method === 'multiple' && Array.isArray(splits) && splits.length > 0) {

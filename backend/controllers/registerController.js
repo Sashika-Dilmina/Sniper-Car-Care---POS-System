@@ -272,8 +272,9 @@ const closeRegister = asyncHandler(async (req, res) => {
      LEFT JOIN customers c ON o.customer_id = c.id
      WHERE o.status != 'cancelled' 
        AND o.payment_status != 'cancelled'
+       AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
        AND (
-         o.status != 'completed' 
+         (o.payment_status != 'credit' AND o.status != 'completed') 
          OR o.payment_status NOT IN ('paid', 'credit', 'free')
        )
        AND o.vip_booking_id IS NULL

@@ -427,10 +427,26 @@ const OrderDetail = () => {
                 <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold border border-red-200">
                   cancelled
                 </span>
+              ) : order.payment_status === 'credit' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                  Credit
+                </span>
+              ) : order.payment_status === 'paid' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800 font-semibold">
+                  Paid
+                </span>
+              ) : order.payment_status === 'free' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-800 font-semibold uppercase">
+                  Free
+                </span>
+              ) : order.payment_status === 'partial' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800 font-semibold">
+                  Partial
+                </span>
               ) : order.credit_status ? (
                 order.credit_status === 'unpaid' ? (
-                  <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold">
-                    Credit / Unpaid
+                  <span className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                    Credit
                   </span>
                 ) : order.credit_status === 'partially_paid' ? (
                   <span className="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800 font-semibold">
@@ -508,7 +524,7 @@ const OrderDetail = () => {
         </div>
       </div>
 
-      {order.payment_status !== 'paid' && order.status !== 'cancelled' && order.is_deleted !== 1 && remainingAmount > 0 && (
+      {order.payment_status !== 'paid' && order.payment_status !== 'credit' && order.status !== 'cancelled' && order.is_deleted !== 1 && remainingAmount > 0 && (
         <div className="bg-white p-6 rounded-lg shadow border-2 border-primary-500">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span className="text-2xl">💳</span> Customer Payment Required
@@ -905,7 +921,9 @@ const OrderDetail = () => {
                     <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded-full ${
                       order.status === 'cancelled' || vipBooking?.status === 'cancelled' || order.payment_status === 'cancelled'
                         ? 'bg-red-100 text-red-800 border border-red-200'
-                        : order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        : order.payment_status === 'paid' ? 'bg-green-100 text-green-800'
+                        : order.payment_status === 'credit' ? 'bg-purple-100 text-purple-800'
+                        : 'bg-red-100 text-red-800'
                     }`}>
                       {(order.status === 'cancelled' || vipBooking?.status === 'cancelled') ? 'cancelled' : (order.payment_status || 'pending')}
                     </span>

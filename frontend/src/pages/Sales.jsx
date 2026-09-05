@@ -1417,6 +1417,7 @@ const Sales = () => {
                                   if (order.credit_status === 'unpaid') return 'Credit / Unpaid';
                                   if (order.credit_status === 'partially_paid') return 'Credit / Partial';
                                 }
+                                if (order.payment_status === 'credit') return 'Credit';
                                 if (order.payment_status === 'free') return 'Free';
                                 if (order.payment_methods) {
                                   return order.payment_methods.split(',').map(m => {
@@ -1431,12 +1432,15 @@ const Sales = () => {
                               };
 
                               const getPaymentBadgeClass = () => {
-                                if (order.credit_status) {
-                                  if (order.credit_status === 'unpaid') return 'bg-red-50 text-red-750';
-                                  if (order.credit_status === 'partially_paid') return 'bg-yellow-50 text-yellow-750';
-                                  return 'bg-green-50 text-green-700';
+                                if (order.payment_status === 'credit') {
+                                  return 'bg-purple-50 text-purple-700 font-semibold border border-purple-200';
                                 }
                                 if (order.payment_status === 'paid' || order.payment_status === 'free') {
+                                  return 'bg-green-50 text-green-700';
+                                }
+                                if (order.credit_status) {
+                                  if (order.credit_status === 'unpaid') return 'bg-purple-50 text-purple-700 font-semibold border border-purple-200';
+                                  if (order.credit_status === 'partially_paid') return 'bg-yellow-50 text-yellow-750';
                                   return 'bg-green-50 text-green-700';
                                 }
                                 return 'bg-red-50 text-red-700';

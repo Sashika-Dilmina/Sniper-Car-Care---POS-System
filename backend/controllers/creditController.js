@@ -46,10 +46,33 @@ const createCustomerCredit = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Customer ID, Order ID, and amount are required' });
   }
 
-  // Insert customer credit record
+  const creditAmt = parseFloat(amount);
+
+  // 1. Insert customer credit record
   const [result] = await pool.query(
     'INSERT INTO customer_credits (customer_id, order_id, amount, remaining_amount, status) VALUES (?, ?, ?, ?, ?)',
-    [customer_id, order_id, parseFloat(amount), parseFloat(amount), 'unpaid']
+    [customer_id, order_id, creditAmt, creditAmt, 'unpaid']
+  );
+
+  // 2. Clean up any stale pending payments for this order
+  await pool.query('DELETE FROM payments WHERE order_id = ? AND status = "pending"', [order_id]);
+
+  // 3. Record completed payment entry with method 'credit'
+  const [existingPayment] = await pool.query('SELECT id FROM payments WHERE order_id = ? AND method = "credit"', [order_id]);
+  if (existingPayment.length > 0) {
+    await pool.query('UPDATE payments SET amount = ?, status = "completed" WHERE id = ?', [creditAmt, existingPayment[0].id]);
+  } else {
+    await pool.query('INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, "credit", "completed")', [order_id, creditAmt]);
+  }
+
+  // 4. Update order payment status to credit and mark completed
+  await pool.query(
+    `UPDATE orders 
+     SET payment_status = 'credit', 
+         status = IF(status = 'cancelled', status, 'completed'),
+         service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) 
+     WHERE id = ?`,
+    [order_id]
   );
 
   const [newCredit] = await pool.query('SELECT * FROM customer_credits WHERE id = ?', [result.insertId]);

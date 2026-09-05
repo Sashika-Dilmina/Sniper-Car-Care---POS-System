@@ -253,6 +253,7 @@ const Orders = () => {
           <option value="">All Payment Status</option>
           <option value="pending">Pending</option>
           <option value="paid">Paid</option>
+          <option value="credit">Credit</option>
         </select>
         <select
           value={filter.service_time}
@@ -446,10 +447,14 @@ const Orders = () => {
                         <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-semibold border border-red-200">
                           cancelled
                         </span>
+                      ) : order.payment_status === 'credit' ? (
+                        <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                          Credit
+                        </span>
                       ) : order.credit_status ? (
                         order.credit_status === 'unpaid' ? (
-                          <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-semibold">
-                            Credit / Unpaid
+                          <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                            Credit
                           </span>
                         ) : order.credit_status === 'partially_paid' ? (
                           <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 font-semibold">

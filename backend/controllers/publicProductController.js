@@ -15,17 +15,11 @@ const getProducts = asyncHandler(async (req, res) => {
   }
 
   if (vehicle_type) {
-    // Return all services applicable to this vehicle type (standard Services and Extra Services)
-    // Exclude retail goods like Car Freshner, Acce, and Accessories
-    query += ' AND category NOT IN ("Car Freshner", "Acce", "Accessories")';
-    if (vehicle_type === 'Saloon') {
-      query += ' AND (vehicle_type = "Saloon" OR vehicle_type = "Both" OR vehicle_type IS NULL) AND category != "4x4 Extra Service"';
-    } else if (vehicle_type === '4x4') {
-      query += ' AND (vehicle_type = "4x4" OR vehicle_type = "Both" OR vehicle_type IS NULL) AND category != "Saloon Extra Service"';
-    } else {
-      query += ' AND (vehicle_type = ? OR vehicle_type = "Both" OR vehicle_type IS NULL)';
-      params.push(vehicle_type);
-    }
+    // Return main services for this vehicle type.
+    // Exclude extra services and retail products from the customer website main grid.
+    query += ' AND category NOT IN ("Extra Service", "Saloon Extra Service", "4x4 Extra Service", "Car Freshner", "Acce", "Accessories")';
+    query += ' AND (vehicle_type = ? OR vehicle_type = "Both" OR vehicle_type IS NULL)';
+    params.push(vehicle_type);
   }
 
   query += ' ORDER BY category ASC, name ASC';
