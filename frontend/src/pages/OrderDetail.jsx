@@ -327,6 +327,23 @@ const OrderDetail = () => {
           </div>
         </div>
 
+        {order.is_deleted === 1 && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-900 p-4 rounded-lg shadow-sm mb-6 flex items-start gap-3">
+            <svg className="w-6 h-6 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <h3 className="font-bold text-base text-red-800">This Order Has Been Deleted</h3>
+              <p className="text-sm mt-1 text-red-700">
+                Reason: <strong>{order.delete_reason || 'No reason specified'}</strong>
+              </p>
+              <p className="text-xs text-red-600 mt-1">
+                The amount and transactions for this order have been cancelled and excluded from all financial calculations and reports.
+              </p>
+            </div>
+          </div>
+        )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold mb-4">Order Information</h2>
@@ -491,7 +508,7 @@ const OrderDetail = () => {
         </div>
       </div>
 
-      {order.payment_status !== 'paid' && order.status !== 'cancelled' && remainingAmount > 0 && (
+      {order.payment_status !== 'paid' && order.status !== 'cancelled' && order.is_deleted !== 1 && remainingAmount > 0 && (
         <div className="bg-white p-6 rounded-lg shadow border-2 border-primary-500">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span className="text-2xl">💳</span> Customer Payment Required

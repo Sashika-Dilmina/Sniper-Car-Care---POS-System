@@ -15,7 +15,7 @@ const getCustomerCredits = asyncHandler(async (req, res) => {
     FROM customer_credits cc
     LEFT JOIN customers c ON cc.customer_id = c.id
     LEFT JOIN orders o ON cc.order_id = o.id
-    WHERE (o.status IS NULL OR o.status != 'cancelled')
+    WHERE (o.status IS NULL OR (o.status != 'cancelled' AND (o.is_deleted = 0 OR o.is_deleted IS NULL)))
   `;
   const params = [];
 

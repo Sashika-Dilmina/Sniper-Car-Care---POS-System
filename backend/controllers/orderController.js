@@ -655,13 +655,22 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
   }
 });
 
-// @desc    Delete order
+// @desc    Delete order (Soft delete with reason)
 // @route   DELETE /api/orders/:id
 // @access  Private (Admin only)
 const deleteOrder = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { reason } = req.body;
 
-  const [orders] = await pool.query('SELECT id FROM orders WHERE id = ?', [id]);
+  if (req.user && req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Access denied. Only administrators can delete orders.' });
+  }
+
+  if (!reason || !reason.trim()) {
+    return res.status(400).json({ message: 'A reason is required to delete this order.' });
+  }
+
+  const [orders] = await pool.query('SELECT id, status, is_deleted FROM orders WHERE id = ?', [id]);
   if (orders.length === 0) {
     return res.status(404).json({ message: 'Order not found' });
   }
@@ -670,7 +679,7 @@ const deleteOrder = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
-    // Restore stock
+    // 1. Restore inventory stock for retail products in this order
     const [items] = await connection.query('SELECT product_id, quantity FROM order_items WHERE order_id = ?', [id]);
     for (let item of items) {
       await connection.query(
@@ -679,22 +688,34 @@ const deleteOrder = asyncHandler(async (req, res) => {
       );
     }
 
-    // Delete order items
-    await connection.query('DELETE FROM order_items WHERE order_id = ?', [id]);
+    // 2. Mark order as deleted with reason and cancelled status
+    await connection.query(
+      'UPDATE orders SET is_deleted = 1, delete_reason = ?, status = "cancelled", payment_status = "cancelled" WHERE id = ?',
+      [reason.trim(), id]
+    );
 
-    // Delete payments
-    await connection.query('DELETE FROM payments WHERE order_id = ?', [id]);
+    // 3. Mark linked payments as failed/cancelled
+    await connection.query(
+      'UPDATE payments SET status = "failed" WHERE order_id = ?',
+      [id]
+    );
 
-    // Delete customer credits
-    await connection.query('DELETE FROM customer_credits WHERE order_id = ?', [id]);
+    // 4. Mark linked services as cancelled
+    await connection.query(
+      'UPDATE services SET status = "cancelled" WHERE order_id = ?',
+      [id]
+    );
 
-    // Delete order
-    await connection.query('DELETE FROM orders WHERE id = ?', [id]);
+    // 5. Mark linked customer credits as cancelled
+    await connection.query(
+      'UPDATE customer_credits SET status = "cancelled" WHERE order_id = ?',
+      [id]
+    );
 
     await connection.commit();
     connection.release();
 
-    res.json({ message: 'Order deleted successfully' });
+    res.json({ success: true, message: 'Order deleted successfully' });
   } catch (error) {
     await connection.rollback();
     connection.release();

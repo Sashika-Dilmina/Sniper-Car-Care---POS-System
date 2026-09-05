@@ -833,6 +833,10 @@ const LandingPage = () => {
         });
       } else {
         // Paid booking: Create order directly in database!
+        const orderNotes = form.notes 
+          ? `One-Tap Booking via Website - ${service.name} (${form.notes.trim()})`
+          : `One-Tap Booking via Website - ${service.name}`;
+
         const orderData = {
           customer_id: customerInfo?.id || null,
           customer_name: form.name,
@@ -844,7 +848,7 @@ const LandingPage = () => {
           source: 'customer_website_4x4',
           status: 'pending',
           payment_status: 'pending',
-          notes: form.notes ? form.notes.trim() : null
+          notes: orderNotes
         };
 
         const response = await axios.post('/api/public/orders', orderData);
@@ -1177,14 +1181,16 @@ const LandingPage = () => {
   const sortedPackages = [...packages].sort((a, b) => {
     const getOrder = (name) => {
       const n = name.toLowerCase();
-      if (n.includes('full body') || n.includes('full service')) return 1;
+      if (n.includes('full body') || n.includes('full service') || n.includes('full wash')) return 1;
       if (n.includes('double soap')) return 2;
       if (n.includes('ceramic')) return 3;
-      if (n.includes('body wash')) return 4;
+      if (n.includes('body wash') || n.includes('exterior wash')) return 4;
       if (n.includes('just water') || n.includes('water wash') || n.includes('quick wash')) return 5;
       return 100;
     };
-    return getOrder(a.name) - getOrder(b.name);
+    const orderDiff = getOrder(a.name) - getOrder(b.name);
+    if (orderDiff !== 0) return orderDiff;
+    return (a.id || 0) - (b.id || 0);
   });
 
   const displayPackages = sortedPackages.filter(pkg => !pkg.name.toLowerCase().includes('vip'));

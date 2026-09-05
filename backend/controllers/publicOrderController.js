@@ -225,7 +225,7 @@ const createOrder = asyncHandler(async (req, res) => {
 
         let serviceName = 'Car Care Service';
         if (notes && notes.includes('One-Tap Booking via Website - ')) {
-          serviceName = notes.replace('One-Tap Booking via Website - ', '');
+          serviceName = notes.replace('One-Tap Booking via Website - ', '').split('(')[0].trim();
         } else if (notes) {
           serviceName = notes;
         }

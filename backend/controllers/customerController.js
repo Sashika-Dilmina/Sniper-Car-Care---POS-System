@@ -22,7 +22,7 @@ const getCustomers = asyncHandler(async (req, res) => {
              LIMIT 1
            ) as last_payment_method
     FROM customers c
-    LEFT JOIN orders o ON c.id = o.customer_id
+    LEFT JOIN orders o ON c.id = o.customer_id AND (o.is_deleted = 0 OR o.is_deleted IS NULL) AND o.status != 'cancelled'
     LEFT JOIN loyalty l ON c.id = l.customer_id
     WHERE 1=1
   `;

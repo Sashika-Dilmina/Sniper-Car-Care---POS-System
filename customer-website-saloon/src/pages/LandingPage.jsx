@@ -832,6 +832,10 @@ const LandingPage = () => {
         });
       } else {
         // Paid booking: Create order directly in database!
+        const orderNotes = form.notes 
+          ? `One-Tap Booking via Website - ${service.name} (${form.notes.trim()})`
+          : `One-Tap Booking via Website - ${service.name}`;
+
         const orderData = {
           customer_id: customerInfo?.id || null,
           customer_name: form.name,
@@ -843,7 +847,7 @@ const LandingPage = () => {
           source: 'customer_website_saloon',
           status: 'pending',
           payment_status: 'pending',
-          notes: form.notes ? form.notes.trim() : null
+          notes: orderNotes
         };
 
         const response = await axios.post('/api/public/orders', orderData);
@@ -1183,7 +1187,9 @@ const LandingPage = () => {
       if (n.includes('just water') || n.includes('water wash') || n.includes('quick wash')) return 5;
       return 100;
     };
-    return getOrder(a.name) - getOrder(b.name);
+    const orderDiff = getOrder(a.name) - getOrder(b.name);
+    if (orderDiff !== 0) return orderDiff;
+    return (a.id || 0) - (b.id || 0);
   });
 
   const displayPackages = sortedPackages.filter(pkg => !pkg.name.toLowerCase().includes('vip'));

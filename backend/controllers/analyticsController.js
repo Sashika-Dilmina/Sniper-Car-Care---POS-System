@@ -302,7 +302,7 @@ const getSalesReport = asyncHandler(async (req, res) => {
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN order_items oi ON o.id = oi.order_id
-    WHERE o.payment_status IN ('paid', 'free')
+    WHERE o.payment_status IN ('paid', 'free') AND (o.is_deleted = 0 OR o.is_deleted IS NULL) AND o.status != 'cancelled'
   `;
   const params = [];
 
@@ -386,7 +386,7 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
           COUNT(CASE WHEN payment_status IN ('paid', 'free') THEN 1 END) as paid_orders,
           COUNT(CASE WHEN payment_status = 'pending' THEN 1 END) as pending_orders
         FROM orders
-        WHERE created_at >= ? AND created_at <= COALESCE(?, CURRENT_TIMESTAMP)`
+        WHERE created_at >= ? AND created_at <= COALESCE(?, CURRENT_TIMESTAMP) AND (is_deleted = 0 OR is_deleted IS NULL) AND status != 'cancelled'`
       : `SELECT 
           COUNT(*) as total_orders,
           COALESCE(SUM(CASE WHEN payment_status = 'free' THEN discount WHEN payment_status = 'paid' THEN total ELSE 0 END), 0) as total_revenue,
@@ -394,7 +394,7 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
           COUNT(CASE WHEN payment_status IN ('paid', 'free') THEN 1 END) as paid_orders,
           COUNT(CASE WHEN payment_status = 'pending' THEN 1 END) as pending_orders
         FROM orders
-        WHERE DATE(created_at) = ?`,
+        WHERE DATE(created_at) = ? AND (is_deleted = 0 OR is_deleted IS NULL) AND status != 'cancelled'`,
     useSession ? [startTime, endTime] : [targetDate]
   );
 
@@ -408,7 +408,7 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
           COUNT(CASE WHEN s.status = 'in_progress' THEN 1 END) as in_progress_services
         FROM services s
         JOIN orders o ON s.order_id = o.id
-        WHERE s.created_at >= ? AND s.created_at <= COALESCE(?, CURRENT_TIMESTAMP)`
+        WHERE s.created_at >= ? AND s.created_at <= COALESCE(?, CURRENT_TIMESTAMP) AND (o.is_deleted = 0 OR o.is_deleted IS NULL) AND o.status != 'cancelled'`
       : `SELECT 
           COUNT(*) as total_services,
           COALESCE(SUM(CASE WHEN o.payment_status IN ('paid', 'free') THEN s.price ELSE 0 END), 0) as services_revenue,
@@ -416,7 +416,7 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
           COUNT(CASE WHEN s.status = 'in_progress' THEN 1 END) as in_progress_services
         FROM services s
         JOIN orders o ON s.order_id = o.id
-        WHERE DATE(s.created_at) = ?`,
+        WHERE DATE(s.created_at) = ? AND (o.is_deleted = 0 OR o.is_deleted IS NULL) AND o.status != 'cancelled'`,
     useSession ? [startTime, endTime] : [targetDate]
   );
 
