@@ -26,6 +26,7 @@ const purchaseRoutes = require('./routes/purchaseRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const creditRoutes = require('./routes/creditRoutes');
 const registerRoutes = require('./routes/registerRoutes');
+const bathaqueRoutes = require('./routes/bathaqueRoutes');
 const { startFtpServer } = require('./services/ftpServer');
 const { startFileWatcher } = require('./services/anprWatcher');
 const runSoftDeleteMigrations = require('./utils/automaticMigration');
@@ -90,6 +91,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/credits', creditRoutes);
 app.use('/api/registers', registerRoutes);
 app.use('/api/vehicle-registration', vehicleRegistrationRoutes);
+app.use('/api/bathaque', bathaqueRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

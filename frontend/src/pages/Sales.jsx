@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import VehiclePlatePreview from '../components/VehiclePlatePreview';
 import SearchableSelect from '../components/SearchableSelect';
+import BathaqueScanModal from '../components/BathaqueScanModal';
 
 const Sales = () => {
   const { user } = useAuth();
@@ -24,12 +25,17 @@ const Sales = () => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   
+  // POS - Bathaque Loyalty State
+  const [bathaqueLoyalty, setBathaqueLoyalty] = useState(null);
+  const [showBathaqueScanModal, setShowBathaqueScanModal] = useState(false);
+
   // POS - Quick Customer Registration State
   const [showQuickRegister, setShowQuickRegister] = useState(false);
   const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '+9715',
+    bathaque_id: '',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -182,12 +188,56 @@ const Sales = () => {
     }
   };
 
+  const fetchBathaqueLoyalty = async (bId) => {
+    if (!bId) {
+      setBathaqueLoyalty(null);
+      return;
+    }
+    try {
+      const res = await axios.get(`/api/bathaque/check/${bId}`);
+      if (res.data.success) {
+        setBathaqueLoyalty(res.data.loyalty);
+      }
+    } catch (e) {
+      console.error('Failed to fetch bathaque loyalty', e);
+    }
+  };
+
+  const handleSelectCustomer = (cust) => {
+    setSelectedCustomer(cust);
+    setCustomerSearch(`${cust.name} (${cust.vehicle_plate})`);
+    setShowCustomerDropdown(false);
+    if (cust.bathaque_id) {
+      fetchBathaqueLoyalty(cust.bathaque_id);
+    } else {
+      setBathaqueLoyalty(null);
+    }
+  };
+
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null);
+    setCustomerSearch('');
+    setBathaqueLoyalty(null);
+    if (paymentMethod === 'free') {
+      setPaymentMethod('cash');
+    }
+  };
+
+  const handleApplyBathaque = (result) => {
+    if (result.customer) {
+      handleSelectCustomer(result.customer);
+    } else if (result.customers && result.customers.length > 0) {
+      handleSelectCustomer(result.customers[0]);
+    }
+    setBathaqueLoyalty(result.loyalty);
+    toast.success(`Bathaque Pass Applied: ${result.bathaque_id} (${result.loyalty?.wash_stamps || 0}/5 stamps)`);
+  };
+
   useEffect(() => {
     if (customerIdParam && customers.length > 0) {
       const cust = customers.find(c => c.id === parseInt(customerIdParam));
       if (cust) {
-        setSelectedCustomer(cust);
-        setCustomerSearch(`${cust.name} (${cust.vehicle_plate})`);
+        handleSelectCustomer(cust);
       }
     }
   }, [customerIdParam, customers]);
@@ -280,13 +330,13 @@ const Sales = () => {
       
       // Update customers local state & select the newly created customer
       fetchCustomers();
-      setSelectedCustomer(createdCustomer);
-      setCustomerSearch(`${createdCustomer.name} (${createdCustomer.vehicle_plate})`);
+      handleSelectCustomer(createdCustomer);
       
       // Reset registration form
       setNewCustomer({
         name: '',
         phone: '+9715',
+        bathaque_id: '',
         emirate: '',
         plate_code: '',
         plate_number: '',
@@ -345,14 +395,18 @@ const Sales = () => {
         price: parseFloat(item.price)
       }));
 
-      const finalDiscountVal = hasServiceInCart ? 0 : discountVal;
-      const finalOrderTotal = hasServiceInCart ? subtotal : total;
+      const isFree = paymentMethod === 'free';
+      const finalDiscountVal = (hasServiceInCart || isFree) ? 0 : discountVal;
+      const finalOrderTotal = isFree ? 0 : (hasServiceInCart ? subtotal : total);
+      const activeBathaqueId = selectedCustomer?.bathaque_id || bathaqueLoyalty?.bathaque_id || null;
 
       const orderData = {
         customer_id: selectedCustomer ? selectedCustomer.id : null,
+        bathaque_id: activeBathaqueId,
         items: orderItems,
         total: finalOrderTotal,
-        discount: finalDiscountVal
+        discount: finalDiscountVal,
+        payment_method: paymentMethod
       };
 
       const orderResponse = await axios.post('/api/orders', orderData);
@@ -360,11 +414,20 @@ const Sales = () => {
 
       // 2. Process payment (Only for retail products; services are paid upon completion in Order View)
       if (!hasServiceInCart) {
-        if (paymentMethod === 'cash' || paymentMethod === 'card') {
+        if (paymentMethod === 'free') {
+          await axios.post('/api/payments/manual', {
+            order_id: createdOrder.id,
+            amount: 0,
+            method: 'free',
+            bathaque_id: activeBathaqueId,
+            status: 'completed'
+          });
+        } else if (paymentMethod === 'cash' || paymentMethod === 'card') {
           await axios.post('/api/payments/manual', {
             order_id: createdOrder.id,
             amount: finalOrderTotal,
             method: finalOrderTotal === 0 ? 'free' : paymentMethod,
+            bathaque_id: activeBathaqueId,
             status: 'completed'
           });
         } else if (paymentMethod === 'multiple') {
@@ -379,6 +442,7 @@ const Sales = () => {
             amount: finalOrderTotal,
             method: 'multiple',
             splits: splitsArr,
+            bathaque_id: activeBathaqueId,
             status: 'completed'
           });
         } else if (paymentMethod === 'tap') {
@@ -404,11 +468,11 @@ const Sales = () => {
 
       toast.success(
         hasServiceInCart
-          ? 'Service booked successfully! Added to service queue.'
-          : 'Sale completed successfully! Receipt generated.',
+          ? (isFree ? 'Free service booked successfully! Added to queue.' : 'Service booked successfully! Added to service queue.')
+          : (isFree ? 'Free Loyalty Wash processed successfully! 🎉' : 'Sale completed successfully! Receipt generated.'),
         {
           duration: 4000,
-          icon: hasServiceInCart ? '🚗' : '🛒'
+          icon: isFree ? '🎁' : hasServiceInCart ? '🚗' : '🛒'
         }
       );
 
@@ -417,6 +481,7 @@ const Sales = () => {
       setDiscount('');
       setSelectedCustomer(null);
       setCustomerSearch('');
+      setBathaqueLoyalty(null);
       setPaymentMethod('cash');
       
       // Refresh local products (for updated stock counts)
@@ -510,6 +575,7 @@ const Sales = () => {
       const plate = String(c.vehicle_plate || '').toLowerCase();
       const plateClean = plate.replace(/[\s\-_]+/g, '');
       const province = String(c.province || '').toLowerCase();
+      const bathaqueId = String(c.bathaque_id || '').toLowerCase();
 
       return (
         name.includes(rawSearch) ||
@@ -517,7 +583,8 @@ const Sales = () => {
         (phoneClean && cleanSearch && phoneClean.includes(cleanSearch)) ||
         plate.includes(rawSearch) ||
         (plateClean && cleanSearch && plateClean.includes(cleanSearch)) ||
-        province.includes(rawSearch)
+        province.includes(rawSearch) ||
+        bathaqueId.includes(rawSearch)
       );
     } catch (err) {
       console.error('Error filtering sales customer:', err);
@@ -812,17 +879,33 @@ const Sales = () => {
             
             {/* Customer Search & Selector */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 relative">
-              <h2 className="text-lg font-bold text-gray-800 flex items-center justify-between">
-                <span>👤 Customer Select</span>
-                {selectedCustomer && (
+              <div className="flex items-center justify-between border-b pb-2">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <span>👤 Customer Select</span>
+                </h2>
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); }}
-                    className="text-xs text-red-500 font-semibold hover:underline"
+                    type="button"
+                    onClick={() => setShowBathaqueScanModal(true)}
+                    className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow transition"
+                    title="Scan or enter Bathaque Loyalty QR Pass"
                   >
-                    Clear Selection
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                    </svg>
+                    <span>Scan QR</span>
                   </button>
-                )}
-              </h2>
+                  {selectedCustomer && (
+                    <button
+                      type="button"
+                      onClick={handleClearCustomer}
+                      className="text-xs text-red-500 font-semibold hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {!selectedCustomer ? (
                 <div className="space-y-2">
@@ -830,11 +913,11 @@ const Sales = () => {
                     <div className="relative flex-1">
                       <input
                         type="text"
-                        placeholder="Search customer by name or plate..."
+                        placeholder="Search by name, plate, or Bathaque ID..."
                         value={customerSearch}
                         onChange={(e) => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
                         onFocus={() => setShowCustomerDropdown(true)}
-                        className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                        className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm"
                       />
                       
                       {/* Customer Dropdown Results */}
@@ -844,16 +927,19 @@ const Sales = () => {
                             filteredCustomers.map(cust => (
                               <div
                                 key={cust.id}
-                                onClick={() => {
-                                  setSelectedCustomer(cust);
-                                  setCustomerSearch(`${cust.name} (${cust.vehicle_plate})`);
-                                  setShowCustomerDropdown(false);
-                                }}
+                                onClick={() => handleSelectCustomer(cust)}
                                 className="px-4 py-2 hover:bg-primary-50 cursor-pointer flex justify-between items-center"
                               >
                                 <div>
                                   <p className="font-bold text-sm text-gray-800">{cust.name}</p>
-                                  <p className="text-xs text-gray-500">{cust.phone || 'No phone'}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xs text-gray-500">{cust.phone || 'No phone'}</p>
+                                    {cust.bathaque_id && (
+                                      <span className="text-[10px] bg-red-50 text-red-600 font-mono font-bold px-1.5 py-0.5 rounded border border-red-200">
+                                        {cust.bathaque_id} ({cust.wash_stamps || 0}/5)
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 <span className="font-mono text-xs font-semibold bg-gray-100 px-2 py-0.5 rounded text-gray-600">
                                   {cust.vehicle_plate}
@@ -877,13 +963,74 @@ const Sales = () => {
                   <p className="text-xs text-gray-400 italic">Leaves order under default "Walk-in Customer" if unselected</p>
                 </div>
               ) : (
-                <div className="bg-primary-50/50 p-4 rounded-xl border border-primary-100 flex items-center justify-between">
-                  <div>
-                    <h4 className="font-black text-primary-900">{selectedCustomer.name}</h4>
-                    <p className="text-xs text-primary-700 font-mono mt-0.5">{selectedCustomer.vehicle_plate} ({selectedCustomer.vehicle_type})</p>
-                    {selectedCustomer.phone && <p className="text-xs text-primary-600 mt-0.5">{selectedCustomer.phone}</p>}
+                <div className="bg-primary-50/50 p-4 rounded-xl border border-primary-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-black text-primary-900">{selectedCustomer.name}</h4>
+                      <p className="text-xs text-primary-700 font-mono mt-0.5">{selectedCustomer.vehicle_plate} ({selectedCustomer.vehicle_type})</p>
+                      {selectedCustomer.phone && <p className="text-xs text-primary-600 mt-0.5">{selectedCustomer.phone}</p>}
+                    </div>
+                    <span className="text-3xl">🚗</span>
                   </div>
-                  <span className="text-3xl">🚗</span>
+
+                  {/* Bathaque Loyalty Punch Card Visual */}
+                  {(selectedCustomer.bathaque_id || bathaqueLoyalty) && (
+                    <div className="pt-2 border-t border-primary-200/60 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-red-600"></span>
+                          Bathaque: <span className="font-mono text-red-600 font-extrabold">{selectedCustomer.bathaque_id || bathaqueLoyalty?.bathaque_id}</span>
+                        </span>
+                        <span className="text-[11px] font-extrabold text-gray-800">
+                          {bathaqueLoyalty?.wash_stamps || 0} / 5 Stamps
+                        </span>
+                      </div>
+
+                      {/* Mini 5-Stamp + Free row */}
+                      <div className="grid grid-cols-6 gap-1.5">
+                        {[1, 2, 3, 4, 5].map(st => {
+                          const done = (bathaqueLoyalty?.wash_stamps || 0) >= st;
+                          return (
+                            <div
+                              key={st}
+                              className={`py-1 rounded-lg text-center text-xs font-bold border transition ${
+                                done
+                                  ? 'bg-emerald-500 text-white border-emerald-600'
+                                  : 'bg-white text-gray-400 border-dashed border-gray-300'
+                              }`}
+                            >
+                              {done ? '✓' : st}
+                            </div>
+                          );
+                        })}
+                        <div
+                          className={`py-1 rounded-lg text-center text-xs font-black border transition ${
+                            (bathaqueLoyalty?.wash_stamps || 0) >= 5
+                              ? 'bg-amber-500 text-white border-amber-600 shadow animate-pulse'
+                              : 'bg-white text-gray-400 border-dashed border-gray-300'
+                          }`}
+                          title="6th Wash is Free"
+                        >
+                          🎁
+                        </div>
+                      </div>
+
+                      {(bathaqueLoyalty?.wash_stamps || 0) >= 5 ? (
+                        <div className="p-2 bg-amber-100 border border-amber-300 rounded-lg text-center">
+                          <p className="text-xs font-black text-amber-900">
+                            🎉 6th Wash is 100% FREE!
+                          </p>
+                          <p className="text-[10px] text-amber-800">
+                            Select "🎁 Free Wash" in Payment Method below to redeem.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-gray-500 text-center">
+                          {5 - (bathaqueLoyalty?.wash_stamps || 0)} more wash(es) until FREE 6th wash.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -907,6 +1054,13 @@ const Sales = () => {
                       value={newCustomer.phone}
                       onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
                       className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Bathaque ID (Optional, e.g. BQ10293847)"
+                      value={newCustomer.bathaque_id}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, bathaque_id: e.target.value.toUpperCase() })}
+                      className="w-full px-3 py-1.5 border rounded-lg text-sm font-mono uppercase font-bold text-red-600"
                     />
                     <select
                       value={newCustomer.vehicle_type}
@@ -1076,12 +1230,13 @@ const Sales = () => {
                   {/* Payment Method */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className={`grid ${bathaqueLoyalty?.wash_stamps >= 5 ? 'grid-cols-5' : 'grid-cols-4'} gap-2`}>
                       {[
                         { key: 'cash', label: '💵 Cash' },
                         { key: 'card', label: '💳 Card' },
                         { key: 'multiple', label: '🔀 Multiple' },
-                        { key: 'credit', label: '🏦 Credit' }
+                        { key: 'credit', label: '🏦 Credit' },
+                        ...(bathaqueLoyalty?.wash_stamps >= 5 ? [{ key: 'free', label: '🎁 Free' }] : [])
                       ].map(pm => (
                         <button
                           key={pm.key}
@@ -1091,7 +1246,11 @@ const Sales = () => {
                           }}
                           className={`py-2 text-xs font-bold rounded-xl border transition-all ${
                             paymentMethod === pm.key
-                              ? 'bg-primary-600 text-white border-primary-600 shadow'
+                              ? pm.key === 'free'
+                                ? 'bg-amber-500 text-white border-amber-500 shadow-md animate-pulse'
+                                : 'bg-primary-600 text-white border-primary-600 shadow'
+                              : pm.key === 'free'
+                              ? 'bg-amber-50 text-amber-900 border-amber-400 hover:bg-amber-100 font-extrabold ring-2 ring-amber-400/50'
                               : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                           }`}
                         >
@@ -1178,7 +1337,9 @@ const Sales = () => {
                 )}
                 <div className="flex justify-between text-lg font-black text-gray-900 border-t pt-2 mt-1">
                   <span>Net Total:</span>
-                  <span>AED {(hasServiceInCart ? subtotal : total).toFixed(2)}</span>
+                  <span className={paymentMethod === 'free' ? 'text-amber-600' : ''}>
+                    {paymentMethod === 'free' ? 'AED 0.00 (FREE WASH)' : `AED ${(hasServiceInCart ? subtotal : total).toFixed(2)}`}
+                  </span>
                 </div>
               </div>
 
@@ -1481,6 +1642,14 @@ const Sales = () => {
             <p className="mt-1">Generated by Sniper POS Admin Ledger</p>
           </div>
         </div>
+      )}
+
+      {/* Bathaque Loyalty Scan Modal */}
+      {showBathaqueScanModal && (
+        <BathaqueScanModal
+          onClose={() => setShowBathaqueScanModal(false)}
+          onApply={handleApplyBathaque}
+        />
       )}
     </div>
   );

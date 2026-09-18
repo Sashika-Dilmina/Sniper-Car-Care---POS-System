@@ -2,6 +2,7 @@ const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { formatPhoneNumber, buildFeedbackUrl, buildPaymentUrl } = require('../utils/customerLinkUtils');
+const { ensureBathaqueLoyalty, getBathaqueLoyalty, incrementBathaqueStamp, redeemBathaqueFreeWash } = require('../utils/bathaqueLoyalty');
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -10,6 +11,7 @@ const getOrders = asyncHandler(async (req, res) => {
   const { status, payment_status, customer_id, date, service_time, limit } = req.query;
   let query = `
     SELECT o.*, 
+           COALESCE(o.bathaque_id, c.bathaque_id) as bathaque_id,
            COALESCE(c.name, vc.name) as customer_name, 
            COALESCE(c.phone, vc.phone) as customer_phone,
            COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
@@ -122,7 +124,7 @@ const getOrders = asyncHandler(async (req, res) => {
   if (orders.length > 0) {
     const orderIds = orders.map(o => o.id);
     const [allItems] = await pool.query(`
-      SELECT oi.*, p.name as product_name, p.category
+      SELECT oi.*, p.name as product_name, p.category, p.price as unit_price
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
       WHERE oi.order_id IN (?)
@@ -152,6 +154,7 @@ const getOrder = asyncHandler(async (req, res) => {
 
   const [orders] = await pool.query(`
     SELECT o.*, 
+           COALESCE(o.bathaque_id, c.bathaque_id) as bathaque_id,
            COALESCE(c.name, vc.name) as customer_name, 
            COALESCE(c.phone, vc.phone) as customer_phone,
            COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
@@ -182,6 +185,15 @@ const getOrder = asyncHandler(async (req, res) => {
   }
 
   const order = orders[0];
+
+  // Fetch Bathaque Loyalty info if order has bathaque_id
+  if (order.bathaque_id) {
+    try {
+      order.bathaque_loyalty = await getBathaqueLoyalty(pool, order.bathaque_id);
+    } catch (bErr) {
+      console.error('[Order] Error fetching bathaque loyalty:', bErr.message);
+    }
+  }
 
   // Get order items
   const [items] = await pool.query(`
@@ -223,13 +235,13 @@ const getOrder = asyncHandler(async (req, res) => {
 // @route   POST /api/orders
 // @access  Private
 const createOrder = asyncHandler(async (req, res) => {
-  const { customer_id, items, total, discount } = req.body;
+  const { customer_id, items, total, discount, bathaque_id, payment_method } = req.body;
 
   if (!items || items.length === 0) {
     return res.status(400).json({ message: 'Order items are required' });
   }
 
-  if (!total) {
+  if (total === undefined || total === null) {
     return res.status(400).json({ message: 'Total amount is required' });
   }
 
@@ -237,6 +249,32 @@ const createOrder = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
+    // Resolve Bathaque ID
+    let orderBathaqueId = bathaque_id ? bathaque_id.toString().trim() : null;
+    if (!orderBathaqueId && customer_id) {
+      const [cRows] = await connection.query('SELECT bathaque_id FROM customers WHERE id = ?', [customer_id]);
+      if (cRows.length > 0 && cRows[0].bathaque_id) {
+        orderBathaqueId = cRows[0].bathaque_id;
+      }
+    }
+
+    const isFreeWashCheckout = payment_method === 'free' || parseFloat(total) === 0;
+    if (isFreeWashCheckout && payment_method === 'free') {
+      if (!orderBathaqueId) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ message: 'Free wash checkout requires an eligible Bathaque ID / QR scan.' });
+      }
+      const loyalty = await getBathaqueLoyalty(connection, orderBathaqueId);
+      if (!loyalty || loyalty.wash_stamps < 5) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ 
+          message: `Bathaque ID ${orderBathaqueId} has only ${loyalty?.wash_stamps || 0}/5 washes. Must have 5 completed washes for a free wash.` 
+        });
+      }
+    }
+
     // Verify stock and check if any product is a service
     let hasService = false;
     for (let item of items) {
@@ -259,14 +297,14 @@ const createOrder = asyncHandler(async (req, res) => {
       }
     }
 
-    let finalTotal = parseFloat(total);
-    let finalDiscount = parseFloat(discount || 0);
+    let finalTotal = isFreeWashCheckout ? 0.00 : parseFloat(total);
+    let finalDiscount = isFreeWashCheckout ? 0.00 : parseFloat(discount || 0);
 
     // Calculate gross subtotal of items
     const grossSubtotal = items.reduce((sum, item) => sum + (parseFloat(item.price || 0) * (parseInt(item.quantity, 10) || 1)), 0);
 
-    // Strictly enforce: No full 100% discount. Max discount allowed is grossSubtotal - 1
-    if (grossSubtotal > 0 && finalDiscount >= grossSubtotal) {
+    // Strictly enforce: No full 100% discount for normal sales. Max discount allowed is grossSubtotal - 1
+    if (!isFreeWashCheckout && grossSubtotal > 0 && finalDiscount >= grossSubtotal) {
       await connection.rollback();
       connection.release();
       const maxAllowed = Math.max(0, grossSubtotal - 1);
@@ -326,29 +364,32 @@ const createOrder = asyncHandler(async (req, res) => {
     }
 
     const orderStatus = hasService ? 'processing' : 'completed';
-    const paymentStatus = (finalTotal === 0) ? 'free' : 'pending';
+    const paymentStatus = (finalTotal === 0 || isFreeWashCheckout) ? 'free' : 'pending';
 
     // Create order using MySQL CURRENT_TIMESTAMP for exact server time synchronization
     let orderResult;
     if (hasService) {
       [orderResult] = await connection.query(
-        'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at, service_completed_at, vip_booking_id) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL, ?)',
-        [customer_id || null, finalTotal, finalDiscount, orderStatus, paymentStatus, vipBookingId]
+        'INSERT INTO orders (customer_id, bathaque_id, total, discount, status, payment_status, service_started_at, service_completed_at, vip_booking_id) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL, ?)',
+        [customer_id || null, orderBathaqueId, finalTotal, finalDiscount, orderStatus, paymentStatus, vipBookingId]
       );
     } else {
       [orderResult] = await connection.query(
-        'INSERT INTO orders (customer_id, total, discount, status, payment_status, service_started_at, service_completed_at, vip_booking_id) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)',
-        [customer_id || null, finalTotal, finalDiscount, orderStatus, paymentStatus, vipBookingId]
+        'INSERT INTO orders (customer_id, bathaque_id, total, discount, status, payment_status, service_started_at, service_completed_at, vip_booking_id) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)',
+        [customer_id || null, orderBathaqueId, finalTotal, finalDiscount, orderStatus, paymentStatus, vipBookingId]
       );
     }
 
     const orderId = orderResult.insertId;
 
-    if (finalTotal === 0) {
+    if (finalTotal === 0 || paymentStatus === 'free') {
       await connection.query(
         'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
         [orderId]
       );
+      if (orderBathaqueId) {
+        await redeemBathaqueFreeWash(connection, orderBathaqueId);
+      }
     }
 
     // Fetch customer vehicle type if customer_id exists
@@ -450,7 +491,8 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     const [orders] = await connection.query(`
       SELECT o.*, c.name as customer_name, c.phone as customer_phone,
              c.vehicle_plate, c.vehicle_type, c.id as customer_id_ref,
-             c.province as emirate
+             c.province as emirate,
+             COALESCE(o.bathaque_id, c.bathaque_id) as bathaque_id
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
       WHERE o.id = ?
@@ -481,43 +523,34 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     let serviceStatus = 'pending';
     let serviceStartedUpdate = '';
     let serviceCompletedUpdate = '';
-    
+
     if (status === 'processing') {
       serviceStatus = 'in_progress';
       serviceStartedUpdate = ', started_at = COALESCE(started_at, CURRENT_TIMESTAMP)';
     } else if (status === 'completed') {
       serviceStatus = 'completed';
-      serviceStartedUpdate = ', started_at = COALESCE(started_at, created_at, CURRENT_TIMESTAMP)';
-      serviceCompletedUpdate = ', completed_at = CURRENT_TIMESTAMP';
+      serviceCompletedUpdate = ', completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP), started_at = COALESCE(started_at, CURRENT_TIMESTAMP)';
     } else if (status === 'cancelled') {
       serviceStatus = 'cancelled';
-      await connection.query(
-        'UPDATE payments SET status = "failed" WHERE order_id = ?',
-        [id]
-      );
-      await connection.query(
-        'DELETE FROM customer_credits WHERE order_id = ?',
-        [id]
-      );
-    } else if (status === 'pending') {
-      serviceStatus = 'pending';
-      serviceStartedUpdate = ', started_at = NULL';
-      serviceCompletedUpdate = ', completed_at = NULL';
     }
 
-    if (status === 'completed' && order.customer_id_ref) {
-      const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
-      if (!isExemptEmirate) {
-        const [pendingServices] = await connection.query(
-          'SELECT id FROM services WHERE order_id = ? AND status != "completed"',
-          [id]
-        );
-        if (pendingServices.length > 0) {
-          const pointsToAdd = pendingServices.length * 25;
+    // When status changes to completed, award 10 loyalty points for each completed service
+    if (status === 'completed') {
+      const [pendingServices] = await connection.query(
+        'SELECT id, customer_id, service_name FROM services WHERE order_id = ? AND status != "completed"',
+        [id]
+      );
+
+      if (pendingServices.length > 0 && order.customer_id_ref) {
+        const pointsToAdd = pendingServices.length * 10;
+        
+        const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
+        if (!isExemptEmirate) {
           const [loyaltyRows] = await connection.query(
-            'SELECT points FROM loyalty WHERE customer_id = ?',
+            'SELECT id, points FROM loyalty WHERE customer_id = ?',
             [order.customer_id_ref]
           );
+
           if (loyaltyRows.length > 0) {
             await connection.query(
               'UPDATE loyalty SET points = points + ? WHERE customer_id = ?',
@@ -553,55 +586,76 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     }
 
     // Handle Loyalty Stamps for Completed Orders
+    const targetBathaqueId = order.bathaque_id;
     const targetCustomerId = order.customer_id || order.customer_id_ref;
-      if (targetCustomerId && parseFloat(order.total) > 0) {
-        const [servicesList] = await connection.query(
-          'SELECT service_name FROM services WHERE order_id = ?',
-          [id]
-        );
-        const [itemsList] = await connection.query(
-          'SELECT p.name, p.category FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
-          [id]
-        );
 
-        const eligibleFreeServices = [
-          'full body service',
-          'full body wash',
-          'ceramic wash',
-          'double soap'
-        ];
+    // 1. If order was marked as free wash, redeem/reset Bathaque loyalty
+    if (status === 'completed' && (order.payment_status === 'free' || parseFloat(order.total) === 0) && targetBathaqueId) {
+      try {
+        await redeemBathaqueFreeWash(connection, targetBathaqueId);
+      } catch (rErr) {
+        console.error('[Bathaque] Error redeeming free wash:', rErr.message);
+      }
+    }
 
-        let hasEligibleService = false;
+    // 2. If order has eligible service and total > 0 (paid wash), increment stamp!
+    if (status === 'completed' && parseFloat(order.total) > 0) {
+      const [servicesList] = await connection.query(
+        'SELECT service_name FROM services WHERE order_id = ?',
+        [id]
+      );
+      const [itemsList] = await connection.query(
+        'SELECT p.name, p.category FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
+        [id]
+      );
 
-        // Check services names
-        for (let s of servicesList) {
-          const sName = s.service_name.toLowerCase().trim();
-          if (eligibleFreeServices.some(e => sName.includes(e)) || sName.includes('vip')) {
+      const eligibleFreeServices = [
+        'full body service',
+        'full body wash',
+        'ceramic wash',
+        'double soap'
+      ];
+
+      let hasEligibleService = false;
+
+      // Check services names
+      for (let s of servicesList) {
+        const sName = s.service_name.toLowerCase().trim();
+        if (eligibleFreeServices.some(e => sName.includes(e)) || sName.includes('vip')) {
+          hasEligibleService = true;
+          break;
+        }
+      }
+
+      // Check items names
+      if (!hasEligibleService) {
+        for (let item of itemsList) {
+          const pName = item.name.toLowerCase().trim();
+          if (eligibleFreeServices.some(e => pName.includes(e)) || item.category === 'VIP' || pName.includes('vip')) {
             hasEligibleService = true;
             break;
           }
         }
+      }
 
-        // Check items names
-        if (!hasEligibleService) {
-          for (let item of itemsList) {
-            const pName = item.name.toLowerCase().trim();
-            if (eligibleFreeServices.some(e => pName.includes(e)) || item.category === 'VIP' || pName.includes('vip')) {
-              hasEligibleService = true;
-              break;
+      if (hasEligibleService) {
+        const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
+        if (!isExemptEmirate) {
+          if (targetBathaqueId) {
+            try {
+              await incrementBathaqueStamp(connection, targetBathaqueId);
+            } catch (bErr) {
+              console.error('[Bathaque] Error incrementing stamp:', bErr.message);
             }
           }
-        }
-
-        if (hasEligibleService) {
-          const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
-          if (!isExemptEmirate) {
+          if (targetCustomerId) {
             const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
             await ensureLoyaltyRow(connection, targetCustomerId);
             await incrementWashStamp(connection, targetCustomerId);
           }
         }
       }
+    }
 
     await connection.commit();
     connection.release();

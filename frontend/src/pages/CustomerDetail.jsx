@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
+import BathaqueQRModal from '../components/BathaqueQRModal';
 
 const CustomerDetail = () => {
   const { id } = useParams();
@@ -9,6 +10,7 @@ const CustomerDetail = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
+  const [showBathaqueQrModal, setShowBathaqueQrModal] = useState(false);
   const [checkinForm, setCheckinForm] = useState({
     customer_id: '',
     name: '',
@@ -86,39 +88,175 @@ const CustomerDetail = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-800">Customer Details</h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {customer.bathaque_id && (
+            <button
+              onClick={() => setShowBathaqueQrModal(true)}
+              className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition flex items-center gap-2 shadow font-bold text-sm"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
+              Print QR Pass
+            </button>
+          )}
           <button
             onClick={handleOpenCheckin}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition flex items-center gap-2 shadow"
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition flex items-center gap-2 shadow text-sm font-semibold"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
             </svg>
             Manual Check-in
           </button>
-          <Link to="/customers" className="text-primary-600 hover:underline">
-            ← Back to Customers
+          <Link to={`/customers/${customer.id}/edit`} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition text-sm font-semibold">
+            Edit
+          </Link>
+          <Link to="/customers" className="text-primary-600 hover:underline text-sm font-semibold">
+            ← Back
           </Link>
         </div>
       </div>
 
-      {/* Loyalty Status Card */}
-      <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 p-6 rounded-lg shadow-lg text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold mb-2">
-              💛 Loyalty Rewards
-            </h2>
-            <p className="text-lg opacity-90">
-              {servicesCompleted} services completed
-            </p>
+      {/* Bathaque Multi-Vehicle Loyalty Card */}
+      {customer.bathaque_id ? (
+        <div className="bg-gradient-to-br from-gray-900 via-slate-900 to-neutral-900 border-2 border-red-500/40 p-6 rounded-2xl shadow-xl text-white">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-gray-700/80">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-red-600/90 text-white">
+                  Multi-Vehicle Loyalty
+                </span>
+                <span className="text-xs text-gray-400">Buy 5 Washes, 6th Wash FREE</span>
+              </div>
+              <div className="flex items-center gap-3 mt-2">
+                <span className="text-xs text-gray-400 uppercase font-semibold">Bathaque ID:</span>
+                <span className="font-mono text-2xl font-black tracking-widest text-red-400 bg-red-950/60 border border-red-800/80 px-3.5 py-1 rounded-xl">
+                  {customer.bathaque_id}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="text-2xl font-black text-white">
+                  {customer.bathaque_loyalty?.wash_stamps || 0} <span className="text-sm font-normal text-gray-400">/ 5 Stamps</span>
+                </div>
+                <div className="text-xs text-gray-400">
+                  Total: {customer.bathaque_loyalty?.total_washes || 0} washes · {customer.bathaque_loyalty?.free_washes_redeemed || 0} redeemed
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBathaqueQrModal(true)}
+                className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow transition"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print Pass
+              </button>
+            </div>
           </div>
-          <div className="text-right">
-            <div className="text-4xl font-bold">{loyaltyPoints}</div>
-            <div className="text-sm opacity-90">Loyalty Points</div>
+
+          {/* Punch Card Circles */}
+          <div className="pt-6">
+            <div className="grid grid-cols-6 gap-3 max-w-2xl mx-auto">
+              {[1, 2, 3, 4, 5].map((stampNum) => {
+                const isStamped = (customer.bathaque_loyalty?.wash_stamps || 0) >= stampNum;
+                return (
+                  <div
+                    key={stampNum}
+                    className={`aspect-square rounded-2xl flex flex-col items-center justify-center border-2 transition-all ${
+                      isStamped
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-lg shadow-emerald-950/50'
+                        : 'bg-gray-800/40 border-dashed border-gray-700 text-gray-500'
+                    }`}
+                  >
+                    <span className="text-xl font-black">
+                      {isStamped ? '✓' : stampNum}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider mt-0.5">
+                      {isStamped ? 'Wash' : `Wash ${stampNum}`}
+                    </span>
+                  </div>
+                );
+              })}
+
+              {/* 6th Wash is FREE */}
+              <div
+                className={`aspect-square rounded-2xl flex flex-col items-center justify-center border-2 text-center p-1 relative overflow-hidden transition-all ${
+                  (customer.bathaque_loyalty?.wash_stamps || 0) >= 5
+                    ? 'bg-gradient-to-br from-amber-500 to-yellow-600 border-amber-300 text-white shadow-xl shadow-amber-900/60 animate-pulse'
+                    : 'bg-gray-800/40 border-dashed border-amber-600/40 text-gray-500'
+                }`}
+              >
+                <span className="text-2xl">🎁</span>
+                <span className="text-[10px] uppercase font-black tracking-wider leading-tight">
+                  {(customer.bathaque_loyalty?.wash_stamps || 0) >= 5 ? 'FREE NOW!' : 'FREE (6th)'}
+                </span>
+              </div>
+            </div>
+
+            {/* Status message */}
+            <div className="mt-4 text-center">
+              {(customer.bathaque_loyalty?.wash_stamps || 0) >= 5 ? (
+                <span className="inline-block px-4 py-1.5 bg-amber-500/20 border border-amber-500 text-amber-300 rounded-full text-xs font-bold">
+                  🎉 Eligible for 100% FREE WASH on this visit!
+                </span>
+              ) : (
+                <span className="text-xs text-gray-400">
+                  {5 - (customer.bathaque_loyalty?.wash_stamps || 0)} more wash(es) needed to unlock FREE 6th wash.
+                </span>
+              )}
+            </div>
+
+            {/* Linked Vehicles sharing this Bathaque ID */}
+            {customer.linked_bathaque_vehicles && customer.linked_bathaque_vehicles.length > 1 && (
+              <div className="mt-5 pt-4 border-t border-gray-800">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  Linked Vehicles Sharing This Loyalty Pool ({customer.linked_bathaque_vehicles.length}):
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {customer.linked_bathaque_vehicles.map((veh) => (
+                    <Link
+                      key={veh.id}
+                      to={`/customers/${veh.id}`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition ${
+                        veh.id === customer.id
+                          ? 'bg-red-950/80 border border-red-600 text-red-300'
+                          : 'bg-gray-800 border border-gray-700 text-gray-300 hover:border-gray-500'
+                      }`}
+                    >
+                      <span>🚗</span>
+                      <span>{veh.vehicle_plate}</span>
+                      <span className="text-[10px] font-sans font-normal opacity-70">({veh.vehicle_type})</span>
+                      {veh.id === customer.id && <span className="text-[10px] bg-red-600 text-white px-1 rounded">Current</span>}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">💡</span>
+            <div>
+              <h4 className="font-bold text-amber-900 text-sm">No Bathaque ID Assigned</h4>
+              <p className="text-xs text-amber-700">
+                Assign a Bathaque ID to this customer to enable 5-wash loyalty punch cards and link multiple vehicles together.
+              </p>
+            </div>
+          </div>
+          <Link
+            to={`/customers/${customer.id}/edit`}
+            className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700 transition shrink-0"
+          >
+            Assign Bathaque ID
+          </Link>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow">
@@ -311,6 +449,14 @@ const CustomerDetail = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Bathaque Loyalty QR Pass Modal */}
+      {showBathaqueQrModal && customer && (
+        <BathaqueQRModal
+          customer={customer}
+          onClose={() => setShowBathaqueQrModal(false)}
+        />
       )}
     </div>
   );

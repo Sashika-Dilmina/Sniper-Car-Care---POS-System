@@ -2,6 +2,7 @@ const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { buildCustomerWebsiteUrl, formatPhoneNumber, parsePlateComponents, findMatchingCustomer } = require('../utils/customerLinkUtils');
+const { ensureBathaqueLoyalty } = require('../utils/bathaqueLoyalty');
 
 // @desc    Mock ANPR detection - simulate camera plate recognition
 // @route   POST /api/anpr/detect
@@ -158,7 +159,8 @@ const getLatestDetections = asyncHandler(async (req, res) => {
 // @route   POST /api/anpr/register
 // @access  Private
 const registerFromANPR = asyncHandler(async (req, res) => {
-  const { plate_number, vehicle_plate, province, vehicle_type, name, phone } = req.body;
+  const { plate_number, vehicle_plate, province, vehicle_type, name, phone, bathaque_id } = req.body;
+  const cleanBathaqueId = bathaque_id ? bathaque_id.toString().trim() : null;
   
   let finalPlate = plate_number || vehicle_plate;
   if (req.body.plate_code && req.body.emirate && req.body.plate_number) {
@@ -182,8 +184,8 @@ const registerFromANPR = asyncHandler(async (req, res) => {
 
   // Create new customer
   const [result] = await pool.query(
-    'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
-    [name || 'Unknown', phone || null, finalPlate, vehicle_type, finalProvince]
+    'INSERT INTO customers (name, phone, bathaque_id, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?, ?)',
+    [name || 'Unknown', phone || null, cleanBathaqueId, finalPlate, vehicle_type, finalProvince]
   );
 
   // Parse components and insert into vehicles table
@@ -199,6 +201,15 @@ const registerFromANPR = asyncHandler(async (req, res) => {
 
   // Initialize loyalty
   await pool.query('INSERT INTO loyalty (customer_id, points) VALUES (?, ?)', [result.insertId, 0]);
+
+  // Ensure Bathaque loyalty row if ID is provided
+  if (cleanBathaqueId) {
+    try {
+      await ensureBathaqueLoyalty(pool, cleanBathaqueId);
+    } catch (bErr) {
+      console.error('[Bathaque] Failed to ensure loyalty row during ANPR register:', bErr.message);
+    }
+  }
 
   const [newCustomer] = await pool.query('SELECT * FROM customers WHERE id = ?', [result.insertId]);
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import BathaqueScanModal from '../components/BathaqueScanModal';
 
 const OrderDetail = () => {
   const { id } = useParams();
@@ -11,6 +12,10 @@ const OrderDetail = () => {
   const [loadingTap, setLoadingTap] = useState(false);
   const [registerStatus, setRegisterStatus] = useState('closed');
   const [sharing, setSharing] = useState(false);
+
+  // Bathaque Loyalty States
+  const [orderBathaqueLoyalty, setOrderBathaqueLoyalty] = useState(null);
+  const [showBathaqueScanModal, setShowBathaqueScanModal] = useState(false);
 
   const [vipBooking, setVipBooking] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -198,10 +203,44 @@ const OrderDetail = () => {
     }
   };
 
+  const fetchBathaqueLoyalty = async (bId) => {
+    if (!bId) return;
+    try {
+      const res = await axios.get(`/api/bathaque/check/${bId}`);
+      if (res.data.success) {
+        setOrderBathaqueLoyalty(res.data.loyalty);
+        if ((res.data.loyalty?.wash_stamps || 0) >= 5) {
+          setSelectedOrderMethod('free');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check Bathaque loyalty', e);
+    }
+  };
+
+  const handleApplyBathaqueToOrder = (result) => {
+    setOrderBathaqueLoyalty(result.loyalty);
+    if ((result.loyalty?.wash_stamps || 0) >= 5) {
+      setSelectedOrderMethod('free');
+      toast.success(`Bathaque Pass Applied: ${result.bathaque_id} - 100% FREE WASH ELIGIBLE! 🎁`);
+    } else {
+      toast.success(`Bathaque Pass Applied: ${result.bathaque_id} (${result.loyalty?.wash_stamps || 0}/5 stamps)`);
+    }
+  };
+
   const fetchOrder = async () => {
     try {
       const response = await axios.get(`/api/orders/${id}`);
-      setOrder(response.data.order);
+      const ord = response.data.order;
+      setOrder(ord);
+      if (ord?.bathaque_loyalty) {
+        setOrderBathaqueLoyalty(ord.bathaque_loyalty);
+        if ((ord.bathaque_loyalty.wash_stamps || 0) >= 5 && ord.payment_status !== 'paid' && ord.payment_status !== 'free') {
+          setSelectedOrderMethod('free');
+        }
+      } else if (ord?.bathaque_id) {
+        fetchBathaqueLoyalty(ord.bathaque_id);
+      }
     } catch (error) {
       toast.error('Failed to load order details');
     } finally {
@@ -293,6 +332,7 @@ const OrderDetail = () => {
   }
 
   const remainingAmount = parseFloat(order.total) - (order.payments?.reduce((sum, p) => sum + (p.status === 'completed' ? parseFloat(p.amount) : 0), 0) || 0);
+  const isEligibleForFree = (orderBathaqueLoyalty?.wash_stamps ?? order?.bathaque_loyalty?.wash_stamps ?? 0) >= 5;
   const isCashOrder = !order.payments || order.payments.length === 0 || order.payments.every(p => p.method === 'cash');
   const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
   const isServiceCategory = (cat, name) => {
@@ -356,6 +396,30 @@ const OrderDetail = () => {
               <div>
                 <p className="text-sm text-gray-600">Vehicle Plate</p>
                 <p className="text-lg font-mono">{order.vehicle_plate}</p>
+              </div>
+            )}
+            {(order.bathaque_id || orderBathaqueLoyalty?.bathaque_id) && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-red-800 uppercase tracking-wider">
+                    Bathaque Loyalty Pass:
+                  </span>
+                  <span className="font-mono font-black text-red-700 text-sm">
+                    {order.bathaque_id || orderBathaqueLoyalty?.bathaque_id}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-red-900 font-bold">
+                  <span>Wash Stamps: {orderBathaqueLoyalty?.wash_stamps ?? order.bathaque_loyalty?.wash_stamps ?? 0} / 5</span>
+                  {isEligibleForFree ? (
+                    <span className="px-2 py-0.5 bg-amber-200 text-amber-900 rounded-full text-[11px] font-black border border-amber-400 animate-pulse">
+                      🎁 6th Wash is FREE!
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 font-normal">
+                      {5 - (orderBathaqueLoyalty?.wash_stamps ?? order.bathaque_loyalty?.wash_stamps ?? 0)} more wash(es) to free
+                    </span>
+                  )}
+                </div>
               </div>
             )}
             {getCleanNote(order.notes) && (
@@ -547,33 +611,80 @@ const OrderDetail = () => {
               <div className="w-full bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <h3 className="font-semibold mb-3">Record Manual Payment</h3>
                 <div className="w-full space-y-4">
+                  {/* Bathaque 5-Stamps Free Wash Alert */}
+                  {isEligibleForFree && (
+                    <div className="p-3 bg-gradient-to-r from-amber-500/15 to-yellow-500/25 border-2 border-amber-400 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🎁</span>
+                        <div>
+                          <p className="text-xs font-black text-amber-900 uppercase">
+                            Eligible for 100% Free Wash!
+                          </p>
+                          <p className="text-[11px] text-amber-800">
+                            Bathaque ID ({orderBathaqueLoyalty?.bathaque_id || order.bathaque_id}) has completed 5 wash stamps.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOrderMethod('free')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black shadow transition ${
+                          selectedOrderMethod === 'free'
+                            ? 'bg-amber-600 text-white shadow-amber-300'
+                            : 'bg-white text-amber-800 border border-amber-400 hover:bg-amber-100'
+                        }`}
+                      >
+                        {selectedOrderMethod === 'free' ? '✓ Free Wash Selected' : 'Apply Free Wash'}
+                      </button>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Method</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs text-gray-500 uppercase font-bold">Method</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowBathaqueScanModal(true)}
+                          className="text-[11px] text-red-600 font-bold hover:underline flex items-center gap-1"
+                        >
+                          <span>📷</span> Scan Bathaque Pass
+                        </button>
+                      </div>
                       <select 
                         value={selectedOrderMethod}
                         onChange={(e) => setSelectedOrderMethod(e.target.value)}
-                        className="w-full p-2 border rounded-lg bg-white font-bold"
+                        className={`w-full p-2 border rounded-lg font-bold ${
+                          selectedOrderMethod === 'free'
+                            ? 'bg-amber-50 text-amber-900 border-amber-500 ring-2 ring-amber-400/40'
+                            : 'bg-white'
+                        }`}
                       >
                         <option value="cash">💵 Cash</option>
                         <option value="card">💳 Card</option>
                         <option value="credit">🏦 Credit</option>
                         <option value="bank_transfer">🏛️ Bank Transfer</option>
                         <option value="multiple">🔀 Multiple Payments (Split)</option>
+                        {isEligibleForFree && (
+                          <option value="free" className="text-amber-800 font-black bg-amber-100">
+                            🎁 Free Wash (Bathaque Loyalty - 5 Stamps Completed)
+                          </option>
+                        )}
                       </select>
                     </div>
                     <div>
                       <div className="flex justify-between items-center mb-1">
                         <label className="block text-xs text-gray-500 uppercase font-bold">Add Discount (AED)</label>
-                        {remainingAmount > 0 && (
+                        {remainingAmount > 0 && selectedOrderMethod !== 'free' && (
                           <span className="text-[10px] text-gray-500 font-semibold">Max: AED {Math.max(0, remainingAmount - 1)}</span>
                         )}
                       </div>
                       <input
                         type="number"
                         min="0"
+                        disabled={selectedOrderMethod === 'free'}
                         max={Math.max(0, remainingAmount - 1)}
-                        value={paymentDiscount}
+                        value={selectedOrderMethod === 'free' ? 0 : paymentDiscount}
                         onChange={(e) => {
                           const val = parseFloat(e.target.value) || 0;
                           const maxAllowed = Math.max(0, remainingAmount - 1);
@@ -584,7 +695,9 @@ const OrderDetail = () => {
                             setPaymentDiscount(val);
                           }
                         }}
-                        className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-primary-500 text-sm font-bold"
+                        className={`w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm font-bold ${
+                          selectedOrderMethod === 'free' ? 'bg-gray-100 text-gray-400' : 'bg-white'
+                        }`}
                       />
                     </div>
                   </div>
@@ -637,17 +750,19 @@ const OrderDetail = () => {
                           toast.error('Credit payment requires a registered customer on this order.');
                           return;
                         }
-                        if (paymentDiscount > 0 && paymentDiscount >= remainingAmount) {
+                        const isFree = selectedOrderMethod === 'free';
+                        if (!isFree && paymentDiscount > 0 && paymentDiscount >= remainingAmount) {
                           toast.error(`Full discount is not allowed. Maximum discount is AED ${Math.max(0, remainingAmount - 1)}`);
                           return;
                         }
-                        const finalAmount = Math.max(0, remainingAmount - paymentDiscount);
+                        const finalAmount = isFree ? 0 : Math.max(0, remainingAmount - paymentDiscount);
                         try {
                           const payload = {
                             order_id: order.id,
                             amount: finalAmount,
                             method: selectedOrderMethod,
-                            discount: paymentDiscount
+                            discount: isFree ? 0 : paymentDiscount,
+                            bathaque_id: orderBathaqueLoyalty?.bathaque_id || order.bathaque_id
                           };
 
                           if (selectedOrderMethod === 'multiple') {
@@ -659,7 +774,7 @@ const OrderDetail = () => {
                           }
 
                           await axios.post('/api/payments/manual', payload);
-                          toast.success('Payment recorded successfully');
+                          toast.success(isFree ? 'Free Wash redeemed and order completed! 🎉' : 'Payment recorded successfully');
                           setShowPayment(false);
                           setPaymentDiscount(0);
                           fetchOrder();
@@ -667,9 +782,15 @@ const OrderDetail = () => {
                           toast.error(err.response?.data?.message || 'Failed to record payment');
                         }
                       }}
-                      className="px-6 py-2.5 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700 transition text-sm shadow-md"
+                      className={`px-6 py-2.5 rounded-lg font-bold transition text-sm shadow-md ${
+                        selectedOrderMethod === 'free'
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse shadow-amber-300'
+                          : 'bg-primary-600 text-white hover:bg-primary-700'
+                      }`}
                     >
-                      Confirm Amount: AED {Math.max(0, remainingAmount - paymentDiscount).toLocaleString()}
+                      {selectedOrderMethod === 'free'
+                        ? '🎁 Confirm 100% Free Wash (AED 0.00)'
+                        : `Confirm Amount: AED ${Math.max(0, remainingAmount - paymentDiscount).toLocaleString()}`}
                     </button>
                     <button onClick={() => setShowPayment(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
                   </div>
@@ -1113,6 +1234,14 @@ const OrderDetail = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bathaque Loyalty Scan Modal */}
+      {showBathaqueScanModal && (
+        <BathaqueScanModal
+          onClose={() => setShowBathaqueScanModal(false)}
+          onApply={handleApplyBathaqueToOrder}
+        />
       )}
     </div>
   );

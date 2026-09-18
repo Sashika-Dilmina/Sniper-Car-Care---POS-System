@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
+const { getBathaqueLoyalty, redeemBathaqueFreeWash } = require('../utils/bathaqueLoyalty');
 
 // @desc    Create payment intent
 // @route   POST /api/payments/create-intent
@@ -201,6 +202,60 @@ const processManualPayment = asyncHandler(async (req, res) => {
           [newTotal, newDiscount, order_id]
         );
       }
+    }
+
+    if (method === 'free') {
+      let targetBathaque = req.body.bathaque_id ? req.body.bathaque_id.toString().trim() : null;
+      if (!targetBathaque) {
+        const [ordRows] = await connection.query(
+          'SELECT o.bathaque_id, c.bathaque_id as cust_bathaque_id FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = ?',
+          [order_id]
+        );
+        if (ordRows.length > 0) {
+          targetBathaque = ordRows[0].bathaque_id || ordRows[0].cust_bathaque_id;
+        }
+      }
+
+      if (!targetBathaque) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ message: 'Free wash redemption requires an eligible Bathaque ID / QR scan.' });
+      }
+
+      const loyalty = await getBathaqueLoyalty(connection, targetBathaque);
+      if (!loyalty || loyalty.wash_stamps < 5) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ 
+          message: `Bathaque ID ${targetBathaque} has only ${loyalty?.wash_stamps || 0}/5 washes. Must have 5 completed washes for a free wash.` 
+        });
+      }
+
+      // Update order total to 0.00 and payment_status to 'free'
+      await connection.query(
+        `UPDATE orders 
+         SET bathaque_id = ?, total = 0.00, payment_status = 'free', 
+             status = IF(status = 'cancelled', status, 'completed'),
+             service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) 
+         WHERE id = ?`,
+        [targetBathaque, order_id]
+      );
+
+      // Remove any prior pending payment rows
+      await connection.query('DELETE FROM payments WHERE order_id = ? AND status = "pending"', [order_id]);
+
+      // Record completed free payment entry
+      await connection.query(
+        'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
+        [order_id]
+      );
+
+      // Redeem the free wash and reset Bathaque stamps to 0
+      await redeemBathaqueFreeWash(connection, targetBathaque);
+
+      await connection.commit();
+      connection.release();
+      return res.json({ success: true, message: 'Free wash redeemed successfully! Stamp cycle has reset.' });
     }
 
     if (method === 'credit') {

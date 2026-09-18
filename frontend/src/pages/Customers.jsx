@@ -4,6 +4,7 @@ import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import VehiclePlatePreview from '../components/VehiclePlatePreview';
 import SearchableSelect from '../components/SearchableSelect';
+import BathaqueQRModal from '../components/BathaqueQRModal';
 import { useAuth } from '../context/AuthContext';
 
 class CustomerErrorBoundary extends Component {
@@ -222,10 +223,13 @@ const CustomersContent = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedQrCustomer, setSelectedQrCustomer] = useState(null);
+  const [showBathaqueQrModal, setShowBathaqueQrModal] = useState(false);
   const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '+9715',
+    bathaque_id: '',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -278,6 +282,7 @@ const CustomersContent = () => {
     try {
       const payload = {
         ...newCustomer,
+        bathaque_id: newCustomer.bathaque_id ? newCustomer.bathaque_id.trim().toUpperCase() : null,
         phone: cleanPhone
       };
       if (isNoVehicle) {
@@ -291,6 +296,7 @@ const CustomersContent = () => {
       setNewCustomer({
         name: '',
         phone: '+9715',
+        bathaque_id: '',
         emirate: '',
         plate_code: '',
         plate_number: '',
@@ -403,6 +409,22 @@ const CustomersContent = () => {
                     placeholder="+971501234567"
                   />
                   <p className="text-xs text-gray-400 mt-1">Numbers only, minimum 9 digits</p>
+                </div>
+
+                {/* Bathaque ID */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-bold text-gray-700">Bathaque ID (Optional)</label>
+                    <span className="text-[11px] text-red-600 font-bold">Multi-Vehicle Loyalty</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={newCustomer.bathaque_id}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, bathaque_id: e.target.value.toUpperCase() })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono font-bold tracking-wider uppercase text-red-600"
+                    placeholder="e.g. BQ10293847"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">Shared ID for multiple vehicles to pool wash stamps together.</p>
                 </div>
 
                 {/* Vehicle Model / Type */}
@@ -792,6 +814,7 @@ const CustomersContent = () => {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bathaque ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle Plate</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment Type</th>
@@ -812,6 +835,15 @@ const CustomersContent = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap"><span translate="no" className="notranslate">{String(customer.phone || 'N/A')}</span></td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {customer.bathaque_id ? (
+                        <span className="px-2.5 py-1 text-xs font-mono font-bold rounded-lg bg-red-50 text-red-600 border border-red-200">
+                          {customer.bathaque_id}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs italic">N/A</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap font-mono notranslate" translate="no"><span translate="no" className="notranslate">{String(customer.vehicle_plate || '')}</span></td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 capitalize notranslate" translate="no">
@@ -837,8 +869,10 @@ const CustomersContent = () => {
                         <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 w-max">
                           {customer.loyalty_points || 0} pts
                         </span>
-                        <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800 w-max font-semibold">
-                          {customer.wash_stamps || 0}/5 Stamps
+                        <span className={`px-2 py-1 text-xs rounded-full w-max font-bold ${
+                          (customer.wash_stamps || 0) >= 5 ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-indigo-100 text-indigo-800'
+                        }`}>
+                          {(customer.wash_stamps || 0) >= 5 ? '🎉 6th Free Wash Ready!' : `${customer.wash_stamps || 0}/5 Stamps`}
                         </span>
                       </div>
                     </td>
@@ -864,6 +898,20 @@ const CustomersContent = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                               </svg>
                             </button>
+                            {customer.bathaque_id && (
+                              <button
+                                onClick={() => {
+                                  setSelectedQrCustomer(customer);
+                                  setShowBathaqueQrModal(true);
+                                }}
+                                className="text-gray-700 hover:text-red-600 transition-colors p-1 hover:bg-gray-100 rounded-lg"
+                                title="Print Bathaque Loyalty QR Pass"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                </svg>
+                              </button>
+                            )}
                           </>
                         )}
                         <Link
@@ -1051,6 +1099,17 @@ const CustomersContent = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bathaque Loyalty QR Pass Modal */}
+      {showBathaqueQrModal && selectedQrCustomer && (
+        <BathaqueQRModal
+          customer={selectedQrCustomer}
+          onClose={() => {
+            setShowBathaqueQrModal(false);
+            setSelectedQrCustomer(null);
+          }}
+        />
       )}
     </div>
   );
