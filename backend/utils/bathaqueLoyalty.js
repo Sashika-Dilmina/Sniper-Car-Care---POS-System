@@ -1,12 +1,15 @@
-/**
- * Bathaque ID Loyalty Punch-Card Utility
- * 5 Paid Washes -> 6th Wash FREE, then cycle resets to 0.
- * Multi-vehicle shared tracking: All vehicles sharing the same Bathaque ID share this stamp count.
- */
+const defaultPool = require('../config/database');
 
-async function ensureBathaqueLoyalty(connection, bathaqueId) {
-  if (!bathaqueId) return null;
-  const cleanId = bathaqueId.toString().trim();
+function resolveDbAndId(connOrPool, possibleId) {
+  if (typeof connOrPool === 'string') {
+    return { connection: defaultPool, cleanId: connOrPool.toString().trim() };
+  }
+  const cleanId = (possibleId || '').toString().trim();
+  return { connection: connOrPool || defaultPool, cleanId };
+}
+
+async function ensureBathaqueLoyalty(connOrPool, bathaqueId) {
+  const { connection, cleanId } = resolveDbAndId(connOrPool, bathaqueId);
   if (!cleanId) return null;
 
   const [rows] = await connection.query(
@@ -37,12 +40,10 @@ async function ensureBathaqueLoyalty(connection, bathaqueId) {
   return createdRows[0] || { bathaque_id: cleanId, wash_stamps: 0, total_washes: 0, free_washes_earned: 0, free_washes_redeemed: 0 };
 }
 
-async function getBathaqueLoyalty(connectionOrPool, bathaqueId) {
-  if (!bathaqueId) return null;
-  const cleanId = bathaqueId.toString().trim();
+async function getBathaqueLoyalty(connOrPool, bathaqueId) {
+  const { connection: db, cleanId } = resolveDbAndId(connOrPool, bathaqueId);
   if (!cleanId) return null;
 
-  const db = connectionOrPool;
   const [rows] = await db.query(
     'SELECT * FROM bathaque_loyalty WHERE bathaque_id = ?',
     [cleanId]
@@ -70,9 +71,8 @@ async function getBathaqueLoyalty(connectionOrPool, bathaqueId) {
   };
 }
 
-async function incrementBathaqueStamp(connection, bathaqueId) {
-  if (!bathaqueId) return null;
-  const cleanId = bathaqueId.toString().trim();
+async function incrementBathaqueStamp(connOrPool, bathaqueId) {
+  const { connection, cleanId } = resolveDbAndId(connOrPool, bathaqueId);
   if (!cleanId) return null;
 
   await ensureBathaqueLoyalty(connection, cleanId);
@@ -114,9 +114,8 @@ async function incrementBathaqueStamp(connection, bathaqueId) {
   };
 }
 
-async function redeemBathaqueFreeWash(connection, bathaqueId) {
-  if (!bathaqueId) return null;
-  const cleanId = bathaqueId.toString().trim();
+async function redeemBathaqueFreeWash(connOrPool, bathaqueId) {
+  const { connection, cleanId } = resolveDbAndId(connOrPool, bathaqueId);
   if (!cleanId) return null;
 
   await ensureBathaqueLoyalty(connection, cleanId);
