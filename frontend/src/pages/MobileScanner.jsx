@@ -4,6 +4,7 @@ import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { Html5Qrcode } from 'html5-qrcode';
+import LanguageSelector from '../components/LanguageSelector';
 
 const MobileScanner = () => {
   const { user, logout } = useAuth();
@@ -264,6 +265,7 @@ const MobileScanner = () => {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col font-sans">
+      <LanguageSelector variant="floating" positionClass="bottom-5 left-5" />
       {/* Top Mobile App Bar */}
       <header className="bg-gray-900/90 backdrop-blur border-b border-gray-800 px-4 py-3 sticky top-0 z-50 flex items-center justify-between">
         <div className="flex items-center gap-2">

@@ -100,9 +100,32 @@ const getCustomerByPlate = asyncHandler(async (req, res) => {
     }
   }
 
+  let bathaqueLoyalty = null;
+  if (customer.bathaque_id) {
+    try {
+      const { getBathaqueLoyalty } = require('../utils/bathaqueLoyalty');
+      bathaqueLoyalty = await getBathaqueLoyalty(pool, customer.bathaque_id);
+      if (bathaqueLoyalty) {
+        wash_stamps = bathaqueLoyalty.wash_stamps;
+      }
+    } catch (e) {
+      console.error('Error fetching bathaque loyalty for public customer:', e);
+    }
+  }
+
   res.json({
-    customer: { ...customer, wash_stamps },
-    loyalty: { wash_stamps, free_wash_ready: false, free_wash_cap: 0 },
+    customer: {
+      ...customer,
+      bathaque_id: customer.bathaque_id || null,
+      wash_stamps: bathaqueLoyalty ? bathaqueLoyalty.wash_stamps : wash_stamps
+    },
+    loyalty: {
+      wash_stamps: bathaqueLoyalty ? bathaqueLoyalty.wash_stamps : wash_stamps,
+      free_wash_ready: bathaqueLoyalty ? bathaqueLoyalty.is_eligible_for_free : false,
+      free_wash_cap: 0,
+      bathaque_id: customer.bathaque_id || null
+    },
+    bathaque_loyalty: bathaqueLoyalty
   });
 });
 
@@ -138,9 +161,32 @@ const getCustomerById = asyncHandler(async (req, res) => {
     }
   }
 
+  let bathaqueLoyaltyById = null;
+  if (customer.bathaque_id) {
+    try {
+      const { getBathaqueLoyalty } = require('../utils/bathaqueLoyalty');
+      bathaqueLoyaltyById = await getBathaqueLoyalty(pool, customer.bathaque_id);
+      if (bathaqueLoyaltyById) {
+        wash_stamps = bathaqueLoyaltyById.wash_stamps;
+      }
+    } catch (e) {
+      console.error('Error fetching bathaque loyalty for customer by id:', e);
+    }
+  }
+
   res.json({
-    customer: { ...customer, wash_stamps },
-    loyalty: { wash_stamps, free_wash_ready: false, free_wash_cap: 0 },
+    customer: {
+      ...customer,
+      bathaque_id: customer.bathaque_id || null,
+      wash_stamps: bathaqueLoyaltyById ? bathaqueLoyaltyById.wash_stamps : wash_stamps
+    },
+    loyalty: {
+      wash_stamps: bathaqueLoyaltyById ? bathaqueLoyaltyById.wash_stamps : wash_stamps,
+      free_wash_ready: bathaqueLoyaltyById ? bathaqueLoyaltyById.is_eligible_for_free : false,
+      free_wash_cap: 0,
+      bathaque_id: customer.bathaque_id || null
+    },
+    bathaque_loyalty: bathaqueLoyaltyById
   });
 });
 

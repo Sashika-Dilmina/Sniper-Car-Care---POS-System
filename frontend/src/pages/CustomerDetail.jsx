@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import BathaqueQRModal from '../components/BathaqueQRModal';
+import { downloadBathaqueCardImage } from '../utils/bathaqueQrExport';
 
 const CustomerDetail = () => {
   const { id } = useParams();
@@ -90,15 +91,35 @@ const CustomerDetail = () => {
         <h1 className="text-3xl font-bold text-gray-800">Customer Details</h1>
         <div className="flex items-center gap-3">
           {customer.bathaque_id && (
-            <button
-              onClick={() => setShowBathaqueQrModal(true)}
-              className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition flex items-center gap-2 shadow font-bold text-sm"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-              </svg>
-              Print QR Pass
-            </button>
+            <>
+              <button
+                onClick={async () => {
+                  try {
+                    toast.loading('Generating QR Image...', { id: 'download-qr' });
+                    await downloadBathaqueCardImage(customer);
+                    toast.success('Loyalty Pass Image downloaded!', { id: 'download-qr' });
+                  } catch (e) {
+                    toast.error('Failed to download QR image', { id: 'download-qr' });
+                  }
+                }}
+                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-700 text-white rounded-lg hover:from-emerald-700 hover:to-green-800 transition flex items-center gap-2 shadow font-bold text-sm"
+                title="Download Loyalty Pass as PNG Image"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download QR Image
+              </button>
+              <button
+                onClick={() => setShowBathaqueQrModal(true)}
+                className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition flex items-center gap-2 shadow font-bold text-sm"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                </svg>
+                Print QR Pass
+              </button>
+            </>
           )}
           <button
             onClick={handleOpenCheckin}
@@ -146,6 +167,24 @@ const CustomerDetail = () => {
                   Total: {customer.bathaque_loyalty?.total_washes || 0} washes · {customer.bathaque_loyalty?.free_washes_redeemed || 0} redeemed
                 </div>
               </div>
+              <button
+                onClick={async () => {
+                  try {
+                    toast.loading('Generating QR Image...', { id: 'download-qr' });
+                    await downloadBathaqueCardImage(customer);
+                    toast.success('Loyalty Pass Image downloaded!', { id: 'download-qr' });
+                  } catch (e) {
+                    toast.error('Failed to download QR image', { id: 'download-qr' });
+                  }
+                }}
+                className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition"
+                title="Download Loyalty Card PNG"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download Image
+              </button>
               <button
                 onClick={() => setShowBathaqueQrModal(true)}
                 className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow transition"

@@ -1,8 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import QRCode from 'qrcode';
+import { downloadBathaqueCardImage } from '../utils/bathaqueQrExport';
 
 const BathaqueQRModal = ({ customer, onClose }) => {
   const [qrDataUrl, setQrDataUrl] = useState('');
+  const [downloading, setDownloading] = useState(false);
   const printRef = useRef(null);
 
   const bathaqueId = customer?.bathaque_id || '';
@@ -29,6 +31,17 @@ const BathaqueQRModal = ({ customer, onClose }) => {
     window.print();
   };
 
+  const handleDownload = async () => {
+    try {
+      setDownloading(true);
+      await downloadBathaqueCardImage(customer);
+    } catch (e) {
+      console.error('Download card error:', e);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   if (!customer) return null;
 
   return (
@@ -42,13 +55,24 @@ const BathaqueQRModal = ({ customer, onClose }) => {
           </div>
           <div className="flex gap-2">
             <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900 text-white rounded-xl font-bold transition flex items-center gap-1.5 text-sm shadow"
+              title="Download pass as PNG image"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>{downloading ? 'Saving...' : 'Download Image'}</span>
+            </button>
+            <button
               onClick={handlePrint}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition flex items-center gap-2 text-sm shadow"
+              className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 text-sm shadow"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
               </svg>
-              Print Pass
+              <span>Print Pass</span>
             </button>
             <button
               onClick={onClose}
