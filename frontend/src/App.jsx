@@ -24,6 +24,7 @@ import Purchases from './pages/Purchases';
 import Expenses from './pages/Expenses';
 import Credits from './pages/Credits';
 import Feedback from './pages/Feedback';
+import MobileScanner from './pages/MobileScanner';
 
 function App() {
   return (
@@ -32,6 +33,14 @@ function App() {
         <Toaster position="top-right" />
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route
+            path="/scan"
+            element={
+              <PrivateRoute>
+                <MobileScanner />
+              </PrivateRoute>
+            }
+          />
           <Route
             path="/"
             element={

@@ -28,6 +28,8 @@ const Sales = () => {
   // POS - Bathaque Loyalty State
   const [bathaqueLoyalty, setBathaqueLoyalty] = useState(null);
   const [showBathaqueScanModal, setShowBathaqueScanModal] = useState(false);
+  const [scanQueue, setScanQueue] = useState([]);
+  const seenQueueIdsRef = useRef(new Set());
 
   // POS - Quick Customer Registration State
   const [showQuickRegister, setShowQuickRegister] = useState(false);
@@ -231,6 +233,106 @@ const Sales = () => {
     }
     setBathaqueLoyalty(result.loyalty);
     toast.success(`Bathaque Pass Applied: ${result.bathaque_id} (${result.loyalty?.wash_stamps || 0}/5 stamps)`);
+  };
+
+  // Poll real-time mobile scanner queue every 5 seconds while in POS terminal tab
+  useEffect(() => {
+    if (activeSubTab !== 'pos') return;
+
+    let isMounted = true;
+    const fetchScanQueue = async () => {
+      try {
+        const res = await axios.get('/api/bathaque/queue');
+        if (res.data?.success && isMounted) {
+          const queue = res.data.queue || [];
+          setScanQueue(queue);
+
+          // Check for newly arrived queue items to notify
+          queue.forEach(item => {
+            if (!seenQueueIdsRef.current.has(item.id)) {
+              seenQueueIdsRef.current.add(item.id);
+              try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+                osc.start(audioCtx.currentTime);
+                osc.stop(audioCtx.currentTime + 0.35);
+              } catch (e) {
+                // AudioContext autoplay might require user interaction first
+              }
+
+              toast(
+                (t) => (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">📱</span>
+                    <div>
+                      <p className="font-bold text-xs">New Phone Scan Received!</p>
+                      <p className="text-[11px] text-gray-600">
+                        {item.customer?.name || 'Customer'} ({item.customer?.vehicle_plate || item.bathaque_id})
+                      </p>
+                    </div>
+                  </div>
+                ),
+                { duration: 5000, icon: '⚡' }
+              );
+            }
+          });
+        }
+      } catch (err) {
+        // silent fail on network jitter
+      }
+    };
+
+    fetchScanQueue();
+    const interval = setInterval(fetchScanQueue, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [activeSubTab]);
+
+  const handleLoadFromScanQueue = async (item) => {
+    try {
+      if (item.customer) {
+        handleSelectCustomer(item.customer);
+      } else if (item.all_customers && item.all_customers.length > 0) {
+        handleSelectCustomer(item.all_customers[0]);
+      } else {
+        setNewCustomer(prev => ({
+          ...prev,
+          bathaque_id: item.bathaque_id
+        }));
+        setShowQuickRegister(true);
+        toast('New customer card scanned! Fill details to save.', { icon: '📝' });
+      }
+
+      if (item.loyalty) {
+        setBathaqueLoyalty(item.loyalty);
+      }
+
+      // Dismiss from server queue
+      await axios.delete(`/api/bathaque/queue/${item.id}`);
+      setScanQueue(prev => prev.filter(q => q.id !== item.id));
+      toast.success('Customer loaded from mobile scan queue!');
+    } catch (err) {
+      console.error('Failed to load scan queue item:', err);
+    }
+  };
+
+  const handleDismissScanQueueItem = async (itemId) => {
+    try {
+      await axios.delete(`/api/bathaque/queue/${itemId}`);
+      setScanQueue(prev => prev.filter(q => q.id !== itemId));
+    } catch (err) {
+      console.error('Failed to dismiss scan item:', err);
+    }
   };
 
   useEffect(() => {
@@ -906,6 +1008,56 @@ const Sales = () => {
                   )}
                 </div>
               </div>
+
+              {/* Staff Mobile Scan Queue Incoming Alert Banner */}
+              {scanQueue.length > 0 && (
+                <div className="bg-gradient-to-r from-red-600 to-rose-700 text-white p-3 rounded-xl shadow-md space-y-2 border border-red-400 animate-pulse-once">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                      </span>
+                      <span className="text-xs font-black uppercase tracking-wider text-red-100">
+                        📱 Incoming Phone Scan ({scanQueue.length})
+                      </span>
+                    </div>
+                    <span className="text-[10px] bg-red-800/80 px-2 py-0.5 rounded font-mono font-bold">
+                      {scanQueue[0].loyalty?.wash_stamps || 0}/5 stamps
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <div className="truncate">
+                      <p className="font-extrabold truncate text-white">
+                        {scanQueue[0].customer?.name || 'Customer'}
+                      </p>
+                      <p className="text-[11px] text-red-100 font-mono">
+                        {scanQueue[0].customer?.vehicle_plate || scanQueue[0].bathaque_id}
+                        {scanQueue[0].scanned_by && ` • by ${scanQueue[0].scanned_by}`}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleLoadFromScanQueue(scanQueue[0])}
+                        className="bg-white hover:bg-red-50 text-red-700 font-black text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1"
+                      >
+                        <span>⚡ Load</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDismissScanQueueItem(scanQueue[0].id)}
+                        className="bg-red-800/60 hover:bg-red-900 text-white text-xs px-2 py-1.5 rounded-lg transition"
+                        title="Dismiss scan"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {!selectedCustomer ? (
                 <div className="space-y-2">
