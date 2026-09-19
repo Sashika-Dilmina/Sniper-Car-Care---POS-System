@@ -2,27 +2,95 @@ const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { getWashStamps } = require('../utils/loyaltyStamps');
 
-// @desc    Get customer by vehicle plate (public)
+// Helper to resolve customer by plate or ID with fallback matching
+async function resolveCustomerByPlate(plate, customerId) {
+  if (customerId) {
+    const [custById] = await pool.query('SELECT * FROM customers WHERE id = ?', [customerId]);
+    if (custById.length > 0) return custById[0];
+  }
+  if (!plate) return null;
+
+  const cleanPlate = plate.replace(/\s+/g, '');
+  
+  // 1. Try direct exact match
+  const [customers] = await pool.query(
+    `SELECT DISTINCT c.* FROM customers c
+     LEFT JOIN vehicles v ON c.id = v.CustomerId
+     WHERE c.vehicle_plate = ?
+        OR REPLACE(c.vehicle_plate, ' ', '') = ?
+        OR v.VehicleRegistrationNumber = ?
+        OR REPLACE(v.VehicleRegistrationNumber, ' ', '') = ?
+     LIMIT 1`,
+    [plate, cleanPlate, plate, cleanPlate]
+  );
+
+  if (customers.length > 0) {
+    return customers[0];
+  }
+
+  // 2. Try parsing and robust matching fallback
+  const { parsePlateComponents } = require('../utils/customerLinkUtils');
+  const { plateCode, emirate, plateNumber: parsedPlateNum } = parsePlateComponents(plate);
+  
+  if (parsedPlateNum) {
+    // B. Check if PlateNumber is unique in database to allow loose fallback first
+    const [matchingCustomers] = await pool.query(
+      `SELECT DISTINCT c.id FROM customers c
+       JOIN vehicles v ON c.id = v.CustomerId
+       WHERE v.PlateNumber = ?`,
+      [parsedPlateNum]
+    );
+    
+    if (matchingCustomers.length === 1) {
+      const matchedCustomerId = matchingCustomers[0].id;
+      const [matchedCustRows] = await pool.query(
+        'SELECT * FROM customers WHERE id = ?',
+        [matchedCustomerId]
+      );
+      if (matchedCustRows.length > 0) {
+        return matchedCustRows[0];
+      }
+    } else if (matchingCustomers.length > 1) {
+      // If there are duplicate plate numbers, distinguish them using plate code/emirate
+      console.log(`[Public Customer] Duplicate plate number ${parsedPlateNum} found. Resolving using code: ${plateCode}`);
+      const [resolvedCustomers] = await pool.query(
+        `SELECT DISTINCT c.* FROM customers c
+         JOIN vehicles v ON c.id = v.CustomerId
+         WHERE v.PlateNumber = ? AND (v.PlateCode = ? OR (? = '' AND (v.PlateCode = '' OR v.PlateCode IS NULL)))
+         LIMIT 1`,
+        [parsedPlateNum, plateCode, plateCode]
+      );
+      
+      if (resolvedCustomers.length > 0) {
+        return resolvedCustomers[0];
+      } else {
+        console.log(`[Public Customer] Could not resolve duplicate plate number ${parsedPlateNum} with code ${plateCode}`);
+      }
+    }
+  }
+
+  return null;
+}
+
+// @desc    Get customer by vehicle plate or ID (public)
 // @route   GET /api/public/customer/by-plate
 // @access  Public
 const getCustomerByPlate = asyncHandler(async (req, res) => {
-  const { plate } = req.query;
+  const { plate, customer_id } = req.query;
 
-  if (!plate) {
-    return res.status(400).json({ message: 'Vehicle plate is required' });
+  if (!plate && !customer_id) {
+    return res.status(400).json({ message: 'Vehicle plate or customer_id is required' });
   }
 
-  const [customers] = await pool.query(
-    'SELECT * FROM customers WHERE vehicle_plate = ?',
-    [plate]
-  );
+  const customer = await resolveCustomerByPlate(plate, customer_id);
 
-  if (customers.length === 0) {
+  if (!customer) {
     return res.status(404).json({ message: 'Customer not found' });
   }
 
-  const customer = customers[0];
+  customer.emirate = customer.province;
   let wash_stamps = 0;
+  let free_wash_cap = 0;
 
   try {
     wash_stamps = await getWashStamps(pool, customer.id);
@@ -32,9 +100,32 @@ const getCustomerByPlate = asyncHandler(async (req, res) => {
     }
   }
 
+  let bathaqueLoyalty = null;
+  if (customer.bathaque_id) {
+    try {
+      const { getBathaqueLoyalty } = require('../utils/bathaqueLoyalty');
+      bathaqueLoyalty = await getBathaqueLoyalty(pool, customer.bathaque_id);
+      if (bathaqueLoyalty) {
+        wash_stamps = bathaqueLoyalty.wash_stamps;
+      }
+    } catch (e) {
+      console.error('Error fetching bathaque loyalty for public customer:', e);
+    }
+  }
+
   res.json({
-    customer: { ...customer, wash_stamps },
-    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5 },
+    customer: {
+      ...customer,
+      bathaque_id: customer.bathaque_id || null,
+      wash_stamps: bathaqueLoyalty ? bathaqueLoyalty.wash_stamps : wash_stamps
+    },
+    loyalty: {
+      wash_stamps: bathaqueLoyalty ? bathaqueLoyalty.wash_stamps : wash_stamps,
+      free_wash_ready: bathaqueLoyalty ? bathaqueLoyalty.is_eligible_for_free : false,
+      free_wash_cap: 0,
+      bathaque_id: customer.bathaque_id || null
+    },
+    bathaque_loyalty: bathaqueLoyalty
   });
 });
 
@@ -58,7 +149,9 @@ const getCustomerById = asyncHandler(async (req, res) => {
   }
 
   const customer = customers[0];
+  customer.emirate = customer.province;
   let wash_stamps = 0;
+  let free_wash_cap = 0;
 
   try {
     wash_stamps = await getWashStamps(pool, customer.id);
@@ -68,9 +161,32 @@ const getCustomerById = asyncHandler(async (req, res) => {
     }
   }
 
+  let bathaqueLoyaltyById = null;
+  if (customer.bathaque_id) {
+    try {
+      const { getBathaqueLoyalty } = require('../utils/bathaqueLoyalty');
+      bathaqueLoyaltyById = await getBathaqueLoyalty(pool, customer.bathaque_id);
+      if (bathaqueLoyaltyById) {
+        wash_stamps = bathaqueLoyaltyById.wash_stamps;
+      }
+    } catch (e) {
+      console.error('Error fetching bathaque loyalty for customer by id:', e);
+    }
+  }
+
   res.json({
-    customer: { ...customer, wash_stamps },
-    loyalty: { wash_stamps, free_wash_ready: wash_stamps >= 5 },
+    customer: {
+      ...customer,
+      bathaque_id: customer.bathaque_id || null,
+      wash_stamps: bathaqueLoyaltyById ? bathaqueLoyaltyById.wash_stamps : wash_stamps
+    },
+    loyalty: {
+      wash_stamps: bathaqueLoyaltyById ? bathaqueLoyaltyById.wash_stamps : wash_stamps,
+      free_wash_ready: bathaqueLoyaltyById ? bathaqueLoyaltyById.is_eligible_for_free : false,
+      free_wash_cap: 0,
+      bathaque_id: customer.bathaque_id || null
+    },
+    bathaque_loyalty: bathaqueLoyaltyById
   });
 });
 
@@ -87,14 +203,11 @@ const getCustomerOrders = asyncHandler(async (req, res) => {
   let customerId = id;
 
   if (!customerId) {
-    const [customers] = await pool.query(
-      'SELECT id FROM customers WHERE vehicle_plate = ?',
-      [plate]
-    );
-    if (customers.length === 0) {
+    const customer = await resolveCustomerByPlate(plate);
+    if (!customer) {
       return res.status(404).json({ message: 'Customer not found' });
     }
-    customerId = customers[0].id;
+    customerId = customer.id;
   }
 
   // Get customer phone number to search for associated VIP bookings
@@ -130,6 +243,28 @@ const getCustomerOrders = asyncHandler(async (req, res) => {
       [orderIds]
     );
     allItems = items;
+
+    // Check if any order has empty items and fetch from services instead
+    for (let order of orders) {
+      const orderItems = allItems.filter(item => item.order_id === order.id);
+      if (orderItems.length === 0) {
+        const [services] = await pool.query(
+          'SELECT id, service_name, price FROM services WHERE order_id = ?',
+          [order.id]
+        );
+        if (services.length > 0) {
+          const serviceItems = services.map(s => ({
+            id: `svc_${s.id}`,
+            order_id: order.id,
+            product_name: order.payment_status === 'free' ? `${s.service_name} (Free Wash)` : s.service_name,
+            quantity: 1,
+            price: order.payment_status === 'free' ? 0.00 : s.price,
+            category: 'Services'
+          }));
+          allItems.push(...serviceItems);
+        }
+      }
+    }
   }
 
   const formattedOrders = orders.map(order => ({
@@ -152,10 +287,18 @@ const getCustomerNotifications = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Vehicle plate is required' });
   }
 
-  const [notifications] = await pool.query(
-    'SELECT * FROM customer_notifications WHERE vehicle_plate = ? ORDER BY created_at DESC LIMIT 50',
-    [plate]
-  );
+  const customer = await resolveCustomerByPlate(plate);
+  
+  let query = 'SELECT * FROM customer_notifications WHERE vehicle_plate = ? OR REPLACE(vehicle_plate, \' \', \'\') = ?';
+  let queryParams = [plate, plate.replace(/\s+/g, '')];
+
+  if (customer && customer.vehicle_plate) {
+    query += ' OR vehicle_plate = ? OR REPLACE(vehicle_plate, \' \', \'\') = ?';
+    queryParams.push(customer.vehicle_plate, customer.vehicle_plate.replace(/\s+/g, ''));
+  }
+
+  query += ' ORDER BY created_at DESC LIMIT 50';
+  const [notifications] = await pool.query(query, queryParams);
 
   res.json({
     success: true,
@@ -173,10 +316,19 @@ const markNotificationsAsRead = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Vehicle plate is required' });
   }
 
-  await pool.query(
-    'UPDATE customer_notifications SET is_read = 1 WHERE vehicle_plate = ? AND is_read = 0',
-    [plate]
-  );
+  const customer = await resolveCustomerByPlate(plate);
+  
+  let query = 'UPDATE customer_notifications SET is_read = 1 WHERE (vehicle_plate = ? OR REPLACE(vehicle_plate, \' \', \'\') = ?)';
+  let queryParams = [plate, plate.replace(/\s+/g, '')];
+
+  if (customer && customer.vehicle_plate) {
+    query += ' OR vehicle_plate = ? OR REPLACE(vehicle_plate, \' \', \'\') = ?';
+    queryParams.push(customer.vehicle_plate, customer.vehicle_plate.replace(/\s+/g, ''));
+  }
+
+  // Wrap existing conditions in parenthesis for proper precedence with AND is_read = 0
+  const finalQuery = `UPDATE customer_notifications SET is_read = 1 WHERE (${query.split(' WHERE ')[1]}) AND is_read = 0`;
+  await pool.query(finalQuery, queryParams);
 
   res.json({
     success: true,
@@ -184,11 +336,92 @@ const markNotificationsAsRead = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Register or update customer from public forms (via QR code)
+// @route   POST /api/public/customer/register
+// @access  Public
+const registerCustomer = asyncHandler(async (req, res) => {
+  const { name, phone, vehicle_plate, vehicle_type, province } = req.body;
+
+  if (!name || !phone || !vehicle_plate || !vehicle_type || !province) {
+    return res.status(400).json({ message: 'Name, phone, vehicle plate, vehicle type, and emirate are required' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Check if customer already exists by plate
+    const [existing] = await connection.query(
+      'SELECT id FROM customers WHERE vehicle_plate = ?',
+      [vehicle_plate]
+    );
+
+    let customerId;
+    if (existing.length > 0) {
+      customerId = existing[0].id;
+      // Update existing customer info
+      await connection.query(
+        'UPDATE customers SET name = ?, phone = ?, vehicle_type = ?, province = ? WHERE id = ?',
+        [name, phone, vehicle_type, province, customerId]
+      );
+      
+      // Also update vehicles table if exists
+      const { parsePlateComponents } = require('../utils/customerLinkUtils');
+      const { plateCode, plateNumber } = parsePlateComponents(vehicle_plate);
+      
+      await connection.query(
+        `INSERT INTO vehicles (CustomerId, VehicleRegistrationNumber, PlateCode, PlateNumber, Emirate)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE VehicleRegistrationNumber = VALUES(VehicleRegistrationNumber), PlateCode = VALUES(PlateCode), PlateNumber = VALUES(PlateNumber), Emirate = VALUES(Emirate)`,
+        [customerId, vehicle_plate, plateCode || '', plateNumber || '', province]
+      );
+      
+      await connection.commit();
+      return res.status(200).json({
+        success: true,
+        message: 'Customer information updated successfully',
+        customer_id: customerId
+      });
+    }
+
+    // Insert new customer
+    const [result] = await connection.query(
+      'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
+      [name, phone, vehicle_plate, vehicle_type, province]
+    );
+    customerId = result.insertId;
+
+    // Create entry in vehicles table
+    const { parsePlateComponents } = require('../utils/customerLinkUtils');
+    const { plateCode, plateNumber } = parsePlateComponents(vehicle_plate);
+
+    await connection.query(
+      'INSERT INTO vehicles (CustomerId, VehicleRegistrationNumber, PlateCode, PlateNumber, Emirate) VALUES (?, ?, ?, ?, ?)',
+      [customerId, vehicle_plate, plateCode || '', plateNumber || '', province]
+    );
+
+    await connection.commit();
+
+    res.status(201).json({
+      success: true,
+      message: 'Customer registered successfully',
+      customer_id: customerId
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error in public customer register:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    connection.release();
+  }
+});
+
 module.exports = {
   getCustomerByPlate,
   getCustomerById,
   getCustomerOrders,
   getCustomerNotifications,
-  markNotificationsAsRead
+  markNotificationsAsRead,
+  registerCustomer
 };
 

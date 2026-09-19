@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import BathaqueScanModal from '../components/BathaqueScanModal';
 
 const OrderDetail = () => {
   const { id } = useParams();
@@ -9,10 +10,170 @@ const OrderDetail = () => {
   const [loading, setLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
   const [loadingTap, setLoadingTap] = useState(false);
+  const [registerStatus, setRegisterStatus] = useState('closed');
+  const [sharing, setSharing] = useState(false);
+
+  // Bathaque Loyalty States
+  const [orderBathaqueLoyalty, setOrderBathaqueLoyalty] = useState(null);
+  const [showBathaqueScanModal, setShowBathaqueScanModal] = useState(false);
+
+  const [vipBooking, setVipBooking] = useState(null);
+  const [employees, setEmployees] = useState([]);
+  const [showVipModal, setShowVipModal] = useState(false);
+  const [updatingVip, setUpdatingVip] = useState(false);
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [scheduleData, setScheduleData] = useState({ appointment_date: '', appointment_time: '' });
+  const [bookingUpdate, setBookingUpdate] = useState({ status: '', notes: '', staff_notes: '', assigned_staff_id: '' });
+  const [paymentDiscount, setPaymentDiscount] = useState(0);
+  const [selectedOrderMethod, setSelectedOrderMethod] = useState('cash');
+  const [orderSplitPayments, setOrderSplitPayments] = useState({ card: 0, cash: 0, bank_transfer: 0 });
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'confirmed': return 'bg-blue-100 text-blue-800';
+      case 'in_progress': return 'bg-purple-100 text-purple-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'cancelled': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const isAppointmentToday = (dateStr) => {
+    if (!dateStr) return false;
+    const apptDate = new Date(dateStr).toDateString();
+    const todayDate = new Date().toDateString();
+    return apptDate === todayDate;
+  };
+
+  const calculateElapsedTime = (startedAt, completedAt, createdAt) => {
+    const effectiveStart = startedAt || createdAt;
+    if (!effectiveStart) return 'Not started';
+    const start = new Date(effectiveStart);
+    const end = completedAt ? new Date(completedAt) : new Date();
+    const diffMs = end - start;
+    if (diffMs <= 0) return '0 min';
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 60) return `${diffMins} min`;
+    const hrs = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+  };
+
+  const getCleanNote = (rawNotes) => {
+    if (!rawNotes) return '';
+    let cleaned = rawNotes.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim();
+    cleaned = cleaned.replace(/^Customer Note:\s*/i, '').trim();
+    return cleaned;
+  };
+
+  const fetchVipBooking = async (bookingId) => {
+    try {
+      const response = await axios.get(`/api/vip/bookings/${bookingId}`);
+      if (response.data.success && response.data.data) {
+        const freshBooking = response.data.data;
+        setVipBooking(freshBooking);
+        setBookingUpdate({
+          status: freshBooking.status,
+          notes: freshBooking.notes || '',
+          staff_notes: freshBooking.staff_notes || '',
+          assigned_staff_id: freshBooking.assigned_staff_id || ''
+        });
+        setScheduleData({
+          appointment_date: freshBooking.appointment_date ? freshBooking.appointment_date.split('T')[0] : '',
+          appointment_time: freshBooking.appointment_time || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching VIP booking details:', error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await axios.get('/api/employees');
+      setEmployees(response.data.employees || []);
+    } catch (error) {
+      console.error('Failed to load employees:', error);
+    }
+  };
+
+  const handleVipStatusChange = async (newStatus, paymentMethod) => {
+    if (!order.vip_booking_id) return;
+    setUpdatingVip(true);
+    try {
+      await axios.patch(`/api/vip/bookings/${order.vip_booking_id}`, {
+        status: newStatus,
+        payment_method: paymentMethod
+      });
+      toast.success(`Booking status changed to ${newStatus}`);
+      fetchVipBooking(order.vip_booking_id);
+      fetchOrder();
+    } catch (error) {
+      console.error('Error changing VIP booking status:', error);
+      toast.error('Failed to change booking status');
+    } finally {
+      setUpdatingVip(false);
+    }
+  };
+
+  const handleVipConfirmAndSchedule = async () => {
+    if (!scheduleData.appointment_date || !scheduleData.appointment_time) {
+      toast.error('Please select both Date and Time');
+      return;
+    }
+    setUpdatingVip(true);
+    try {
+      await axios.patch(`/api/vip/bookings/${order.vip_booking_id}`, {
+        status: 'confirmed',
+        appointment_date: scheduleData.appointment_date,
+        appointment_time: scheduleData.appointment_time,
+        staff_notes: bookingUpdate.staff_notes,
+        assigned_staff_id: bookingUpdate.assigned_staff_id || null
+      });
+      toast.success('Booking confirmed & customer scheduled!');
+      setIsRescheduling(false);
+      fetchVipBooking(order.vip_booking_id);
+      fetchOrder();
+    } catch (error) {
+      console.error('Error scheduling VIP booking:', error);
+      toast.error('Failed to schedule booking');
+    } finally {
+      setUpdatingVip(false);
+    }
+  };
+
+  const updateVipBookingDetails = async (e) => {
+    e.preventDefault();
+    setUpdatingVip(true);
+    try {
+      await axios.patch(`/api/vip/bookings/${order.vip_booking_id}`, {
+        staff_notes: bookingUpdate.staff_notes,
+        assigned_staff_id: bookingUpdate.assigned_staff_id || null
+      });
+      toast.success('Notes & assignment updated');
+      fetchVipBooking(order.vip_booking_id);
+    } catch (error) {
+      console.error('Error updating VIP booking:', error);
+      toast.error('Failed to update booking');
+    } finally {
+      setUpdatingVip(false);
+    }
+  };
+
+
+
+  useEffect(() => {
+    if (order && order.vip_booking_id) {
+      fetchVipBooking(order.vip_booking_id);
+      fetchEmployees();
+    }
+  }, [order?.vip_booking_id]);
 
 
   useEffect(() => {
     fetchOrder();
+    fetchRegisterStatus();
 
     // Check url query parameters for payment status notifications
     const params = new URLSearchParams(window.location.search);
@@ -28,14 +189,106 @@ const OrderDetail = () => {
     }
   }, [id]);
 
+  const fetchRegisterStatus = async () => {
+    try {
+      const response = await axios.get('/api/registers/active');
+      if (response.data.success && response.data.active) {
+        setRegisterStatus('open');
+      } else {
+        setRegisterStatus('closed');
+      }
+    } catch (e) {
+      console.error('Failed to fetch register status:', e);
+      setRegisterStatus('closed');
+    }
+  };
+
+  const fetchBathaqueLoyalty = async (bId) => {
+    if (!bId) return;
+    try {
+      const res = await axios.get(`/api/bathaque/check/${bId}`);
+      if (res.data.success) {
+        setOrderBathaqueLoyalty(res.data.loyalty);
+        if ((res.data.loyalty?.wash_stamps || 0) >= 5) {
+          setSelectedOrderMethod('free');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check Bathaque loyalty', e);
+    }
+  };
+
+  const handleApplyBathaqueToOrder = (result) => {
+    setOrderBathaqueLoyalty(result.loyalty);
+    if ((result.loyalty?.wash_stamps || 0) >= 5) {
+      setSelectedOrderMethod('free');
+      toast.success(`Bathaque Pass Applied: ${result.bathaque_id} - 100% FREE WASH ELIGIBLE! 🎁`);
+    } else {
+      toast.success(`Bathaque Pass Applied: ${result.bathaque_id} (${result.loyalty?.wash_stamps || 0}/5 stamps)`);
+    }
+  };
+
   const fetchOrder = async () => {
     try {
       const response = await axios.get(`/api/orders/${id}`);
-      setOrder(response.data.order);
+      const ord = response.data.order;
+      setOrder(ord);
+      if (ord?.bathaque_loyalty) {
+        setOrderBathaqueLoyalty(ord.bathaque_loyalty);
+        if ((ord.bathaque_loyalty.wash_stamps || 0) >= 5 && ord.payment_status !== 'paid' && ord.payment_status !== 'free') {
+          setSelectedOrderMethod('free');
+        }
+      } else if (ord?.bathaque_id) {
+        fetchBathaqueLoyalty(ord.bathaque_id);
+      }
     } catch (error) {
       toast.error('Failed to load order details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleWhatsAppShare = async () => {
+    if (!order) return;
+    setSharing(true);
+    try {
+      const response = await axios.get(`/api/orders/${id}/pdf`);
+      if (response.data.success && response.data.pdfUrl) {
+        const backendBaseUrl = axios.defaults.baseURL || window.location.origin;
+        const fullPdfUrl = `${backendBaseUrl}${response.data.pdfUrl}`;
+        
+        try {
+          // Fetch the PDF blob to create a File object
+          const fileResponse = await fetch(fullPdfUrl);
+          const blob = await fileResponse.blob();
+          const file = new File([blob], `invoice-${order.id}-${Date.now()}.pdf`, { type: 'application/pdf' });
+          
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: `Sniper Car Care Invoice #${order.id}`,
+              text: `Please find the invoice for Order #${order.id} attached.`
+            });
+            toast.success('Invoice PDF shared successfully!');
+            return;
+          }
+        } catch (shareErr) {
+          console.warn('Native sharing failed, falling back to link:', shareErr);
+        }
+        
+        // Fallback to text link if navigator.share fails or is not supported
+        const message = `Check out your Sniper Car Care Invoice #${order.id}: ${fullPdfUrl}`;
+        const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
+        toast.success('Opened PDF invoice link in browser.');
+      } else {
+        toast.error('Failed to generate invoice PDF');
+      }
+    } catch (error) {
+      console.error('Error sharing PDF:', error);
+      toast.error('Failed to generate and share invoice PDF');
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -45,7 +298,7 @@ const OrderDetail = () => {
       toast.success('Order status updated');
       fetchOrder();
     } catch (error) {
-      toast.error('Failed to update status');
+      toast.error(error.response?.data?.message || 'Failed to update status');
     }
   };
 
@@ -79,16 +332,29 @@ const OrderDetail = () => {
   }
 
   const remainingAmount = parseFloat(order.total) - (order.payments?.reduce((sum, p) => sum + (p.status === 'completed' ? parseFloat(p.amount) : 0), 0) || 0);
+  const isEligibleForFree = (orderBathaqueLoyalty?.wash_stamps ?? order?.bathaque_loyalty?.wash_stamps ?? 0) >= 5;
   const isCashOrder = !order.payments || order.payments.length === 0 || order.payments.every(p => p.method === 'cash');
   const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
-  const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
+  const isServiceCategory = (cat, name) => {
+    const c = (cat || '').toLowerCase();
+    const n = (name || '').toLowerCase();
+    return c.includes('service') || c === 'vip' || n.includes('service') || n.includes('wash');
+  };
+  const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => !isServiceCategory(item.category, item.product_name));
 
   return (
     <div className="space-y-6">
       <div className="space-y-6 no-print">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold text-gray-800">Order #{order.id}</h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 no-print">
+            <button
+              onClick={handleWhatsAppShare}
+              disabled={sharing}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+            >
+              {sharing ? '⏳ Generating PDF...' : '💬 Share via WhatsApp'}
+            </button>
             <button
               onClick={() => window.print()}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
@@ -100,6 +366,23 @@ const OrderDetail = () => {
             </Link>
           </div>
         </div>
+
+        {order.is_deleted === 1 && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-900 p-4 rounded-lg shadow-sm mb-6 flex items-start gap-3">
+            <svg className="w-6 h-6 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <h3 className="font-bold text-base text-red-800">This Order Has Been Deleted</h3>
+              <p className="text-sm mt-1 text-red-700">
+                Reason: <strong>{order.delete_reason || 'No reason specified'}</strong>
+              </p>
+              <p className="text-xs text-red-600 mt-1">
+                The amount and transactions for this order have been cancelled and excluded from all financial calculations and reports.
+              </p>
+            </div>
+          </div>
+        )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow">
@@ -115,6 +398,36 @@ const OrderDetail = () => {
                 <p className="text-lg font-mono">{order.vehicle_plate}</p>
               </div>
             )}
+            {(order.bathaque_id || orderBathaqueLoyalty?.bathaque_id) && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-red-800 uppercase tracking-wider">
+                    Bathaque Loyalty Pass:
+                  </span>
+                  <span className="font-mono font-black text-red-700 text-sm">
+                    {order.bathaque_id || orderBathaqueLoyalty?.bathaque_id}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-red-900 font-bold">
+                  <span>Wash Stamps: {orderBathaqueLoyalty?.wash_stamps ?? order.bathaque_loyalty?.wash_stamps ?? 0} / 5</span>
+                  {isEligibleForFree ? (
+                    <span className="px-2 py-0.5 bg-amber-200 text-amber-900 rounded-full text-[11px] font-black border border-amber-400 animate-pulse">
+                      🎁 6th Wash is FREE!
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 font-normal">
+                      {5 - (orderBathaqueLoyalty?.wash_stamps ?? order.bathaque_loyalty?.wash_stamps ?? 0)} more wash(es) to free
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {getCleanNote(order.notes) && (
+              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-xs font-bold text-red-800 uppercase tracking-wider mb-0.5">📝 CUSTOMER NOTE</p>
+                <p className="text-sm text-red-900 font-semibold">{getCleanNote(order.notes)}</p>
+              </div>
+            )}
             <div>
               <p className="text-sm text-gray-600">Status</p>
               <div className="mt-2 flex items-center flex-wrap gap-3">
@@ -128,16 +441,25 @@ const OrderDetail = () => {
                   {isProductOnly ? 'Order Placed' : (order.status === 'processing' ? 'In Progress' : order.status)}
                 </span>
 
-                {order.status === 'processing' && !isProductOnly && (
+                {isVipOrder ? (
                   <button
-                    onClick={() => handleStatusUpdate('completed')}
-                    className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98]"
+                    onClick={() => setShowVipModal(true)}
+                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-black rounded-lg transition shadow-md active:scale-[0.98]"
                   >
-                    ✓ Done / Completed
+                    👑 Manage VIP Booking
                   </button>
+                ) : (
+                  (order.status === 'processing' || order.status === 'pending') && (
+                    <button
+                      onClick={() => handleStatusUpdate('completed')}
+                      className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98]"
+                    >
+                      ✓ Done / Completed
+                    </button>
+                  )
                 )}
 
-                {(order.status === 'pending' || order.status === 'processing') && (
+                {!isVipOrder && (order.status === 'pending' || order.status === 'processing') && (
                   <button
                     onClick={() => {
                       if (window.confirm('Are you sure you want to cancel this order?')) {
@@ -165,10 +487,30 @@ const OrderDetail = () => {
             )}
             <div>
               <p className="text-sm text-gray-600">Payment Status</p>
-              {order.credit_status ? (
+              {order.status === 'cancelled' || order.payment_status === 'cancelled' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold border border-red-200">
+                  cancelled
+                </span>
+              ) : order.payment_status === 'credit' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                  Credit
+                </span>
+              ) : order.payment_status === 'paid' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800 font-semibold">
+                  Paid
+                </span>
+              ) : order.payment_status === 'free' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-800 font-semibold uppercase">
+                  Free
+                </span>
+              ) : order.payment_status === 'partial' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800 font-semibold">
+                  Partial
+                </span>
+              ) : order.credit_status ? (
                 order.credit_status === 'unpaid' ? (
-                  <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold">
-                    Credit / Unpaid
+                  <span className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                    Credit
                   </span>
                 ) : order.credit_status === 'partially_paid' ? (
                   <span className="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800 font-semibold">
@@ -188,6 +530,18 @@ const OrderDetail = () => {
                 </span>
               )}
             </div>
+            <div>
+              <p className="text-sm text-gray-600">Payment Method</p>
+              <span className={`px-3 py-1 text-sm rounded-full font-semibold capitalize ${
+                (order.payment_methods || order.payments?.[0]?.method) === 'cash' ? 'bg-green-100 text-green-800' :
+                (order.payment_methods || order.payments?.[0]?.method) === 'card' ? 'bg-purple-100 text-purple-800' :
+                (order.payment_methods || order.payments?.[0]?.method) === 'credit' ? 'bg-orange-100 text-orange-800' :
+                (order.payment_methods || order.payments?.[0]?.method) ? 'bg-blue-100 text-blue-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {order.payment_methods || order.payments?.[0]?.method || 'N/A'}
+              </span>
+            </div>
             {order.source && (
               <div>
                 <p className="text-sm text-gray-600">Order Source</p>
@@ -195,14 +549,6 @@ const OrderDetail = () => {
                   }`}>
                   {order.source === 'customer_website' ? '🌐 Customer Website' : '🖥️ POS System'}
                 </span>
-              </div>
-            )}
-            {order.notes && (
-              <div>
-                <p className="text-sm text-gray-600">Customer Notes</p>
-                <div className="mt-1 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-gray-700">{order.notes}</p>
-                </div>
               </div>
             )}
           </div>
@@ -222,9 +568,19 @@ const OrderDetail = () => {
                 </p>
               </div>
             ))}
-            <div className="pt-3 border-t">
-              <div className="flex justify-between font-bold text-lg">
-                <span>Total:</span>
+            <div className="pt-3 border-t space-y-2">
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Subtotal:</span>
+                <span>AED {(parseFloat(order.total) + (parseFloat(order.discount) || 0)).toLocaleString()}</span>
+              </div>
+              {parseFloat(order.discount) > 0 && (
+                <div className="flex justify-between text-sm text-red-600 font-semibold">
+                  <span>Discount:</span>
+                  <span>- AED {parseFloat(order.discount).toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-black text-lg text-primary-600 border-t pt-2 mt-1">
+                <span>Net Total:</span>
                 <span>AED {parseFloat(order.total).toLocaleString()}</span>
               </div>
             </div>
@@ -232,7 +588,7 @@ const OrderDetail = () => {
         </div>
       </div>
 
-      {order.payment_status !== 'paid' && remainingAmount > 0 && isCashOrder && (
+      {order.payment_status !== 'paid' && order.payment_status !== 'credit' && order.status !== 'cancelled' && order.is_deleted !== 1 && remainingAmount > 0 && (
         <div className="bg-white p-6 rounded-lg shadow border-2 border-primary-500">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span className="text-2xl">💳</span> Customer Payment Required
@@ -254,51 +610,199 @@ const OrderDetail = () => {
             {showPayment ? (
               <div className="w-full bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <h3 className="font-semibold mb-3">Record Manual Payment</h3>
-                <div className="flex gap-4 items-end">
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Method</label>
-                    <select id="manual_method" className="w-full p-2 border rounded-lg bg-white">
-                      <option value="cash">Cash</option>
-                      <option value="bank_transfer">Bank Transfer</option>
-                    </select>
+                <div className="w-full space-y-4">
+                  {/* Bathaque 5-Stamps Free Wash Alert */}
+                  {isEligibleForFree && (
+                    <div className="p-3 bg-gradient-to-r from-amber-500/15 to-yellow-500/25 border-2 border-amber-400 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🎁</span>
+                        <div>
+                          <p className="text-xs font-black text-amber-900 uppercase">
+                            Eligible for 100% Free Wash!
+                          </p>
+                          <p className="text-[11px] text-amber-800">
+                            Bathaque ID ({orderBathaqueLoyalty?.bathaque_id || order.bathaque_id}) has completed 5 wash stamps.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOrderMethod('free')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black shadow transition ${
+                          selectedOrderMethod === 'free'
+                            ? 'bg-amber-600 text-white shadow-amber-300'
+                            : 'bg-white text-amber-800 border border-amber-400 hover:bg-amber-100'
+                        }`}
+                      >
+                        {selectedOrderMethod === 'free' ? '✓ Free Wash Selected' : 'Apply Free Wash'}
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs text-gray-500 uppercase font-bold">Method</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowBathaqueScanModal(true)}
+                          className="text-[11px] text-red-600 font-bold hover:underline flex items-center gap-1"
+                        >
+                          <span>📷</span> Scan Bathaque Pass
+                        </button>
+                      </div>
+                      <select 
+                        value={selectedOrderMethod}
+                        onChange={(e) => setSelectedOrderMethod(e.target.value)}
+                        className={`w-full p-2 border rounded-lg font-bold ${
+                          selectedOrderMethod === 'free'
+                            ? 'bg-amber-50 text-amber-900 border-amber-500 ring-2 ring-amber-400/40'
+                            : 'bg-white'
+                        }`}
+                      >
+                        <option value="cash">💵 Cash</option>
+                        <option value="card">💳 Card</option>
+                        <option value="credit">🏦 Credit</option>
+                        <option value="bank_transfer">🏛️ Bank Transfer</option>
+                        <option value="multiple">🔀 Multiple Payments (Split)</option>
+                        {isEligibleForFree && (
+                          <option value="free" className="text-amber-800 font-black bg-amber-100">
+                            🎁 Free Wash (Bathaque Loyalty - 5 Stamps Completed)
+                          </option>
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs text-gray-500 uppercase font-bold">Add Discount (AED)</label>
+                        {remainingAmount > 0 && selectedOrderMethod !== 'free' && (
+                          <span className="text-[10px] text-gray-500 font-semibold">Max: AED {Math.max(0, remainingAmount - 1)}</span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={selectedOrderMethod === 'free'}
+                        max={Math.max(0, remainingAmount - 1)}
+                        value={selectedOrderMethod === 'free' ? 0 : paymentDiscount}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const maxAllowed = Math.max(0, remainingAmount - 1);
+                          if (remainingAmount > 0 && val >= remainingAmount) {
+                            toast.error(`Full discount is not allowed. Maximum discount is AED ${maxAllowed}`);
+                            setPaymentDiscount(maxAllowed);
+                          } else {
+                            setPaymentDiscount(val);
+                          }
+                        }}
+                        className={`w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm font-bold ${
+                          selectedOrderMethod === 'free' ? 'bg-gray-100 text-gray-400' : 'bg-white'
+                        }`}
+                      />
+                    </div>
                   </div>
-                  <button
-                    onClick={async () => {
-                      const method = document.getElementById('manual_method').value;
-                      try {
-                        await axios.post('/api/payments/manual', {
-                          order_id: order.id,
-                          amount: remainingAmount,
-                          method: method
-                        });
-                        toast.success('Payment recorded successfully');
-                        setShowPayment(false);
-                        fetchOrder();
-                      } catch (err) {
-                        toast.error('Failed to record payment');
-                      }
-                    }}
-                    className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700 transition"
-                  >
-                    Confirm Amount: AED {remainingAmount.toLocaleString()}
-                  </button>
-                  <button onClick={() => setShowPayment(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700">Cancel</button>
+
+                  {selectedOrderMethod === 'multiple' && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-left">
+                      <p className="text-[11px] font-bold uppercase text-gray-500">Split Payment Amounts</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-700">Card (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderSplitPayments.card || ''}
+                            onChange={(e) => setOrderSplitPayments({ ...orderSplitPayments, card: parseFloat(e.target.value) || 0 })}
+                            className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-700">Cash (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderSplitPayments.cash || ''}
+                            onChange={(e) => setOrderSplitPayments({ ...orderSplitPayments, cash: parseFloat(e.target.value) || 0 })}
+                            className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-700">Bank Transfer (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderSplitPayments.bank_transfer || ''}
+                            onChange={(e) => setOrderSplitPayments({ ...orderSplitPayments, bank_transfer: parseFloat(e.target.value) || 0 })}
+                            className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-4 items-center pt-2 border-t">
+                    <button
+                      onClick={async () => {
+                        if (selectedOrderMethod === 'credit' && !order.customer_id) {
+                          toast.error('Credit payment requires a registered customer on this order.');
+                          return;
+                        }
+                        const isFree = selectedOrderMethod === 'free';
+                        if (!isFree && paymentDiscount > 0 && paymentDiscount >= remainingAmount) {
+                          toast.error(`Full discount is not allowed. Maximum discount is AED ${Math.max(0, remainingAmount - 1)}`);
+                          return;
+                        }
+                        const finalAmount = isFree ? 0 : Math.max(0, remainingAmount - paymentDiscount);
+                        try {
+                          const payload = {
+                            order_id: order.id,
+                            amount: finalAmount,
+                            method: selectedOrderMethod,
+                            discount: isFree ? 0 : paymentDiscount,
+                            bathaque_id: orderBathaqueLoyalty?.bathaque_id || order.bathaque_id
+                          };
+
+                          if (selectedOrderMethod === 'multiple') {
+                            payload.splits = [
+                              { method: 'card', amount: parseFloat(orderSplitPayments.card || 0) },
+                              { method: 'cash', amount: parseFloat(orderSplitPayments.cash || 0) },
+                              { method: 'bank_transfer', amount: parseFloat(orderSplitPayments.bank_transfer || 0) }
+                            ].filter(s => s.amount > 0);
+                          }
+
+                          await axios.post('/api/payments/manual', payload);
+                          toast.success(isFree ? 'Free Wash redeemed and order completed! 🎉' : 'Payment recorded successfully');
+                          setShowPayment(false);
+                          setPaymentDiscount(0);
+                          fetchOrder();
+                        } catch (err) {
+                          toast.error(err.response?.data?.message || 'Failed to record payment');
+                        }
+                      }}
+                      className={`px-6 py-2.5 rounded-lg font-bold transition text-sm shadow-md ${
+                        selectedOrderMethod === 'free'
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse shadow-amber-300'
+                          : 'bg-primary-600 text-white hover:bg-primary-700'
+                      }`}
+                    >
+                      {selectedOrderMethod === 'free'
+                        ? '🎁 Confirm 100% Free Wash (AED 0.00)'
+                        : `Confirm Amount: AED ${Math.max(0, remainingAmount - paymentDiscount).toLocaleString()}`}
+                    </button>
+                    <button onClick={() => setShowPayment(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <button
                   onClick={() => setShowPayment(true)}
                   className="px-6 py-3 border-2 border-primary-600 text-primary-600 font-bold rounded-full hover:bg-primary-50 transition flex items-center gap-2"
                 >
-                  Record Cash/Manual Payment
-                </button>
-                <button
-                  onClick={handleTapCheckout}
-                  disabled={loadingTap}
-                  className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-full hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50"
-                >
-                  💳 {loadingTap ? 'Redirecting...' : 'Pay Online via Tap'}
+                  <span>💵</span> Record Manual Payment
                 </button>
               </div>
             )}
@@ -395,9 +899,16 @@ const OrderDetail = () => {
           <div className="text-right">
             <h3 className="font-bold text-xs uppercase mb-1">Invoice Info:</h3>
             <p><span className="font-bold">Invoice #:</span> CC-{order.id}</p>
-            <p><span className="font-bold">Date:</span> {new Date(order.created_at).toLocaleDateString()}</p>
+            <p><span className="font-bold">Date & Time:</span> {new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             <p><span className="font-bold">Status:</span> {order.status === 'completed' ? 'Completed' : 'In Progress'}</p>
-            <p><span className="font-bold">Payment:</span> {order.payment_status.toUpperCase()}</p>
+            {order.credit_status ? (
+              <>
+                <p><span className="font-bold">Payment:</span> CREDIT</p>
+                <p><span className="font-bold">Credit Status:</span> {order.credit_status.replace('_', ' ').toUpperCase()}</p>
+              </>
+            ) : (
+              <p><span className="font-bold">Payment:</span> {order.payment_status.toUpperCase()}</p>
+            )}
           </div>
         </div>
 
@@ -438,10 +949,17 @@ const OrderDetail = () => {
               <span>Net Amount:</span>
               <span>AED {parseFloat(order.total).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between font-bold border-b pb-1 text-gray-600">
-              <span>Remaining Balance:</span>
-              <span>AED {remainingAmount.toFixed(2)}</span>
-            </div>
+            {order.credit_status ? (
+              <div className="flex justify-between font-bold border-b pb-1 text-red-600">
+                <span>Credit Balance (To Pay):</span>
+                <span>AED {parseFloat(order.credit_remaining || 0).toFixed(2)}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between font-bold border-b pb-1 text-gray-600">
+                <span>Remaining Balance:</span>
+                <span>AED {remainingAmount.toFixed(2)}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -464,6 +982,267 @@ const OrderDetail = () => {
           <p>This is a computer generated invoice. No signature required.</p>
         </div>
       </div>
+
+      {/* VIP Booking Action Modal */}
+      {showVipModal && vipBooking && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto no-print">
+          <div className="relative w-full max-w-lg rounded-xl bg-white p-6 sm:p-8 shadow-2xl max-h-[90vh] flex flex-col my-8">
+            <button
+              onClick={() => setShowVipModal(false)}
+              className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-600 transition"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="shrink-0 border-b pb-4 mb-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Manage VIP Booking</h3>
+                  <p className="text-sm text-gray-550 font-medium">Booking ID #{vipBooking.id}</p>
+                </div>
+                <span className={`px-3 py-1.5 text-xs font-black uppercase rounded-full ${getStatusColor(vipBooking.status)}`}>
+                  {vipBooking.status}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2 space-y-5 text-sm">
+              {/* Customer and Booking Info */}
+              <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                <div>
+                  <p className="text-xs text-gray-400 font-bold uppercase">Customer</p>
+                  <p className="font-semibold text-gray-800">{vipBooking.name}</p>
+                  <p className="text-xs text-gray-500">{vipBooking.phone}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-bold uppercase">Vehicle</p>
+                  <p className="font-semibold text-gray-800 font-mono">{vipBooking.vehicle_model}</p>
+                  <p className="text-xs text-gray-500">{vipBooking.vehicle_type}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-400 font-bold uppercase">Requested VIP Service</p>
+                  <p className="font-semibold text-red-600 font-medium">{vipBooking.service_type}</p>
+                  {vipBooking.order_total && (
+                    <p className="text-xs font-semibold text-gray-600">Price: AED {parseFloat(vipBooking.order_total).toLocaleString()}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Order Synced & Payment Details */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-xs text-gray-400 font-bold uppercase">Synced POS Order</p>
+                    <p className="font-semibold text-gray-800">Order #{order.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 font-bold uppercase text-right">Payment Status</p>
+                    <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded-full ${
+                      order.status === 'cancelled' || vipBooking?.status === 'cancelled' || order.payment_status === 'cancelled'
+                        ? 'bg-red-100 text-red-800 border border-red-200'
+                        : order.payment_status === 'paid' ? 'bg-green-100 text-green-800'
+                        : order.payment_status === 'credit' ? 'bg-purple-100 text-purple-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {(order.status === 'cancelled' || vipBooking?.status === 'cancelled') ? 'cancelled' : (order.payment_status || 'pending')}
+                    </span>
+                  </div>
+                </div>
+                {order.payment_status === 'paid' && (
+                  <div className="text-[10px] font-bold text-gray-500 uppercase text-right mt-1">
+                    Paid via: {order.payments?.[0]?.method || 'manual'}
+                  </div>
+                )}
+              </div>
+
+              {/* Appointment Scheduling section */}
+              {vipBooking.status === 'pending' || isRescheduling ? (
+                <div className="border border-yellow-200 bg-yellow-50/50 rounded-lg p-4 space-y-3">
+                  <h4 className="font-bold text-yellow-900 text-xs uppercase tracking-wider">
+                    {isRescheduling ? 'Reschedule Appointment' : 'Schedule & Confirm Appointment'}
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Appointment Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={scheduleData.appointment_date}
+                        onChange={(e) => setScheduleData({ ...scheduleData, appointment_date: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Appointment Time *</label>
+                      <select
+                        required
+                        value={scheduleData.appointment_time}
+                        onChange={(e) => setScheduleData({ ...scheduleData, appointment_time: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                      >
+                        <option value="">Select time...</option>
+                        {['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'].map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleVipConfirmAndSchedule}
+                      disabled={updatingVip}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 rounded-lg transition"
+                    >
+                      {updatingVip ? 'Scheduling...' : 'Save & Confirm'}
+                    </button>
+                    {isRescheduling && (
+                      <button
+                        onClick={() => setIsRescheduling(false)}
+                        className="px-4 py-2.5 border rounded-lg text-xs hover:bg-gray-100 transition"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-lg p-4 bg-white flex justify-between items-center shadow-sm">
+                  <div>
+                    <p className="text-xs text-gray-400 font-bold uppercase">Scheduled Appointment</p>
+                    <p className="font-bold text-gray-800 mt-1">
+                      {vipBooking.appointment_date
+                        ? `${new Date(vipBooking.appointment_date).toLocaleDateString('en-GB')} at ${vipBooking.appointment_time}`
+                        : 'Not Scheduled'}
+                    </p>
+                  </div>
+                  {['confirmed', 'in_progress'].includes(vipBooking.status) && (
+                    <button
+                      onClick={() => setIsRescheduling(true)}
+                      className="text-indigo-600 hover:underline font-bold text-xs"
+                    >
+                      Reschedule
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Status Actions Flow */}
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400 font-bold uppercase">Status Actions</p>
+                {vipBooking.status === 'in_progress' && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex justify-between items-center text-purple-900 font-bold text-xs">
+                    <span>⏱️ Time Elapsed:</span>
+                    <span>{calculateElapsedTime(vipBooking.service_started_at, vipBooking.service_completed_at)}</span>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {!isAppointmentToday(vipBooking.appointment_date) && ['confirmed', 'in_progress'].includes(vipBooking.status) ? (
+                    <div className="w-full bg-yellow-50 border border-yellow-200 text-yellow-800 p-3 rounded-lg text-xs font-bold text-center">
+                      ⚠️ VIP service can only be started/completed on the scheduled day. Please reschedule this booking to today to proceed.
+                    </div>
+                  ) : (
+                    <>
+                      {vipBooking.status === 'confirmed' && (
+                        <button
+                          onClick={() => handleVipStatusChange('in_progress')}
+                          disabled={updatingVip}
+                          className="flex-1 min-w-[150px] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                        >
+                          ⚡ Start Service
+                        </button>
+                      )}
+                      {vipBooking.status === 'in_progress' && (
+                        <button
+                          onClick={() => handleVipStatusChange('completed')}
+                          disabled={updatingVip}
+                          className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                        >
+                          ✓ Done (Complete Service)
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {['pending', 'confirmed', 'in_progress'].includes(vipBooking.status) && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to cancel this booking?')) {
+                          handleVipStatusChange('cancelled');
+                        }
+                      }}
+                      disabled={updatingVip}
+                      className="px-4 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg transition"
+                    >
+                      Cancel Booking
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes & Assignment form */}
+              <form onSubmit={updateVipBookingDetails} className="space-y-4 pt-3 border-t">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Assign Staff Member
+                  </label>
+                  <select
+                    value={bookingUpdate.assigned_staff_id}
+                    onChange={(e) => setBookingUpdate({ ...bookingUpdate, assigned_staff_id: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                  >
+                    <option value="">Unassigned</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Customer Notes (Read-Only) */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    Customer Notes
+                  </label>
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700 italic">
+                    {vipBooking.notes || 'No notes left by customer'}
+                  </div>
+                </div>
+
+                {/* Staff Notes */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    Staff Notes
+                  </label>
+                  <textarea
+                    value={bookingUpdate.staff_notes}
+                    onChange={(e) => setBookingUpdate({ ...bookingUpdate, staff_notes: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-xs resize-none"
+                    rows="3"
+                    placeholder="Add notes from staff members..."
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={updatingVip}
+                  className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg transition"
+                >
+                  Save Notes & Assignment
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bathaque Loyalty Scan Modal */}
+      {showBathaqueScanModal && (
+        <BathaqueScanModal
+          onClose={() => setShowBathaqueScanModal(false)}
+          onApply={handleApplyBathaqueToOrder}
+        />
+      )}
     </div>
   );
 };

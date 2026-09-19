@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 // @access  Private (Admin only)
 const getEmployees = asyncHandler(async (req, res) => {
   const [employees] = await pool.query(`
-    SELECT id, name, email, role, created_at, updated_at
+    SELECT id, name, email, role, is_deleted, delete_reason, created_at, updated_at
     FROM users
     WHERE role IN ('admin', 'staff')
     ORDER BY created_at DESC
@@ -38,18 +38,15 @@ const getEmployee = asyncHandler(async (req, res) => {
 // @route   POST /api/employees
 // @access  Private (Admin only)
 const createEmployee = asyncHandler(async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
+  const role = req.body.role === 'admin' ? 'admin' : 'staff';
 
-  if (!name || !email || !password || !role) {
+  if (!name || !email || !password) {
     return res.status(400).json({ message: 'Please provide all required fields' });
   }
 
   if (password.length < 6) {
     return res.status(400).json({ message: 'Password must be at least 6 characters' });
-  }
-
-  if (!['admin', 'staff'].includes(role)) {
-    return res.status(400).json({ message: 'Invalid role. Must be admin or staff' });
   }
 
   // Check if email already exists
@@ -86,7 +83,8 @@ const createEmployee = asyncHandler(async (req, res) => {
 // @access  Private (Admin only)
 const updateEmployee = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
+  const role = req.body.role === 'admin' ? 'admin' : 'staff';
 
   const [employees] = await pool.query('SELECT id FROM users WHERE id = ?', [id]);
   if (employees.length === 0) {
@@ -135,13 +133,17 @@ const updateEmployee = asyncHandler(async (req, res) => {
 // @access  Private (Admin only)
 const deleteEmployee = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { reason } = req.body;
 
   const [employees] = await pool.query('SELECT id FROM users WHERE id = ?', [id]);
   if (employees.length === 0) {
     return res.status(404).json({ message: 'Employee not found' });
   }
 
-  await pool.query('DELETE FROM users WHERE id = ?', [id]);
+  await pool.query(
+    'UPDATE users SET is_deleted = 1, delete_reason = ? WHERE id = ?',
+    [reason || 'No reason specified', id]
+  );
 
   res.json({ message: 'Employee deleted successfully' });
 });

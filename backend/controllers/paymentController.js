@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
+const { getBathaqueLoyalty, redeemBathaqueFreeWash } = require('../utils/bathaqueLoyalty');
 
 // @desc    Create payment intent
 // @route   POST /api/payments/create-intent
@@ -60,7 +61,7 @@ const confirmPayment = asyncHandler(async (req, res) => {
 
         // Update order payment status
         const [orders] = await connection.query(
-          'SELECT total, vip_booking_id FROM orders WHERE id = ?',
+          'SELECT total, status, vip_booking_id FROM orders WHERE id = ?',
           [order_id]
         );
 
@@ -79,8 +80,8 @@ const confirmPayment = asyncHandler(async (req, res) => {
             [newPaymentStatus, order_id]
           );
 
-          // If payment status becomes "paid", automatically start VIP service if it's a VIP booking
-          if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined) {
+          // If payment status becomes "paid", automatically start VIP service if it's a VIP booking (only if order is not completed)
+          if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined && orders[0].status !== 'completed') {
             await connection.query(
               `UPDATE orders 
                SET status = 'processing', 
@@ -95,39 +96,6 @@ const confirmPayment = asyncHandler(async (req, res) => {
             console.log(`[VIP] Auto-started service for VIP booking ${orders[0].vip_booking_id} after Stripe payment`);
           }
 
-          // If payment status becomes "paid", send Feedback SMS
-          if (newPaymentStatus === 'paid') {
-            const [orderData] = await connection.query(`
-              SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
-              FROM orders o
-              JOIN customers c ON o.customer_id = c.id
-              WHERE o.id = ?
-            `, [order_id]);
-
-            if (orderData.length > 0) {
-              const order = orderData[0];
-              const phone = formatPhoneNumber(order.phone);
-              const feedbackUrl = buildFeedbackUrl({
-                vehicleType: order.vehicle_type || 'Saloon',
-                customerId: order.customer_id,
-                plate: order.vehicle_plate,
-                orderId: order.id
-              });
-
-              if (phone) {
-                try {
-                  await sendReson8Message({
-                    to: phone,
-                    message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
-                    campaignName: 'PAYMENT_FEEDBACK'
-                  });
-                  console.log(`[SMS] Feedback SMS sent to ${phone} after payment for order ${order_id}`);
-                } catch (err) {
-                  console.error('[SMS] Feedback SMS failed:', err.message);
-                }
-              }
-            }
-          }
         }
 
         await connection.commit();
@@ -140,6 +108,12 @@ const confirmPayment = asyncHandler(async (req, res) => {
       } catch (error) {
         await connection.rollback();
         connection.release();
+        if (error.code === 'ER_DUP_ENTRY') {
+          return res.json({
+            message: 'Payment confirmed successfully',
+            payment_intent: paymentIntent
+          });
+        }
         throw error;
       }
     } else {
@@ -168,9 +142,9 @@ const getOrderPayments = asyncHandler(async (req, res) => {
 // @route   POST /api/payments/manual
 // @access  Private
 const processManualPayment = asyncHandler(async (req, res) => {
-  const { order_id, amount, method, status = 'completed' } = req.body;
+  const { order_id, amount, method, status = 'completed', discount = 0, splits } = req.body;
 
-  if (!order_id || !amount || !method) {
+  if (!order_id || amount === undefined || !method) {
     return res.status(400).json({ message: 'Order ID, amount, and method are required' });
   }
 
@@ -178,15 +152,219 @@ const processManualPayment = asyncHandler(async (req, res) => {
   await connection.beginTransaction();
 
   try {
-    // Record payment
-    await connection.query(
-      'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
-      [order_id, amount, method, status]
+    // Safety check: If order is already fully paid and total payments cover order total, return early
+    const [existingOrder] = await connection.query(
+      'SELECT total, payment_status FROM orders WHERE id = ?',
+      [order_id]
     );
+    if (existingOrder.length > 0 && existingOrder[0].payment_status === 'paid' && method !== 'free') {
+      const [existingPayments] = await connection.query(
+        'SELECT SUM(amount) as total_paid FROM payments WHERE order_id = ? AND status = "completed"',
+        [order_id]
+      );
+      const totalPaid = parseFloat(existingPayments[0].total_paid || 0);
+      const orderTotal = parseFloat(existingOrder[0].total || 0);
+      if (totalPaid >= orderTotal && orderTotal > 0) {
+        await connection.rollback();
+        connection.release();
+        return res.json({
+          message: 'Order is already fully paid',
+          deduplicated: true
+        });
+      }
+    }
+
+    const discountVal = parseFloat(discount || 0);
+    if (discountVal > 0) {
+      const [orderRows] = await connection.query(
+        'SELECT total, discount FROM orders WHERE id = ?',
+        [order_id]
+      );
+      if (orderRows.length > 0) {
+        const currentTotal = parseFloat(orderRows[0].total);
+        const currentDiscount = parseFloat(orderRows[0].discount || 0);
+        
+        // Strictly enforce: No full 100% discount. Max discount allowed is currentTotal - 1
+        if (discountVal >= currentTotal) {
+          await connection.rollback();
+          connection.release();
+          const maxAllowed = Math.max(0, currentTotal - 1);
+          return res.status(400).json({ 
+            message: `Full discount is not allowed. Maximum discount allowed is AED ${maxAllowed.toFixed(2)}` 
+          });
+        }
+
+        const newTotal = Math.max(0, currentTotal - discountVal);
+        const newDiscount = currentDiscount + discountVal;
+        
+        await connection.query(
+          'UPDATE orders SET total = ?, discount = ? WHERE id = ?',
+          [newTotal, newDiscount, order_id]
+        );
+      }
+    }
+
+    if (method === 'free') {
+      let targetBathaque = req.body.bathaque_id ? req.body.bathaque_id.toString().trim() : null;
+      if (!targetBathaque) {
+        const [ordRows] = await connection.query(
+          'SELECT o.bathaque_id, c.bathaque_id as cust_bathaque_id FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = ?',
+          [order_id]
+        );
+        if (ordRows.length > 0) {
+          targetBathaque = ordRows[0].bathaque_id || ordRows[0].cust_bathaque_id;
+        }
+      }
+
+      if (!targetBathaque) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ message: 'Free wash redemption requires an eligible Bathaque ID / QR scan.' });
+      }
+
+      const loyalty = await getBathaqueLoyalty(connection, targetBathaque);
+      if (!loyalty || loyalty.wash_stamps < 5) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ 
+          message: `Bathaque ID ${targetBathaque} has only ${loyalty?.wash_stamps || 0}/5 washes. Must have 5 completed washes for a free wash.` 
+        });
+      }
+
+      // Update order total to 0.00 and payment_status to 'free'
+      await connection.query(
+        `UPDATE orders 
+         SET bathaque_id = ?, total = 0.00, payment_status = 'free', 
+             status = IF(status = 'cancelled', status, 'completed'),
+             service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) 
+         WHERE id = ?`,
+        [targetBathaque, order_id]
+      );
+
+      // Remove any prior pending payment rows
+      await connection.query('DELETE FROM payments WHERE order_id = ? AND status = "pending"', [order_id]);
+
+      // Record completed free payment entry
+      await connection.query(
+        'INSERT INTO payments (order_id, amount, method, status) VALUES (?, 0.00, "free", "completed")',
+        [order_id]
+      );
+
+      // Redeem the free wash and reset Bathaque stamps to 0
+      await redeemBathaqueFreeWash(connection, targetBathaque);
+
+      await connection.commit();
+      connection.release();
+      return res.json({ success: true, message: 'Free wash redeemed successfully! Stamp cycle has reset.' });
+    }
+
+    if (method === 'credit') {
+      const [orderRow] = await connection.query('SELECT customer_id, vip_booking_id FROM orders WHERE id = ?', [order_id]);
+      let customerId = orderRow.length > 0 ? orderRow[0].customer_id : null;
+      if (!customerId && orderRow.length > 0 && orderRow[0].vip_booking_id) {
+        const [vipRow] = await connection.query('SELECT vip_customer_id FROM vip_bookings WHERE id = ?', [orderRow[0].vip_booking_id]);
+        if (vipRow.length > 0) customerId = vipRow[0].vip_customer_id;
+      }
+      if (!customerId) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ message: 'Credit payment requires a registered customer on this order.' });
+      }
+
+      const creditAmount = parseFloat(amount || 0);
+
+      // 1. Insert or update customer_credits
+      const [existingCredit] = await connection.query('SELECT id FROM customer_credits WHERE order_id = ?', [order_id]);
+      if (existingCredit.length > 0) {
+        await connection.query(
+          'UPDATE customer_credits SET customer_id = ?, amount = ?, remaining_amount = ?, status = "unpaid" WHERE id = ?',
+          [customerId, creditAmount, creditAmount, existingCredit[0].id]
+        );
+      } else {
+        await connection.query(
+          'INSERT INTO customer_credits (customer_id, order_id, amount, remaining_amount, status) VALUES (?, ?, ?, ?, "unpaid")',
+          [customerId, order_id, creditAmount, creditAmount]
+        );
+      }
+
+      // 2. Remove any prior pending payment rows for this order
+      await connection.query('DELETE FROM payments WHERE order_id = ? AND status = "pending"', [order_id]);
+
+      // 3. Record completed payment entry with method 'credit'
+      const [existingCreditPayment] = await connection.query('SELECT id FROM payments WHERE order_id = ? AND method = "credit"', [order_id]);
+      if (existingCreditPayment.length > 0) {
+        await connection.query('UPDATE payments SET amount = ?, status = "completed" WHERE id = ?', [creditAmount, existingCreditPayment[0].id]);
+      } else {
+        await connection.query('INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, "credit", "completed")', [order_id, creditAmount]);
+      }
+
+      // 4. Update order payment_status to 'credit' and ensure status is completed
+      await connection.query(
+        `UPDATE orders 
+         SET payment_status = 'credit', 
+             status = IF(status = 'cancelled', status, 'completed'),
+             service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) 
+         WHERE id = ?`,
+        [order_id]
+      );
+
+      await connection.commit();
+      connection.release();
+      return res.json({ success: true, message: 'Credit payment recorded successfully' });
+    }
+
+    if (method === 'multiple' && Array.isArray(splits) && splits.length > 0) {
+      // Process multiple split payments
+      for (const split of splits) {
+        const splitAmt = parseFloat(split.amount || 0);
+        if (splitAmt > 0 && split.method) {
+          // Check for duplicate insert in last 10 seconds
+          const [recentDup] = await connection.query(
+            'SELECT id FROM payments WHERE order_id = ? AND method = ? AND amount = ? AND status = "completed" AND created_at >= TIMESTAMPADD(SECOND, -10, CURRENT_TIMESTAMP) LIMIT 1',
+            [order_id, split.method, splitAmt]
+          );
+
+          if (recentDup.length === 0) {
+            await connection.query(
+              'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
+              [order_id, splitAmt, split.method, status]
+            );
+          }
+        }
+      }
+    } else {
+      // Check for duplicate single payment insert in last 10 seconds
+      const [recentDup] = await connection.query(
+        'SELECT id FROM payments WHERE order_id = ? AND method = ? AND amount = ? AND status = "completed" AND created_at >= TIMESTAMPADD(SECOND, -10, CURRENT_TIMESTAMP) LIMIT 1',
+        [order_id, method, amount]
+      );
+
+      if (recentDup.length === 0) {
+        // Check if there is an existing pending payment record
+        const [pendingPayments] = await connection.query(
+          'SELECT id FROM payments WHERE order_id = ? AND status = "pending" LIMIT 1',
+          [order_id]
+        );
+
+        if (pendingPayments.length > 0 && status === 'completed') {
+          // Update existing pending payment to completed
+          await connection.query(
+            'UPDATE payments SET amount = ?, method = ?, status = "completed" WHERE id = ?',
+            [amount, method, pendingPayments[0].id]
+          );
+        } else {
+          // Record payment
+          await connection.query(
+            'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
+            [order_id, amount, method, status]
+          );
+        }
+      }
+    }
 
     // Update order payment status
     const [orders] = await connection.query(
-      'SELECT total, vip_booking_id FROM orders WHERE id = ?',
+      'SELECT total, status, vip_booking_id FROM orders WHERE id = ?',
       [order_id]
     );
 
@@ -199,14 +377,15 @@ const processManualPayment = asyncHandler(async (req, res) => {
 
       const totalPaid = parseFloat(payments[0].total_paid || 0);
 
-      const newPaymentStatus = totalPaid >= orderTotal ? 'paid' : (totalPaid > 0 ? 'partial' : 'pending');
+      const isFreeWash = method === 'free' || orderTotal === 0;
+      const newPaymentStatus = isFreeWash ? 'free' : (totalPaid >= orderTotal ? 'paid' : (totalPaid > 0 ? 'partial' : 'pending'));
       await connection.query(
         'UPDATE orders SET payment_status = ? WHERE id = ?',
         [newPaymentStatus, order_id]
       );
 
-      // If payment status becomes "paid", automatically start VIP service if it's a VIP booking
-      if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined) {
+      // If payment status becomes "paid", automatically start VIP service if it's a VIP booking (only if order is not completed)
+      if (newPaymentStatus === 'paid' && orders[0].vip_booking_id !== null && orders[0].vip_booking_id !== undefined && orders[0].status !== 'completed') {
         await connection.query(
           `UPDATE orders 
            SET status = 'processing', 
@@ -221,40 +400,7 @@ const processManualPayment = asyncHandler(async (req, res) => {
         console.log(`[VIP] Auto-started service for VIP booking ${orders[0].vip_booking_id} after manual payment`);
       }
 
-      // If payment status becomes "paid", send Feedback SMS
-      if (newPaymentStatus === 'paid') {
-        const [orderData] = await connection.query(`
-          SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
-          FROM orders o
-          JOIN customers c ON o.customer_id = c.id
-          WHERE o.id = ?
-        `, [order_id]);
-
-        if (orderData.length > 0) {
-          const order = orderData[0];
-          const phone = formatPhoneNumber(order.phone);
-          const feedbackUrl = buildFeedbackUrl({
-            vehicleType: order.vehicle_type || 'Saloon',
-            customerId: order.customer_id,
-            plate: order.vehicle_plate,
-            orderId: order.id
-          });
-
-          if (phone) {
-            try {
-              await sendReson8Message({
-                to: phone,
-                message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
-                campaignName: 'PAYMENT_FEEDBACK'
-              });
-              console.log(`[SMS] Feedback SMS sent to ${phone} after manual payment for order ${order_id}`);
-            } catch (err) {
-              console.error('[SMS] Feedback SMS failed:', err.message);
-            }
-          }
-        }
       }
-    }
 
     await connection.commit();
     connection.release();

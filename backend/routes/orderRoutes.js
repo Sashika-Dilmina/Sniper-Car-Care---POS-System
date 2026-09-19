@@ -5,7 +5,9 @@ const {
   getOrder,
   createOrder,
   updateOrderStatus,
-  deleteOrder
+  deleteOrder,
+  getOrderInvoicePDF,
+  sendTapPaymentLink
 } = require('../controllers/orderController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -18,6 +20,9 @@ router.route('/')
 router.route('/:id')
   .get(getOrder)
   .delete(authorize('admin'), deleteOrder);
+
+router.get('/:id/pdf', getOrderInvoicePDF);
+router.post('/:id/send-tap-link', sendTapPaymentLink);
 
 router.put('/:id/status', updateOrderStatus);
 

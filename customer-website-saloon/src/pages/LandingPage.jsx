@@ -84,7 +84,7 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
               <div
                 className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full overflow-hidden transition-all duration-300 ${
                   isFilled
-                    ? 'shadow-md ring-2 ring-red-500 scale-110'
+                    ? 'shadow-md ring-2 ring-blue-600 bg-blue-50 scale-110'
                     : 'border border-gray-300'
                 }`}
               >
@@ -92,6 +92,7 @@ const LoyaltyProgress = ({ washStamps = 0 }) => {
                   src={isFilled ? stamp1 : stamp4} 
                   alt={`Stamp ${n}`} 
                   className="w-full h-full object-contain transition-all duration-300" 
+                  style={{ filter: isFilled ? 'hue-rotate(25deg) saturate(2.5) brightness(0.95)' : 'none' }}
                 />
               </div>
               <span className="text-[10px] sm:text-xs font-bold text-gray-500 mt-1.5">{n}</span>
@@ -336,12 +337,27 @@ const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const vehiclePlate = searchParams.get('plate') || '';
+  const vehiclePlate = searchParams.get('plate') || localStorage.getItem('sniper_customer_plate') || '';
+  const customerIdParam = searchParams.get('customer_id') || localStorage.getItem('sniper_customer_id') || '';
+
+  useEffect(() => {
+    const urlPlate = searchParams.get('plate');
+    const urlCustId = searchParams.get('customer_id');
+    if (urlPlate) {
+      localStorage.setItem('sniper_customer_plate', urlPlate);
+    } else if (vehiclePlate) {
+      localStorage.setItem('sniper_customer_plate', vehiclePlate);
+    }
+    if (urlCustId) {
+      localStorage.setItem('sniper_customer_id', urlCustId);
+    }
+  }, [searchParams, vehiclePlate]);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showVIPModal, setShowVIPModal] = useState(false);
   const [vipStep, setVipStep] = useState(1);
   const [selectedService, setSelectedService] = useState(null);
   const [customerInfo, setCustomerInfo] = useState(null);
+  const [showFreeWashPopup, setShowFreeWashPopup] = useState(false);
   const [bookingForm, setBookingForm] = useState({
     name: '',
     phone: '+9715',
@@ -370,8 +386,26 @@ const LandingPage = () => {
   const [showSupportOptions, setShowSupportOptions] = useState(false);
   const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
   const [washStamps, setWashStamps] = useState(0);
+  const [freeWashCap, setFreeWashCap] = useState(0);
   const [packages, setPackages] = useState([]);
   const [dbProducts, setDbProducts] = useState([]);
+  const [realFeedbacks, setRealFeedbacks] = useState([]);
+  const [bookingSuccessData, setBookingSuccessData] = useState(null);
+  const [customerNote, setCustomerNote] = useState('');
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
+  const [extraServicesList, setExtraServicesList] = useState([]);
+  const [selectedExtraServices, setSelectedExtraServices] = useState([]);
+  const [isExtraServicesOpen, setIsExtraServicesOpen] = useState(false);
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+
+  useEffect(() => {
+    if (bookingSuccessData) {
+      axios.get('/api/public/extra-services?vehicle_type=Saloon')
+        .then(res => setExtraServicesList(res.data.products || []))
+        .catch(err => console.error('Extra services error:', err));
+    }
+  }, [bookingSuccessData]);
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productForm, setProductForm] = useState({
@@ -417,7 +451,7 @@ const LandingPage = () => {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        const response = await axios.get('/api/public/products?category=Services&vehicle_type=Saloon');
+        const response = await axios.get('/api/public/products?vehicle_type=Saloon');
         const mappedPackages = (response.data.products || []).map(p => ({
           id: p.id,
           name: p.name,
@@ -442,6 +476,20 @@ const LandingPage = () => {
     };
     fetchServices();
     fetchDbProducts();
+
+    const fetchLatestFeedbacks = async () => {
+      try {
+        const response = await axios.get('/api/feedback/public/latest');
+        if (response.data.success && Array.isArray(response.data.feedback) && response.data.feedback.length > 0) {
+          setRealFeedbacks(response.data.feedback);
+        }
+      } catch (err) {
+        console.log('Error fetching latest feedback:', err.message);
+      }
+    };
+    fetchLatestFeedbacks();
+    const feedbackInterval = setInterval(fetchLatestFeedbacks, 10000);
+    return () => clearInterval(feedbackInterval);
   }, []);
 
   // Real-time order status notifications
@@ -548,13 +596,17 @@ const LandingPage = () => {
     }
   }, [location]);
 
-  // Fetch customer info by plate number
+  // Fetch customer info by plate number or customer_id
   useEffect(() => {
     const fetchCustomerInfo = async () => {
-      if (!vehiclePlate) return;
+      if (!vehiclePlate && !customerIdParam) return;
 
       try {
-        const response = await axios.get(`/api/public/customer/by-plate?plate=${vehiclePlate}`);
+        const params = new URLSearchParams();
+        if (customerIdParam) params.append('customer_id', customerIdParam);
+        if (vehiclePlate) params.append('plate', vehiclePlate);
+
+        const response = await axios.get(`/api/public/customer/by-plate?${params.toString()}`);
         if (response.data.customer) {
           setCustomerInfo(response.data.customer);
           setWashStamps(
@@ -562,11 +614,12 @@ const LandingPage = () => {
               response.data.customer.wash_stamps ??
               0
           );
+          setFreeWashCap(response.data.loyalty?.free_wash_cap ?? 0);
           setBookingForm({
             name: response.data.customer.name || '',
             phone: response.data.customer.phone || '+9715',
             vehicle_type: response.data.customer.vehicle_type || 'Saloon',
-            vehicle_plate: vehiclePlate,
+            vehicle_plate: response.data.customer.vehicle_plate || vehiclePlate,
             notes: ''
           });
         }
@@ -576,7 +629,7 @@ const LandingPage = () => {
     };
 
     fetchCustomerInfo();
-  }, [vehiclePlate]);
+  }, [vehiclePlate, customerIdParam]);
 
   // Fetch plate codes dynamically based on selected Emirate
   useEffect(() => {
@@ -662,7 +715,7 @@ const LandingPage = () => {
     }
   }, [vipBookingForm.emirate]);
 
-  const defaultTimeSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
+  const defaultTimeSlots = ['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'];
 
   // Fetch available time slots when date changes
   useEffect(() => {
@@ -688,6 +741,32 @@ const LandingPage = () => {
   }, [vipBookingForm.appointment_date]);
 
   const submitBooking = async (service, form) => {
+    if (isSubmittingBooking) return;
+    setIsSubmittingBooking(true);
+
+    const isVip = service.name.toLowerCase().includes('vip') || service.category === 'VIP';
+    if (isVip) {
+      try {
+        await axios.post('/api/vip/bookings', {
+          name: form.name,
+          phone: form.phone.replace(/[^0-9]/g, ''),
+          vehicle_model: form.vehicle_plate || (vehiclePlate || ''),
+          vehicle_type: form.vehicle_type || (location.pathname.includes('4x4') ? '4x4' : 'Saloon'),
+          service_type: service.name,
+          notes: form.notes || `VIP Booking requested via Website`
+        });
+        toast.success('VIP booking request submitted! We will contact you soon with confirmation details.', { duration: 5000 });
+        setShowBookingModal(false);
+        setSelectedService(null);
+      } catch (error) {
+        console.error('VIP Booking error:', error);
+        toast.error(error.response?.data?.message || 'Failed to book VIP service. Please try again.');
+      } finally {
+        setIsSubmittingBooking(false);
+      }
+      return;
+    }
+
     try {
       // Extract price from service.price
       let servicePrice = 0;
@@ -698,63 +777,113 @@ const LandingPage = () => {
         servicePrice = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
       }
 
-      // Create order with service details
-      const orderData = {
-        customer_id: customerInfo?.id || null,
-        customer_name: form.name,
-        customer_phone: form.phone,
-        vehicle_plate: form.vehicle_plate || null,
-        vehicle_type: form.vehicle_type,
-        items: [], // Empty items array since we're booking a service, not a product
-        total: servicePrice,
-        source: 'customer_website_saloon',
-        status: 'pending',
-        payment_status: 'pending',
-        notes: form.notes || `One-Tap Booking via Website - ${service.name}`
-      };
+      // Check if eligible for a Free Wash
+      const isEligibleForFreeWash = washStamps >= 5;
+      const sNameLower = service.name.toLowerCase().trim();
+      const eligibleFreeServices = [
+        'full body service',
+        'full body wash',
+        'ceramic wash',
+        'double soap'
+      ];
+      const isServiceEligible = eligibleFreeServices.some(s => sNameLower.includes(s)) && !sNameLower.includes('vip');
+      const isFreeWashApplied = false; // Automatic free wash discount disabled per user requirement
 
-      const response = await axios.post('/api/public/orders', orderData);
-      const order = response.data.order;
+      if (isFreeWashApplied) {
+        // If it is a free wash, we create the order immediately (no payment needed)
+        const orderData = {
+          customer_id: customerInfo?.id || null,
+          customer_name: form.name,
+          customer_phone: form.phone,
+          vehicle_plate: form.vehicle_plate || null,
+          vehicle_type: form.vehicle_type,
+          items: [], 
+          total: servicePrice,
+          source: 'customer_website_saloon',
+          status: 'pending',
+          payment_status: 'free', 
+          notes: form.notes ? form.notes.trim() : null
+        };
 
-      if (form.vehicle_plate) {
-        setSearchParams({ plate: form.vehicle_plate });
-      }
+        const response = await axios.post('/api/public/orders', orderData);
+        const order = response.data.order;
 
-      if (response.data.loyalty?.wash_stamps !== undefined) {
-        setWashStamps(response.data.loyalty.wash_stamps);
-      }
+        if (form.vehicle_plate) {
+          setSearchParams({ plate: form.vehicle_plate });
+        }
 
-      const isFreeWash = response.data.loyalty?.free_wash_earned;
+        if (response.data.loyalty?.wash_stamps !== undefined) {
+          setWashStamps(response.data.loyalty.wash_stamps);
+        }
 
-      if (isFreeWash) {
-        toast.success('Service booked! You earned a FREE wash — enjoy your reward!', { duration: 5000 });
-      } else if (response.data.loyalty) {
-        toast.success(
-          `Service booked! Loyalty progress: ${response.data.loyalty.wash_stamps}/5 washes.`
-        );
+        toast.success('Service booked! You redeemed a FREE wash!', { duration: 5000 });
+        setShowFreeWashPopup(true);
+        
+        setShowBookingModal(false);
+        setSelectedService(null);
+        setBookingForm({
+          name: '',
+          phone: '+9715',
+          vehicle_type: 'Saloon',
+          emirate: '',
+          plate_code: '',
+          plate_number: '',
+          notes: ''
+        });
       } else {
-        toast.success('Service booked successfully! Redirecting to payment...');
-      }
-      setShowBookingModal(false);
-      setSelectedService(null);
-      setBookingForm({
-        name: '',
-        phone: '+9715',
-        vehicle_type: 'Saloon',
-        emirate: '',
-        plate_code: '',
-        plate_number: '',
-        notes: ''
-      });
+        // Paid booking: Create order directly in database!
+        const orderNotes = form.notes 
+          ? `One-Tap Booking via Website - ${service.name} (${form.notes.trim()})`
+          : `One-Tap Booking via Website - ${service.name}`;
 
-      if (!isFreeWash && order && order.id) {
-        setTimeout(() => {
-          navigate(`/payment?order_id=${order.id}&plate=${encodeURIComponent(form.vehicle_plate || '')}`);
-        }, 1500);
+        const orderData = {
+          customer_id: customerInfo?.id || null,
+          customer_name: form.name,
+          customer_phone: form.phone,
+          vehicle_plate: form.vehicle_plate || null,
+          vehicle_type: form.vehicle_type,
+          items: [],
+          total: servicePrice,
+          source: 'customer_website_saloon',
+          status: 'pending',
+          payment_status: 'pending',
+          notes: orderNotes
+        };
+
+        const response = await axios.post('/api/public/orders', orderData);
+        const order = response.data.order;
+
+        toast.success('Thank you! Your booking has been received successfully! 🚗', { duration: 5000 });
+        setShowBookingModal(false);
+        setSelectedService(null);
+        setBookingForm({
+          name: '',
+          phone: '+9715',
+          vehicle_type: 'Saloon',
+          emirate: '',
+          plate_code: '',
+          plate_number: '',
+          notes: ''
+        });
+
+        const savedPlate = form.vehicle_plate || vehiclePlate || localStorage.getItem('sniper_customer_plate') || '';
+        if (savedPlate) {
+          localStorage.setItem('sniper_customer_plate', savedPlate);
+        }
+
+        setCustomerNote('');
+        setNoteSaved(false);
+        setBookingSuccessData({
+          orderId: order?.id,
+          serviceName: service.name,
+          vehiclePlate: savedPlate
+        });
       }
     } catch (error) {
       console.error('Booking error:', error);
       toast.error(error.response?.data?.message || 'Failed to book service. Please try again.');
+    } finally {
+      setIsSubmittingBooking(false);
     }
   };
 
@@ -888,9 +1017,10 @@ const LandingPage = () => {
     e.preventDefault();
 
     const isRegistered = !!customerInfo;
+    const isNoVehicle = vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care';
     const requiredFields = isRegistered
       ? (vipBookingForm.name && vipBookingForm.phone && vipBookingForm.service_type)
-      : (vipBookingForm.name && vipBookingForm.phone && vipBookingForm.emirate && vipBookingForm.plate_number && vipBookingForm.service_type);
+      : (vipBookingForm.name && vipBookingForm.phone && vipBookingForm.emirate && (isNoVehicle || vipBookingForm.plate_number) && vipBookingForm.service_type);
 
     if (!requiredFields) {
       toast.error('Please fill all required fields');
@@ -905,7 +1035,7 @@ const LandingPage = () => {
 
     const plateStr = isRegistered
       ? (vehiclePlate || customerInfo.vehicle_plate || '')
-      : `${vipBookingForm.plate_code} ${vipBookingForm.emirate} ${vipBookingForm.plate_number}`;
+      : (isNoVehicle ? `${vipBookingForm.emirate} - ${cleanPhone}` : `${vipBookingForm.plate_code} ${vipBookingForm.emirate} ${vipBookingForm.plate_number}`);
 
     try {
       await axios.post('/api/vip/bookings', {
@@ -976,26 +1106,21 @@ const LandingPage = () => {
   };
 
   const handleServiceClick = (service) => {
-    // If we have customer info from the plate, do ONE-TAP BOOKING
+    setSelectedService(service);
+
     if (customerInfo) {
-      const autoForm = {
-        name: customerInfo.name || 'Existing Customer',
-        phone: customerInfo.phone || '',
-        vehicle_plate: vehiclePlate || customerInfo.vehicle_plate || '',
-        notes: `Quick Book via Plate Link: ${vehiclePlate}`
-      };
-
-      // Show a loading toast for immediate feedback
-      const loadingToast = toast.loading('Booking your service...');
-
-      submitBooking(service, autoForm).finally(() => {
-        toast.dismiss(loadingToast);
+      // Customer is recognized! Directly submit booking without showing registration modal
+      submitBooking(service, {
+        name: customerInfo.name,
+        phone: customerInfo.phone || '+9715',
+        vehicle_type: customerInfo.vehicle_type || 'Saloon',
+        vehicle_plate: customerInfo.vehicle_plate || vehiclePlate,
+        notes: ''
       });
       return;
     }
 
-    // Otherwise, show the manual booking modal
-    setSelectedService(service);
+    // Unrecognized customer -> show registration/booking modal
     setShowBookingModal(true);
 
     const parts = (vehiclePlate || '').trim().split(/\s+/);
@@ -1026,7 +1151,8 @@ const LandingPage = () => {
 
     if (!selectedService) return;
 
-    if (!bookingForm.name || !bookingForm.phone || !bookingForm.emirate || !bookingForm.plate_number) {
+    const isNoVehicle = bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care';
+    if (!bookingForm.name || !bookingForm.phone || !bookingForm.emirate || (!isNoVehicle && !bookingForm.plate_number)) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -1038,7 +1164,9 @@ const LandingPage = () => {
       return;
     }
 
-    const plateStr = `${bookingForm.plate_code} ${bookingForm.emirate} ${bookingForm.plate_number}`;
+    const plateStr = isNoVehicle 
+      ? `${bookingForm.emirate} - ${cleanPhone}`
+      : `${bookingForm.plate_code} ${bookingForm.emirate} ${bookingForm.plate_number}`;
 
     await submitBooking(selectedService, {
       ...bookingForm,
@@ -1059,7 +1187,9 @@ const LandingPage = () => {
       if (n.includes('just water') || n.includes('water wash') || n.includes('quick wash')) return 5;
       return 100;
     };
-    return getOrder(a.name) - getOrder(b.name);
+    const orderDiff = getOrder(a.name) - getOrder(b.name);
+    if (orderDiff !== 0) return orderDiff;
+    return (a.id || 0) - (b.id || 0);
   });
 
   const displayPackages = sortedPackages.filter(pkg => !pkg.name.toLowerCase().includes('vip'));
@@ -1145,6 +1275,7 @@ const LandingPage = () => {
         </Reveal>
       </section>
 
+      {/*
       <section className="w-full px-2 sm:px-4 py-1 sm:py-2">
         <Reveal>
           <div className="w-full max-w-6xl mx-auto template-card border-red-100 bg-gradient-to-br from-white via-white to-red-50/40 px-2 py-2 sm:p-4 rounded-xl shadow-sm flex items-center justify-between">
@@ -1157,6 +1288,7 @@ const LandingPage = () => {
           </div>
         </Reveal>
       </section>
+      */}
 
       <section id="services" className="w-full max-w-6xl mx-auto px-3 sm:px-4 pb-10">
         <Reveal>
@@ -1182,9 +1314,21 @@ const LandingPage = () => {
                   <img 
                     src={getServiceImage(pkg)} 
                     alt={pkg.name} 
-                    className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 ease-out"
+                    onError={(e) => {
+                      const cleanName = (pkg.name || '').replace(/\(Free Wash\)/i, '').trim();
+                      e.currentTarget.src = images.byServiceName[cleanName] || images.defaultService;
+                    }}
+                    className={`w-full h-full ${isFullBody ? 'object-cover' : 'object-contain'} group-hover:scale-105 transition-transform duration-500 ease-out`}
                   />
                   <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2.5 sm:p-3 text-white flex justify-between items-end pointer-events-none">
+                    <div className="min-w-0 flex-1 pr-1">
+                      <p className="font-extrabold text-xs sm:text-sm leading-tight text-white drop-shadow truncate">{pkg.name}</p>
+                    </div>
+                    <span className="text-xs font-black bg-red-600 px-2 py-0.5 rounded text-white shadow shrink-0">
+                      AED {pkg.price}
+                    </span>
+                  </div>
                 </div>
               </Reveal>
             );
@@ -1192,37 +1336,39 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <section id="vip" className="mx-auto max-w-6xl px-4 pb-10">
-        <Reveal>
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
-              if (vipPkg) {
-                handleServiceClick(vipPkg);
-              } else {
-                openVIPModal();
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+      {packages.some(p => p.name.toLowerCase().includes('vip')) && (
+        <section id="vip" className="mx-auto max-w-6xl px-4 pb-10">
+          <Reveal>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
                 const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
-                if (vipPkg) handleServiceClick(vipPkg);
-                else openVIPModal();
-              }
-            }}
-            className="group relative w-full rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
-          >
-            <img 
-              src={images.vip} 
-              alt="VIP Service" 
-              className="w-full h-auto object-contain group-hover:scale-[1.02] transition-transform duration-500 ease-out" 
-            />
-            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          </div>
-        </Reveal>
-      </section>
+                if (vipPkg) {
+                  handleServiceClick(vipPkg);
+                } else {
+                  openVIPModal();
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
+                  if (vipPkg) handleServiceClick(vipPkg);
+                  else openVIPModal();
+                }
+              }}
+              className="group relative w-full rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
+            >
+              <img 
+                src={images.vip} 
+                alt="VIP Service" 
+                className="w-full h-auto object-contain group-hover:scale-[1.02] transition-transform duration-500 ease-out" 
+              />
+              <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </div>
+          </Reveal>
+        </section>
+      )}
 
       <section id="products" className="mx-auto max-w-6xl px-4 pb-10 bg-gray-50 py-10 -mx-0">
         <Reveal>
@@ -1326,11 +1472,19 @@ const LandingPage = () => {
           </div>
         </Reveal>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {testimonials.map((testimonial, index) => (
-            <Reveal key={testimonial.name} delay={index * 100}>
+          {(realFeedbacks.length > 0 
+            ? realFeedbacks.map(f => ({
+                name: f.customer_name || 'Valued Customer',
+                location: f.vehicle_type ? `${f.vehicle_type} Client` : 'Verified Client',
+                quote: f.comment || 'Outstanding detailing and top-quality service!',
+                rating: f.rating || 5
+              }))
+            : testimonials
+          ).map((testimonial, index) => (
+            <Reveal key={testimonial.name + index} delay={index * 100}>
               <div className="template-card p-6 h-full">
-                <div className="text-amber-500 text-sm mb-3">{'★'.repeat(testimonial.rating)}</div>
-                <p className="text-sm text-gray-600 leading-relaxed">&ldquo;{testimonial.quote}&rdquo;</p>
+                <div className="text-amber-500 text-sm mb-3">{'★'.repeat(testimonial.rating || 5)}</div>
+                <p className="text-sm text-gray-600 leading-relaxed notranslate" translate="no">&ldquo;{testimonial.quote}&rdquo;</p>
                 <div className="mt-4 text-sm font-bold text-gray-900">{testimonial.name}</div>
                 <div className="text-[10px] uppercase tracking-widest text-gray-400">{testimonial.location}</div>
               </div>
@@ -1362,8 +1516,8 @@ const LandingPage = () => {
                 
                 {item.title === 'CUSTOMER SUPPORT' && showSupportOptions && (
                   <div className="mt-3 flex gap-2 w-full justify-center" onClick={(e) => e.stopPropagation()}>
-                    <a href="tel:+971555371811" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">Call</a>
-                    <a href="https://wa.me/971555371811" target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">WhatsApp</a>
+                    <a href="tel:+971542655588" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">Call (054 265 5588)</a>
+                    <a href="https://wa.me/971542655588" target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">WhatsApp</a>
                   </div>
                 )}
               </div>
@@ -1390,14 +1544,14 @@ const LandingPage = () => {
                 
                 {item.step === 1 && quickBookOpen && (
                   <div className="hidden sm:flex absolute top-full left-1/2 -translate-x-1/2 mt-4 w-[250px] max-w-[250px] p-4 bg-white rounded-xl border border-gray-200 shadow-2xl flex-col gap-3 z-50 before:content-[''] before:absolute before:-top-2 before:left-1/2 before:-translate-x-1/2 before:border-8 before:border-transparent before:border-b-white" onClick={(e) => e.stopPropagation()}>
-                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
+                    <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 notranslate" translate="no" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
                       <option value="">Select Service</option>
                       {packages.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
                     </select>
                     <input type="date" className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.date} onChange={e => setQuickBookForm({...quickBookForm, date: e.target.value})} min={new Date().toISOString().split('T')[0]} />
                     <select className="w-full p-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.time} onChange={e => setQuickBookForm({...quickBookForm, time: e.target.value})}>
                       <option value="">Select Time</option>
-                      {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => <option key={t} value={t}>{t}</option>)}
+                      {['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'].map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     <button 
                       className="w-full mt-1 bg-red-600 text-white text-xs font-bold py-3 rounded-lg hover:bg-red-700 shadow-md transition-colors"
@@ -1455,7 +1609,7 @@ const LandingPage = () => {
             </button>
 
             <div className="shrink-0 mb-2">
-              <h3 className="text-2xl font-bold text-gray-900 mb-1">Book {selectedService.name}</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-1">Book <span className="notranslate" translate="no">{selectedService.name}</span></h3>
               <p className="text-lg text-red-600 font-semibold">{selectedService.price}</p>
             </div>
 
@@ -1487,7 +1641,8 @@ const LandingPage = () => {
                 <select
                   value={bookingForm.vehicle_type}
                   onChange={(e) => setBookingForm({ ...bookingForm, vehicle_type: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm notranslate"
+                  translate="no"
                 >
                   <option value="Saloon">Saloon</option>
                   <option value="4x4">4x4</option>
@@ -1514,41 +1669,49 @@ const LandingPage = () => {
                       <option value="Umm Al Quwain">Umm Al Quwain</option>
                       <option value="Ras Al Khaimah">Ras Al Khaimah</option>
                       <option value="Fujairah">Fujairah</option>
+                      <option value="Garage">Garage</option>
+                      <option value="Sniper car care">Sniper car care</option>
                     </select>
                   </div>
 
                   {/* Plate Code Dropdown */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
-                    <SearchableSelect
-                      options={plateCodes}
-                      value={bookingForm.plate_code}
-                      onChange={(val) => setBookingForm(prev => ({ ...prev, plate_code: val }))}
-                      disabled={plateCodes.length === 0}
-                    />
-                  </div>
+                  {!(bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care') && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
+                      <SearchableSelect
+                        options={plateCodes}
+                        value={bookingForm.plate_code}
+                        onChange={(val) => setBookingForm(prev => ({ ...prev, plate_code: val }))}
+                        disabled={plateCodes.length === 0}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Plate Number Input */}
-                <div className="mt-3">
-                  <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
-                  <input
-                    type="text"
-                    required
-                    value={bookingForm.plate_number}
-                    onChange={(e) => setBookingForm({ ...bookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
-                    placeholder="12345"
-                  />
-                </div>
+                {!(bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care') && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
+                    <input
+                      type="text"
+                      required={!(bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care')}
+                      value={bookingForm.plate_number}
+                      onChange={(e) => setBookingForm({ ...bookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
+                      placeholder="12345"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Plate Live Preview */}
-              <VehiclePlatePreview 
-                emirate={bookingForm.emirate}
-                plateCode={bookingForm.plate_code}
-                plateNumber={bookingForm.plate_number}
-              />
+              {!(bookingForm.emirate === 'Garage' || bookingForm.emirate === 'Sniper car care') && (
+                <VehiclePlatePreview 
+                  emirate={bookingForm.emirate}
+                  plateCode={bookingForm.plate_code}
+                  plateNumber={bookingForm.plate_number}
+                />
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Special Requests (Optional)</label>
                 <textarea
@@ -1617,7 +1780,8 @@ const LandingPage = () => {
                   required
                   value={vipBookingForm.vehicle_type}
                   onChange={(e) => setVipBookingForm({ ...vipBookingForm, vehicle_type: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm notranslate"
+                  translate="no"
                 >
                   <option value="Saloon">Saloon</option>
                   <option value="4x4">4x4</option>
@@ -1647,41 +1811,49 @@ const LandingPage = () => {
                           <option value="Umm Al Quwain">Umm Al Quwain</option>
                           <option value="Ras Al Khaimah">Ras Al Khaimah</option>
                           <option value="Fujairah">Fujairah</option>
+                          <option value="Garage">Garage</option>
+                          <option value="Sniper car care">Sniper car care</option>
                         </select>
                       </div>
 
                       {/* Plate Code Dropdown */}
-                      <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
-                        <SearchableSelect
-                          options={vipPlateCodes}
-                          value={vipBookingForm.plate_code}
-                          onChange={(val) => setVipBookingForm(prev => ({ ...prev, plate_code: val }))}
-                          disabled={vipPlateCodes.length === 0}
-                        />
-                      </div>
+                      {!(vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care') && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
+                          <SearchableSelect
+                            options={vipPlateCodes}
+                            value={vipBookingForm.plate_code}
+                            onChange={(val) => setVipBookingForm(prev => ({ ...prev, plate_code: val }))}
+                            disabled={vipPlateCodes.length === 0}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Plate Number Input */}
-                    <div className="mt-3">
-                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
-                      <input
-                        type="text"
-                        required={!customerInfo}
-                        value={vipBookingForm.plate_number}
-                        onChange={(e) => setVipBookingForm({ ...vipBookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
-                        className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
-                        placeholder="12345"
-                      />
-                    </div>
+                    {!(vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care') && (
+                      <div className="mt-3">
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
+                        <input
+                          type="text"
+                          required={!customerInfo && !(vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care')}
+                          value={vipBookingForm.plate_number}
+                          onChange={(e) => setVipBookingForm({ ...vipBookingForm, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                          className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm bg-white"
+                          placeholder="12345"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Plate Live Preview */}
-                  <VehiclePlatePreview 
-                    emirate={vipBookingForm.emirate}
-                    plateCode={vipBookingForm.plate_code}
-                    plateNumber={vipBookingForm.plate_number}
-                  />
+                  {!(vipBookingForm.emirate === 'Garage' || vipBookingForm.emirate === 'Sniper car care') && (
+                    <VehiclePlatePreview 
+                      emirate={vipBookingForm.emirate}
+                      plateCode={vipBookingForm.plate_code}
+                      plateNumber={vipBookingForm.plate_number}
+                    />
+                  )}
                 </>
               )}
 
@@ -1721,7 +1893,7 @@ const LandingPage = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Service Type</label>
-                <select className="w-full p-3.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
+                <select className="w-full p-3.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 notranslate" translate="no" value={quickBookForm.service} onChange={e => setQuickBookForm({...quickBookForm, service: e.target.value})}>
                   <option value="">Select Service</option>
                   {packages.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
                 </select>
@@ -1736,7 +1908,7 @@ const LandingPage = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Time</label>
                 <select className="w-full p-3.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500" value={quickBookForm.time} onChange={e => setQuickBookForm({...quickBookForm, time: e.target.value})}>
                   <option value="">Select Time</option>
-                  {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => <option key={t} value={t}>{t}</option>)}
+                  {['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
 
@@ -1860,7 +2032,169 @@ const LandingPage = () => {
           </div>
         </div>
       )}
+      {/* Free Wash Celebration Popup */}
+      {showFreeWashPopup && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-3xl p-8 max-w-md w-full text-center border-4 border-white shadow-2xl relative animate-scaleUp">
+            <div className="text-6xl mb-4 animate-bounce">🎉</div>
+            <h2 className="text-3xl font-black text-white italic tracking-wide mb-2 uppercase">FREE WASH REDEEMED!</h2>
+            <p className="text-white font-bold text-lg mb-6">Your free wash booking has been successfully created! We look forward to serving you.</p>
+            <button
+              onClick={() => setShowFreeWashPopup(false)}
+              className="w-full py-4 bg-white text-yellow-600 font-black rounded-xl hover:bg-gray-150 transition-all text-lg shadow-md uppercase tracking-wider"
+            >
+              Great, Thank you!
+            </button>
+          </div>
+        </div>
+      )}
 
+      {/* Thank You Booking Confirmation Modal */}
+      {bookingSuccessData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl border border-gray-100 transform transition-all scale-100">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl shadow-inner animate-bounce">
+              🎉
+            </div>
+            <h2 className="text-2xl font-black text-gray-900 mb-2">Thank You for Your Booking!</h2>
+            <p className="text-gray-600 text-sm mb-6">
+              Your booking request for <span className="font-bold text-red-600">{bookingSuccessData.serviceName}</span> has been received successfully!
+            </p>
+
+            {bookingSuccessData.vehiclePlate && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Vehicle Plate</p>
+                <p className="text-lg font-black font-mono text-gray-800">{bookingSuccessData.vehiclePlate}</p>
+              </div>
+            )}
+
+            {/* Note Box for Staff */}
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 text-left shadow-sm">
+              <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <span>📝</span> Add a Note for Staff (Optional)
+              </label>
+              <p className="text-[11px] text-amber-700 mb-2">
+                Need any special instructions or preferences? Let our staff know:
+              </p>
+              <textarea
+                value={customerNote}
+                onChange={(e) => setCustomerNote(e.target.value)}
+                rows={2}
+                disabled={noteSaved}
+                className="w-full p-2.5 text-xs text-gray-900 bg-white border border-amber-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none disabled:bg-gray-100 disabled:text-gray-500"
+                placeholder="e.g. Please pay special attention to interior vacuuming..."
+              />
+              <button
+                type="button"
+                disabled={isSavingNote || noteSaved}
+                onClick={async () => {
+                  if (!bookingSuccessData?.orderId && !customerNote.trim()) return;
+                  setIsSavingNote(true);
+                  try {
+                    if (bookingSuccessData?.orderId) {
+                      await axios.patch(`/api/public/orders/${bookingSuccessData.orderId}/note`, { note: customerNote });
+                    }
+                    setNoteSaved(true);
+                    toast.success('Note sent to staff! Thank you.', { icon: '📝' });
+                  } catch (err) {
+                    console.error('Note update error:', err);
+                    toast.error('Could not save note. Please try again.');
+                  } finally {
+                    setIsSavingNote(false);
+                  }
+                }}
+                className={`w-full mt-2 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1 ${
+                  noteSaved 
+                    ? 'bg-green-600 text-white cursor-default' 
+                    : 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm active:scale-95'
+                }`}
+              >
+                {noteSaved ? '✓ Note Sent to Staff' : isSavingNote ? 'Saving...' : '💾 Send Note to Staff'}
+              </button>
+            </div>
+
+            {/* Extra Services Dropdown */}
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 mb-6 text-left shadow-sm">
+              <button
+                type="button"
+                onClick={() => setIsExtraServicesOpen(!isExtraServicesOpen)}
+                className="w-full flex items-center justify-between font-bold text-xs text-purple-900 uppercase tracking-wider focus:outline-none"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span>✨</span> Extra Services (Optional)
+                </span>
+                <span className="text-sm">{isExtraServicesOpen ? '▲' : '▼'}</span>
+              </button>
+
+              {isExtraServicesOpen && (
+                <div className="mt-3 space-y-2 pt-2 border-t border-purple-200">
+                  {extraServicesList.length > 0 ? (
+                    extraServicesList.map((service) => (
+                      <label key={service.id} className="flex items-center justify-between p-2 rounded-xl bg-white border border-purple-100 hover:border-purple-300 cursor-pointer transition">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedExtraServices.includes(service.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedExtraServices([...selectedExtraServices, service.id]);
+                              } else {
+                                setSelectedExtraServices(selectedExtraServices.filter(id => id !== service.id));
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                          />
+                          <span className="text-xs font-bold text-gray-800">{service.name}</span>
+                        </div>
+                        <span className="text-xs font-black text-purple-700">AED {parseFloat(service.price).toLocaleString()}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 text-center py-2">No extra services available right now.</p>
+                  )}
+
+                  {extraServicesList.length > 0 && (
+                    <button
+                      type="button"
+                      disabled={selectedExtraServices.length === 0}
+                      onClick={async () => {
+                        if (!bookingSuccessData?.orderId || selectedExtraServices.length === 0) return;
+                        try {
+                          await axios.post(`/api/public/orders/${bookingSuccessData.orderId}/extra-services`, { service_ids: selectedExtraServices });
+                          toast.success('Extra services added to your order! Total updated.', { icon: '✨' });
+                        } catch (err) {
+                          console.error('Error adding extra services:', err);
+                          toast.error('Failed to add extra services.');
+                        }
+                      }}
+                      className="w-full mt-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95"
+                    >
+                      ✓ Save Selected Extra Services
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  const plate = bookingSuccessData.vehiclePlate || localStorage.getItem('sniper_customer_plate');
+                  setBookingSuccessData(null);
+                  if (plate) {
+                    window.location.href = `/?plate=${encodeURIComponent(plate)}`;
+                  } else {
+                    window.location.href = '/';
+                  }
+                }}
+                className="w-full py-3.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-2xl transition shadow-lg shadow-red-500/20 active:scale-95 text-base flex items-center justify-center gap-2"
+              >
+                <span>🏠</span> Return to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

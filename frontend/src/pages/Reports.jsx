@@ -67,11 +67,24 @@ const Reports = () => {
   const [stockReport, setStockReport] = useState(null);
   const [stockLoading, setStockLoading] = useState(false);
 
+  // Commission Report State
+  const [commissionStartDate, setCommissionStartDate] = useState('');
+  const [commissionEndDate, setCommissionEndDate] = useState('');
+  const [commissionReport, setCommissionReport] = useState(null);
+  const [commissionLoading, setCommissionLoading] = useState(false);
+
+  // Service Sales Report State
+  const [serviceSalesStartDate, setServiceSalesStartDate] = useState('');
+  const [serviceSalesEndDate, setServiceSalesEndDate] = useState('');
+  const [serviceSalesReport, setServiceSalesReport] = useState(null);
+  const [serviceSalesLoading, setServiceSalesLoading] = useState(false);
+
   // Cash Register Sessions State
   const [registers, setRegisters] = useState([]);
   const [loadingRegisters, setLoadingRegisters] = useState(false);
   const [selectedRegisterReport, setSelectedRegisterReport] = useState(null);
   const [loadingRegisterReport, setLoadingRegisterReport] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const printRegisterId = searchParams.get('print_register_id');
 
   const formatRegisterDate = (dateStr) => {
@@ -312,6 +325,48 @@ const Reports = () => {
     }
   };
 
+  // Commission Report
+  const fetchCommissionReport = async () => {
+    if (!commissionStartDate || !commissionEndDate) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+    setCommissionLoading(true);
+    try {
+      const response = await axios.get(`/api/analytics/reports/commission?start_date=${commissionStartDate}&end_date=${commissionEndDate}`);
+      if (response.data.success) {
+        setCommissionReport(response.data);
+      } else {
+        toast.error('Failed to generate commission report');
+      }
+    } catch (error) {
+      toast.error('Failed to generate commission report');
+    } finally {
+      setCommissionLoading(false);
+    }
+  };
+
+  // Service Sales Report
+  const fetchServiceSalesReport = async () => {
+    if (!serviceSalesStartDate || !serviceSalesEndDate) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+    setServiceSalesLoading(true);
+    try {
+      const response = await axios.get(`/api/analytics/reports/service-sales?start_date=${serviceSalesStartDate}&end_date=${serviceSalesEndDate}`);
+      if (response.data.success) {
+        setServiceSalesReport(response.data);
+      } else {
+        toast.error('Failed to generate service sales report');
+      }
+    } catch (error) {
+      toast.error('Failed to generate service sales report');
+    } finally {
+      setServiceSalesLoading(false);
+    }
+  };
+
   // Excel Download Functions
   const downloadDailyExcel = async () => {
     try {
@@ -430,9 +485,135 @@ const Reports = () => {
     { id: 'purchases', label: 'Purchase of Items' },
     { id: 'credit', label: 'Credit Report' },
     { id: 'registers', label: 'Cash Register Sessions' },
+    { id: 'commission', label: 'Commission Report' },
+    { id: 'service_sales', label: 'Service Sales Report' },
   ] : [
     { id: 'registers', label: 'Cash Register Sessions' },
+    { id: 'commission', label: 'Commission Report' },
   ];
+
+  const handleWhatsAppShare = async () => {
+    setSharing(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('tab', activeTab);
+      
+      if (activeTab === 'daily') {
+        params.append('date', dailyDate);
+      } else if (activeTab === 'business_summary') {
+        if (!plStartDate || !plEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', plStartDate);
+        params.append('end_date', plEndDate);
+      } else if (activeTab === 'stock') {
+        if (stockStartDate && stockEndDate) {
+          params.append('start_date', stockStartDate);
+          params.append('end_date', stockEndDate);
+        }
+      } else if (activeTab === 'payment') {
+        if (!paymentStartDate || !paymentEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', paymentStartDate);
+        params.append('end_date', paymentEndDate);
+      } else if (activeTab === 'customer') {
+        if (!customerStartDate || !customerEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', customerStartDate);
+        params.append('end_date', customerEndDate);
+      } else if (activeTab === 'supplier') {
+        if (!supplierStartDate || !supplierEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', supplierStartDate);
+        params.append('end_date', supplierEndDate);
+      } else if (activeTab === 'purchases') {
+        if (!purchaseStartDate || !purchaseEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', purchaseStartDate);
+        params.append('end_date', purchaseEndDate);
+      } else if (activeTab === 'credit') {
+        if (creditStartDate && creditEndDate) {
+          params.append('start_date', creditStartDate);
+          params.append('end_date', creditEndDate);
+        }
+      } else if (activeTab === 'registers') {
+        if (!selectedRegisterReport) {
+          toast.error('No active register session report opened');
+          setSharing(false);
+          return;
+        }
+        params.append('register_id', selectedRegisterReport.register_id);
+      } else if (activeTab === 'commission') {
+        if (!commissionStartDate || !commissionEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', commissionStartDate);
+        params.append('end_date', commissionEndDate);
+      } else if (activeTab === 'service_sales') {
+        if (!serviceSalesStartDate || !serviceSalesEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', serviceSalesStartDate);
+        params.append('end_date', serviceSalesEndDate);
+      }
+
+      const response = await axios.get(`/api/analytics/reports/pdf?${params.toString()}`);
+      if (response.data.success && response.data.pdfUrl) {
+        const backendBaseUrl = axios.defaults.baseURL || window.location.origin;
+        const fullPdfUrl = `${backendBaseUrl}${response.data.pdfUrl}`;
+        
+        try {
+          // Fetch the PDF blob to create a File object
+          const fileResponse = await fetch(fullPdfUrl);
+          const blob = await fileResponse.blob();
+          const file = new File([blob], `report-${activeTab}-${Date.now()}.pdf`, { type: 'application/pdf' });
+          
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Sniper Car Care Report',
+              text: 'Please find the attached PDF report.'
+            });
+            toast.success('Report PDF shared successfully!');
+            return;
+          }
+        } catch (shareErr) {
+          console.warn('Native sharing failed, falling back to link:', shareErr);
+        }
+        
+        // Fallback to text link if navigator.share fails or is not supported
+        const message = `Check out the Sniper Car Care report: ${fullPdfUrl}`;
+        const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
+        toast.success('Opened PDF report link in browser.');
+      } else {
+        toast.error('Failed to generate report PDF');
+      }
+    } catch (error) {
+      console.error('Error sharing PDF:', error);
+      toast.error('Failed to generate and share report PDF');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -505,16 +686,33 @@ const Reports = () => {
       <div className="space-y-6 no-print">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-800">Reports</h1>
-          <button
-            onClick={handlePrint}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm font-semibold"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            Print Report
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleWhatsAppShare}
+              disabled={sharing}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm font-semibold disabled:opacity-50"
+            >
+              {sharing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Generating PDF...
+                </>
+              ) : (
+                <>💬 Share via WhatsApp</>
+              )}
+            </button>
+            <button
+              onClick={handlePrint}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm font-semibold"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Report
+            </button>
+          </div>
         </div>
+      </div>
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow no-print">
@@ -571,25 +769,37 @@ const Reports = () => {
 
           {dailyReport && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Orders</p>
-                  <p className="text-2xl font-bold">{dailyReport.orders?.total_orders || 0}</p>
+                  <p className="text-2xl font-bold notranslate">{dailyReport.orders?.total_orders || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Revenue</p>
-                  <p className="text-2xl font-bold text-primary-600">
-                    AED {parseFloat(dailyReport.orders?.total_revenue || 0).toLocaleString()}
+                  <p className="text-sm text-gray-600">Total Sales</p>
+                  <p className="text-2xl font-bold text-primary-600 notranslate">
+                    AED {parseFloat(dailyReport.orders?.total_sales !== undefined ? dailyReport.orders.total_sales : dailyReport.orders?.total_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Services</p>
-                  <p className="text-2xl font-bold">{dailyReport.services?.total_services || 0}</p>
+                  <p className="text-2xl font-bold notranslate">{dailyReport.services?.total_services || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Services Revenue</p>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-sm text-gray-600">Services Sales</p>
+                  <p className="text-2xl font-bold text-green-600 notranslate">
                     AED {parseFloat(dailyReport.services?.services_revenue || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">Saloon Free Washes</p>
+                  <p className="text-2xl font-bold text-indigo-600 notranslate">
+                    AED {parseFloat(dailyReport.orders?.saloon_free_washes_value || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">4x4 Free Washes</p>
+                  <p className="text-2xl font-bold text-purple-600 notranslate">
+                    AED {parseFloat(dailyReport.orders?.four_wheel_free_washes_value || 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -622,35 +832,107 @@ const Reports = () => {
                 </div>
               )}
 
-              {dailyReport.top_products && dailyReport.top_products.length > 0 && (
+              {/* Top Services & Products Sections */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Saloon Services */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <h3 className="text-lg font-semibold mb-3">Top Saloon Services</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-2 text-left">Product</th>
-                          <th className="px-4 py-2 text-left">Category</th>
-                          <th className="px-4 py-2 text-right">Quantity</th>
-                          <th className="px-4 py-2 text-right">Revenue</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Service</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {dailyReport.top_products.map((product, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="px-4 py-2">{product.name}</td>
-                            <td className="px-4 py-2">{product.category}</td>
-                            <td className="px-4 py-2 text-right">{product.quantity_sold}</td>
-                            <td className="px-4 py-2 text-right">
-                              AED {parseFloat(product.revenue || 0).toLocaleString()}
-                            </td>
+                        {dailyReport.top_services_saloon && dailyReport.top_services_saloon.length > 0 ? (
+                          dailyReport.top_services_saloon.map((service, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{service.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{service.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(service.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No saloon services sold</td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>
                 </div>
-              )}
+
+                {/* 4x4 Services */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Top 4x4 Services</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Service</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyReport.top_services_4x4 && dailyReport.top_services_4x4.length > 0 ? (
+                          dailyReport.top_services_4x4.map((service, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{service.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{service.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(service.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No 4x4 services sold</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Physical Products */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Product</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyReport.top_products && dailyReport.top_products.length > 0 ? (
+                          dailyReport.top_products.map((product, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{product.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{product.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(product.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No products sold</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -719,9 +1001,16 @@ const Reports = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {paymentReport.payment_methods.map((pm, idx) => (
+                        {paymentReport.payment_methods.map((pm, idx) => {
+                          const displayMethod = (m) => {
+                            if (m === 'saloon_free') return 'Saloon Free Wash';
+                            if (m === '4x4_free') return '4x4 Free Wash';
+                            if (m === 'tap') return 'TAP';
+                            return m.charAt(0).toUpperCase() + m.slice(1);
+                          };
+                          return (
                           <tr key={idx} className="border-b">
-                            <td className="px-4 py-2 capitalize">{pm.method}</td>
+                            <td className="px-4 py-2 font-semibold">{displayMethod(pm.method)}</td>
                             <td className="px-4 py-2 text-right">{pm.transaction_count}</td>
                             <td className="px-4 py-2 text-right">{pm.completed_count}</td>
                             <td className="px-4 py-2 text-right">{pm.pending_count}</td>
@@ -730,7 +1019,8 @@ const Reports = () => {
                               AED {parseFloat(pm.total_amount || 0).toLocaleString()}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1088,12 +1378,20 @@ const Reports = () => {
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.card_sales || 0).toFixed(3)}</span>
                       </div>
                       <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">TAP Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.tap_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
                         <span className="text-gray-500">Credit Sale</span>
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.credit_sales || 0).toFixed(3)}</span>
                       </div>
                       <div className="flex justify-between pl-4">
                         <span className="text-gray-500">Bank Transfer Sales</span>
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.bank_transfer_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t pt-1.5 mt-2">
+                        <span className="text-gray-700">Cost of Goods / Services</span>
+                        <span className="font-mono text-red-600 font-bold">{parseFloat(plReport.summary.total_cost || 0).toFixed(3)}</span>
                       </div>
                       <div className="flex justify-between font-extrabold border-t pt-1.5 mt-2">
                         <span className="text-gray-900">Total Profit</span>
@@ -1145,6 +1443,21 @@ const Reports = () => {
                       <div className="flex justify-between">
                         <span className="text-gray-700">Total Expense</span>
                         <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.total_expenses || 0).toFixed(3)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Other Activities Section */}
+                  <div className="space-y-2 pt-2">
+                    <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Other Activities:</h3>
+                    <div className="space-y-1.5 pl-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Saloon Free Wash</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.saloon_free_wash_total || 0).toFixed(3)} ({plReport.summary.saloon_free_wash_count || 0} washes)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">4*4 Free Wash</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.fourx4_free_wash_total || 0).toFixed(3)} ({plReport.summary.fourx4_free_wash_count || 0} washes)</span>
                       </div>
                     </div>
                   </div>
@@ -1230,17 +1543,396 @@ const Reports = () => {
         </div>
       )}
 
+      {/* Commission Report */}
+      {activeTab === 'commission' && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-bold mb-4">Commission Report</h2>
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <input
+                type="date"
+                value={commissionStartDate}
+                onChange={(e) => setCommissionStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <input
+                type="date"
+                value={commissionEndDate}
+                onChange={(e) => setCommissionEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={fetchCommissionReport}
+                disabled={commissionLoading}
+                className="w-full px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+              >
+                {commissionLoading ? 'Loading...' : 'Generate Report'}
+              </button>
+            </div>
+          </div>
+
+          {commissionReport && (
+            <div className="space-y-6 print-full-width">
+              {/* Report Header */}
+              <div className="text-center border-b pb-4 mb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <p className="text-sm font-semibold text-gray-500">Business Location: Kalba Sharjah</p>
+                <h2 className="text-xl font-bold mt-2">Commission Report</h2>
+                <p className="text-sm text-gray-600">
+                  Period: {commissionStartDate} to {commissionEndDate}
+                </p>
+              </div>
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-4 py-3 text-left font-bold">Service Name</th>
+                      <th className="px-4 py-3 text-right font-bold">Quantity</th>
+                      <th className="px-4 py-3 text-right font-bold">Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Saloon Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={3}>Saloon</td>
+                    </tr>
+                    {commissionReport.saloon && commissionReport.saloon.length > 0 ? (
+                      commissionReport.saloon.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.commission).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={3}>No Saloon services found</td>
+                      </tr>
+                    )}
+                    {/* Saloon Total Row */}
+                    {commissionReport.saloon && commissionReport.saloon.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.saloon.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.saloon.reduce((s, r) => s + parseFloat(r.commission), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={3} className="py-1"></td>
+                    </tr>
+
+                    {/* 4x4 Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={3}>4x4</td>
+                    </tr>
+                    {commissionReport.fourx4 && commissionReport.fourx4.length > 0 ? (
+                      commissionReport.fourx4.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.commission).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={3}>No 4x4 services found</td>
+                      </tr>
+                    )}
+                    {/* 4x4 Total Row */}
+                    {commissionReport.fourx4 && commissionReport.fourx4.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.fourx4.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.fourx4.reduce((s, r) => s + parseFloat(r.commission), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={3} className="py-1"></td>
+                    </tr>
+
+                    {/* VIP Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={3}>VIP</td>
+                    </tr>
+                    {commissionReport.vip && commissionReport.vip.length > 0 ? (
+                      commissionReport.vip.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.vehicle_type}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.commission).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={3}>No VIP services found</td>
+                      </tr>
+                    )}
+                    {/* VIP Total Row */}
+                    {commissionReport.vip && commissionReport.vip.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.vip.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.vip.reduce((s, r) => s + parseFloat(r.commission), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Service Sales Report */}
+      {activeTab === 'service_sales' && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-bold mb-4">Service Sales Report</h2>
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <input
+                type="date"
+                value={serviceSalesStartDate}
+                onChange={(e) => setServiceSalesStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <input
+                type="date"
+                value={serviceSalesEndDate}
+                onChange={(e) => setServiceSalesEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={fetchServiceSalesReport}
+                disabled={serviceSalesLoading}
+                className="w-full px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+              >
+                {serviceSalesLoading ? 'Loading...' : 'Generate Report'}
+              </button>
+            </div>
+          </div>
+
+          {serviceSalesReport && (
+            <div className="space-y-6 print-full-width">
+              {/* Report Header */}
+              <div className="text-center border-b pb-4 mb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <p className="text-sm font-semibold text-gray-500">Business Location: Kalba Sharjah</p>
+                <h2 className="text-xl font-bold mt-2">Service Wise Report</h2>
+                <p className="text-sm text-gray-600">
+                  Period: {serviceSalesStartDate} to {serviceSalesEndDate}
+                </p>
+              </div>
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-4 py-3 text-left font-bold">Service Name</th>
+                      <th className="px-4 py-3 text-right font-bold">Quantity</th>
+                      <th className="px-4 py-3 text-right font-bold">Selling Price (AED)</th>
+                      <th className="px-4 py-3 text-right font-bold">Net Price (AED)</th>
+                      <th className="px-4 py-3 text-right font-bold">Cost Price (AED)</th>
+                      <th className="px-4 py-3 text-right font-bold">Profit (AED)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Saloon Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>Saloon</td>
+                    </tr>
+                    {serviceSalesReport.saloon && serviceSalesReport.saloon.length > 0 ? (
+                      serviceSalesReport.saloon.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.selling_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.net_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.cost_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.profit).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No Saloon services found</td>
+                      </tr>
+                    )}
+                    {/* Saloon Total Row */}
+                    {serviceSalesReport.saloon && serviceSalesReport.saloon.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={6} className="py-1"></td>
+                    </tr>
+
+                    {/* 4x4 Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>4x4</td>
+                    </tr>
+                    {serviceSalesReport.fourx4 && serviceSalesReport.fourx4.length > 0 ? (
+                      serviceSalesReport.fourx4.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.selling_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.net_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.cost_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.profit).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No 4x4 services found</td>
+                      </tr>
+                    )}
+                    {/* 4x4 Total Row */}
+                    {serviceSalesReport.fourx4 && serviceSalesReport.fourx4.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={6} className="py-1"></td>
+                    </tr>
+
+                    {/* VIP Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>VIP</td>
+                    </tr>
+                    {serviceSalesReport.vip && serviceSalesReport.vip.length > 0 ? (
+                      serviceSalesReport.vip.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.selling_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.net_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.cost_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.profit).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No VIP services found</td>
+                      </tr>
+                    )}
+                    {/* VIP Total Row */}
+                    {serviceSalesReport.vip && serviceSalesReport.vip.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Stock Report */}
       {activeTab === 'stock' && (
         <div className="bg-white p-6 rounded-lg shadow space-y-6">
           <div className="flex justify-between items-center border-b pb-4 no-print">
             <h2 className="text-xl font-bold text-gray-800">Stock Inventory Report</h2>
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition flex items-center gap-2 text-xs"
-            >
-              🖨️ Print Stock Report
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleWhatsAppShare}
+                disabled={sharing}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition flex items-center gap-2 text-xs disabled:opacity-50"
+              >
+                {sharing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>💬 Share via WhatsApp</>
+                )}
+              </button>
+              <button
+                onClick={handlePrint}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition flex items-center gap-2 text-xs"
+              >
+                🖨️ Print Stock Report
+              </button>
+            </div>
           </div>
 
           <div className="mb-4 flex flex-col sm:flex-row gap-4 items-end bg-gray-50 p-4 rounded-xl border no-print">
@@ -1577,13 +2269,23 @@ const Reports = () => {
                 >
                   ← Back to Sessions
                 </button>
-                <button
-                  onClick={handlePrint}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
-                >
-                  🖨️ Print Statement
-                </button>
-                  {/* Printable Cash Register Report Card */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleWhatsAppShare}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+                  >
+                    💬 Share via WhatsApp
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2"
+                  >
+                    🖨️ Print Statement
+                  </button>
+                </div>
+              </div>
+              
+              {/* Printable Cash Register Report Card */}
               <div className="print-full-width mx-auto max-w-3xl p-6 border rounded-2xl bg-white space-y-4 text-black font-mono text-[14px] shadow-sm">
                 <div className="text-center pb-3 border-b border-dashed border-gray-400">
                   <h2 className="text-sm font-bold uppercase tracking-wider">Register Details</h2>
@@ -1610,7 +2312,7 @@ const Reports = () => {
                     <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Other Sale</span>
+                    <span>TAP Sale</span>
                     <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -1620,6 +2322,10 @@ const Reports = () => {
                   <div className="flex justify-between">
                     <span>Credit Sale Recovery</span>
                     <span>{selectedRegisterReport.credit_sale_recovery.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Free Washes Amount</span>
+                    <span>{parseFloat(selectedRegisterReport.free_wash_amount || 0).toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Total Expense</span>
@@ -1632,6 +2338,15 @@ const Reports = () => {
                   <div className="flex justify-between font-bold">
                     <span>Cash In Drawer</span>
                     <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Staff Return</span>
+                    <span>
+                      {(selectedRegisterReport.closed_amount !== null
+                        ? selectedRegisterReport.closed_amount
+                        : 0.00
+                      ).toFixed(3)}
+                    </span>
                   </div>
                   <div className="flex justify-between font-bold">
                     <span>Difference Amount</span>
@@ -1650,12 +2365,11 @@ const Reports = () => {
                     <p>{selectedRegisterReport.notes}</p>
                   </div>
                 )}
-              </div>              </div>
+              </div>
             </div>
           )}
         </div>
       )}
-      </div>
 
       {/* Printable Cash Register Report Card (Only visible when printing) */}
       {selectedRegisterReport && (
@@ -1685,7 +2399,7 @@ const Reports = () => {
               <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Other Sale</span>
+              <span>TAP Sale</span>
               <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
@@ -1695,6 +2409,10 @@ const Reports = () => {
             <div className="flex justify-between">
               <span>Credit Sale Recovery</span>
               <span>{selectedRegisterReport.credit_sale_recovery.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Free Washes Amount</span>
+              <span>{parseFloat(selectedRegisterReport.free_wash_amount || 0).toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
               <span>Total Expense</span>
@@ -1707,6 +2425,15 @@ const Reports = () => {
             <div className="flex justify-between font-bold">
               <span>Cash In Drawer</span>
               <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Staff Return</span>
+              <span>
+                {(selectedRegisterReport.closed_amount !== null
+                  ? selectedRegisterReport.closed_amount
+                  : 0.00
+                ).toFixed(3)}
+              </span>
             </div>
             <div className="flex justify-between font-bold">
               <span>Difference Amount</span>

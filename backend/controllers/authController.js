@@ -22,11 +22,12 @@ const register = asyncHandler(async (req, res) => {
   // Hash password
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
+  const finalRole = role === 'admin' ? 'admin' : 'staff';
 
   // Create user
   const [result] = await pool.query(
     'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-    [name, email, hashedPassword, role || 'staff']
+    [name, email, hashedPassword, finalRole]
   );
 
   const [newUser] = await pool.query(
@@ -54,8 +55,8 @@ const login = asyncHandler(async (req, res) => {
   // Check for user
   const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
   
-  if (users.length === 0) {
-    return res.status(401).json({ message: 'Invalid credentials' });
+  if (users.length === 0 || users[0].is_deleted === 1) {
+    return res.status(401).json({ message: 'Invalid credentials or account is deactivated' });
   }
 
   const user = users[0];

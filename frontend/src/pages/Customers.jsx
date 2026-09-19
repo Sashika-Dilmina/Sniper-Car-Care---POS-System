@@ -1,12 +1,63 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Component } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from '../config/axios';
 import toast from 'react-hot-toast';
 import VehiclePlatePreview from '../components/VehiclePlatePreview';
 import SearchableSelect from '../components/SearchableSelect';
+import BathaqueQRModal from '../components/BathaqueQRModal';
+import { downloadBathaqueCardImage } from '../utils/bathaqueQrExport';
 import { useAuth } from '../context/AuthContext';
 
-const Customers = () => {
+class CustomerErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('CustomerErrorBoundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 bg-red-50 border border-red-200 rounded-2xl text-center space-y-4 my-6">
+          <div className="text-4xl">⚠️</div>
+          <h2 className="text-xl font-bold text-red-800">Customers List Display Issue</h2>
+          <p className="text-xs text-red-600">
+            {this.state.error?.message || 'A temporary display issue occurred.'}
+          </p>
+          <div className="flex justify-center gap-3 pt-2">
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+              }}
+              className="px-4 py-2 bg-gray-700 text-white rounded-xl font-bold text-xs"
+            >
+              Reset View
+            </button>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-xs"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const CustomersContent = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
@@ -69,6 +120,7 @@ const Customers = () => {
   };
 
   const resetFilters = () => {
+    setSearchTerm('');
     setFilters({
       vehicle_type: 'all',
       payment_type: 'all',
@@ -78,14 +130,19 @@ const Customers = () => {
   };
 
   const handleDelete = async (customerId, customerName) => {
-    if (window.confirm(`Are you sure you want to delete customer "${customerName}"? This action cannot be undone.`)) {
-      try {
-        await axios.delete(`/api/customers/${customerId}`);
-        toast.success('Customer deleted successfully');
-        fetchCustomers();
-      } catch (error) {
-        toast.error(error.response?.data?.message || 'Failed to delete customer');
-      }
+    const reason = window.prompt(`Please enter the reason for deleting customer "${customerName}":`);
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
+    
+    try {
+      await axios.delete(`/api/customers/${customerId}`, { data: { reason } });
+      toast.success('Customer deleted successfully');
+      fetchCustomers();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete customer');
     }
   };
 
@@ -125,16 +182,55 @@ const Customers = () => {
     }
   };
 
-  const filteredCustomers = customers.filter(customer =>
-    customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.vehicle_plate?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCustomers = (customers || []).filter(customer => {
+    if (!customer || typeof customer !== 'object') return false;
+    if (!searchTerm || typeof searchTerm !== 'string' || !searchTerm.trim()) return true;
+
+    try {
+      const rawSearch = String(searchTerm).trim().toLowerCase();
+      const cleanSearch = rawSearch.replace(/[^a-z0-9]/g, '');
+
+      const name = String(customer.name || '').toLowerCase();
+      const phone = String(customer.phone || '').toLowerCase();
+      const phoneClean = phone.replace(/[^0-9]/g, '');
+      const plate = String(customer.vehicle_plate || '').toLowerCase();
+      const plateClean = plate.replace(/[^a-z0-9]/g, '');
+      const province = String(customer.province || '').toLowerCase();
+      const custId = String(customer.id || '');
+
+      // Check customer ID match
+      if (custId === rawSearch || custId.includes(rawSearch)) return true;
+
+      // Check name match
+      if (name.includes(rawSearch)) return true;
+
+      // Check phone match (raw or numeric only)
+      if (phone.includes(rawSearch) || (phoneClean && cleanSearch && phoneClean.includes(cleanSearch))) return true;
+
+      // Check plate match (raw substring or space-insensitive match)
+      if (plate.includes(rawSearch) || (plateClean && cleanSearch && plateClean.includes(cleanSearch))) return true;
+
+      // Check province match
+      if (province.includes(rawSearch)) return true;
+
+      return false;
+    } catch (err) {
+      console.error('Error filtering customer:', err);
+      return false;
+    }
+  });
+
+
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedQrCustomer, setSelectedQrCustomer] = useState(null);
+  const [showBathaqueQrModal, setShowBathaqueQrModal] = useState(false);
   const [plateCodes, setPlateCodes] = useState([]);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '+9715',
+    bathaque_id: '',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -171,7 +267,8 @@ const Customers = () => {
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     
-    if (!newCustomer.name || !newCustomer.phone || !newCustomer.emirate || !newCustomer.plate_number) {
+    const isNoVehicle = newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care';
+    if (!newCustomer.name || !newCustomer.phone || !newCustomer.emirate || (!isNoVehicle && !newCustomer.plate_number)) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -184,15 +281,23 @@ const Customers = () => {
     }
 
     try {
-      await axios.post('/api/anpr/register', {
+      const payload = {
         ...newCustomer,
-        phone: cleanPhone // send sanitized number
-      });
+        bathaque_id: newCustomer.bathaque_id ? newCustomer.bathaque_id.trim().toUpperCase() : null,
+        phone: cleanPhone
+      };
+      if (isNoVehicle) {
+        payload.plate_code = '';
+        payload.plate_number = `${newCustomer.emirate} - ${cleanPhone}`;
+      }
+
+      await axios.post('/api/anpr/register', payload);
       toast.success('Customer registered successfully!');
       setShowAddModal(false);
       setNewCustomer({
         name: '',
         phone: '+9715',
+        bathaque_id: '',
         emirate: '',
         plate_code: '',
         plate_number: '',
@@ -236,7 +341,7 @@ const Customers = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center no-print">
         <h1 className="text-3xl font-bold text-gray-800">Customers</h1>
         <div className="flex gap-3">
           {user?.role === 'admin' && (
@@ -250,6 +355,16 @@ const Customers = () => {
               Export to Excel
             </button>
           )}
+          <button
+            onClick={() => setShowQRModal(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow-md"
+            title="Show registration QR code printouts"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 00-1 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+            Registration QR
+          </button>
           <button
             onClick={() => setShowAddModal(true)}
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition flex items-center gap-2 shadow-lg"
@@ -297,13 +412,30 @@ const Customers = () => {
                   <p className="text-xs text-gray-400 mt-1">Numbers only, minimum 9 digits</p>
                 </div>
 
+                {/* Bathaque ID */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-bold text-gray-700">Bathaque ID (Optional)</label>
+                    <span className="text-[11px] text-red-600 font-bold">Multi-Vehicle Loyalty</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={newCustomer.bathaque_id}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, bathaque_id: e.target.value.toUpperCase() })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono font-bold tracking-wider uppercase text-red-600"
+                    placeholder="e.g. BQ10293847"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">Shared ID for multiple vehicles to pool wash stamps together.</p>
+                </div>
+
                 {/* Vehicle Model / Type */}
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">Vehicle Model *</label>
                   <select
                     value={newCustomer.vehicle_type}
                     onChange={(e) => setNewCustomer({ ...newCustomer, vehicle_type: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none notranslate"
+                    translate="no"
                   >
                     <option value="Saloon">Saloon</option>
                     <option value="4x4">4x4</option>
@@ -331,41 +463,49 @@ const Customers = () => {
                         <option value="Umm Al Quwain">Umm Al Quwain</option>
                         <option value="Ras Al Khaimah">Ras Al Khaimah</option>
                         <option value="Fujairah">Fujairah</option>
+                        <option value="Garage">Garage</option>
+                        <option value="Sniper car care">Sniper car care</option>
                       </select>
                     </div>
 
                     {/* Plate Code Dropdown */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
-                      <SearchableSelect
-                        options={plateCodes}
-                        value={newCustomer.plate_code}
-                        onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
-                        disabled={plateCodes.length === 0}
-                      />
-                    </div>
+                    {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Plate Code *</label>
+                        <SearchableSelect
+                          options={plateCodes}
+                          value={newCustomer.plate_code}
+                          onChange={(val) => setNewCustomer({ ...newCustomer, plate_code: val })}
+                          disabled={plateCodes.length === 0}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Plate Number Input */}
-                  <div className="mt-3">
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newCustomer.plate_number}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
-                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono"
-                      placeholder="12345"
-                    />
-                  </div>
+                  {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Plate Number *</label>
+                      <input
+                        type="text"
+                        required={!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care')}
+                        value={newCustomer.plate_number}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                        className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono"
+                        placeholder="12345"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Plate Preview */}
-                <VehiclePlatePreview 
-                  emirate={newCustomer.emirate} 
-                  plateCode={newCustomer.plate_code} 
-                  plateNumber={newCustomer.plate_number} 
-                />
+                {!(newCustomer.emirate === 'Garage' || newCustomer.emirate === 'Sniper car care') && (
+                  <VehiclePlatePreview 
+                    emirate={newCustomer.emirate} 
+                    plateCode={newCustomer.plate_code} 
+                    plateNumber={newCustomer.plate_number} 
+                  />
+                )}
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -439,7 +579,8 @@ const Customers = () => {
                     <select
                       value={checkinForm.vehicle_type}
                       onChange={(e) => setCheckinForm({ ...checkinForm, vehicle_type: e.target.value })}
-                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none notranslate"
+                      translate="no"
                     >
                       <option value="Saloon">Saloon</option>
                       <option value="4x4">4x4</option>
@@ -488,7 +629,7 @@ const Customers = () => {
       )}
 
       {/* Search Bar */}
-      <div className="bg-white p-4 rounded-lg shadow">
+      <div className="bg-white p-4 rounded-lg shadow no-print">
         <div className="flex gap-4">
           <input
             type="text"
@@ -512,7 +653,7 @@ const Customers = () => {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-lg shadow no-print">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-gray-800">Filter Customers</h3>
             <button
@@ -532,7 +673,8 @@ const Customers = () => {
               <select
                 value={filters.vehicle_type}
                 onChange={(e) => handleFilterChange('vehicle_type', e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 notranslate"
+                translate="no"
               >
                 <option value="all">All Types</option>
                 <option value="4x4">4x4</option>
@@ -659,7 +801,7 @@ const Customers = () => {
       )}
 
       {/* Results Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-lg shadow overflow-hidden no-print">
         <div className="px-6 py-4 border-b bg-gray-50">
           <p className="text-sm text-gray-600">
             Showing <span className="font-semibold text-gray-900">{filteredCustomers.length}</span> customer{filteredCustomers.length !== 1 ? 's' : ''}
@@ -673,6 +815,7 @@ const Customers = () => {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bathaque ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle Plate</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment Type</th>
@@ -682,27 +825,43 @@ const Customers = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredCustomers.map((customer) => (
-                  <tr key={customer.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">{customer.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{customer.phone || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap font-mono">{customer.vehicle_plate}</td>
+                {filteredCustomers.map((customer, index) => (
+                  <tr key={customer.id ? `cust-${customer.id}` : `cust-idx-${index}`} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
+                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                      <span>{String(customer.name || '')}</span>
+                      {customer.is_deleted === 1 && (
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                          Deleted (Reason: {String(customer.delete_reason || 'N/A')})
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap"><span translate="no" className="notranslate">{String(customer.phone || 'N/A')}</span></td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 capitalize">
-                        {customer.vehicle_type}
+                      {customer.bathaque_id ? (
+                        <span className="px-2.5 py-1 text-xs font-mono font-bold rounded-lg bg-red-50 text-red-600 border border-red-200">
+                          {customer.bathaque_id}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs italic">N/A</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap font-mono notranslate" translate="no"><span translate="no" className="notranslate">{String(customer.vehicle_plate || '')}</span></td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 capitalize notranslate" translate="no">
+                        {String(customer.vehicle_type || 'Saloon')}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {customer.last_payment_method ? (
-                        <span className={`px-2 py-1 text-xs rounded-full capitalize ${customer.last_payment_method === 'cash' ? 'bg-green-100 text-green-800' :
-                            customer.last_payment_method === 'card' ? 'bg-purple-100 text-purple-800' :
-                              customer.last_payment_method === 'credit' ? 'bg-orange-100 text-orange-800' :
+                        <span className={`px-2 py-1 text-xs rounded-full capitalize notranslate ${String(customer.last_payment_method) === 'cash' ? 'bg-green-100 text-green-800' :
+                            String(customer.last_payment_method) === 'card' ? 'bg-purple-100 text-purple-800' :
+                              String(customer.last_payment_method) === 'credit' ? 'bg-orange-100 text-orange-800' :
                                 'bg-gray-100 text-gray-800'
-                          }`}>
-                          {customer.last_payment_method}
+                          }`} translate="no">
+                          {String(customer.last_payment_method)}
                         </span>
                       ) : (
-                        <span className="text-gray-400 text-xs">No orders</span>
+                        <span className="text-gray-400 text-xs" translate="no">No orders</span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{customer.total_orders || 0}</td>
@@ -711,31 +870,70 @@ const Customers = () => {
                         <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 w-max">
                           {customer.loyalty_points || 0} pts
                         </span>
-                        <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800 w-max font-semibold">
-                          {customer.wash_stamps || 0}/5 Stamps
+                        <span className={`px-2 py-1 text-xs rounded-full w-max font-bold ${
+                          (customer.wash_stamps || 0) >= 5 ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-indigo-100 text-indigo-800'
+                        }`}>
+                          {(customer.wash_stamps || 0) >= 5 ? '🎉 6th Free Wash Ready!' : `${customer.wash_stamps || 0}/5 Stamps`}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleOpenCheckin(customer)}
-                          className="text-primary-600 hover:text-primary-800 transition-colors"
-                          title="Manual Check-in / Scan"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                          </svg>
-                        </button>
-                         <button
-                          onClick={() => navigate(`/sales?customer_id=${customer.id}`)}
-                          className="text-indigo-600 hover:text-indigo-800 transition-colors"
-                          title="Book Service / POS Sale"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                        </button>
+                        {customer.is_deleted !== 1 && (
+                          <>
+                            <button
+                              onClick={() => handleOpenCheckin(customer)}
+                              className="text-primary-600 hover:text-primary-800 transition-colors"
+                              title="Manual Check-in / Scan"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                              </svg>
+                            </button>
+                             <button
+                              onClick={() => navigate(`/sales?customer_id=${customer.id}`)}
+                              className="text-indigo-600 hover:text-indigo-800 transition-colors"
+                              title="Book Service / POS Sale"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                              </svg>
+                            </button>
+                            {customer.bathaque_id && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setSelectedQrCustomer(customer);
+                                    setShowBathaqueQrModal(true);
+                                  }}
+                                  className="text-gray-700 hover:text-red-600 transition-colors p-1 hover:bg-gray-100 rounded-lg"
+                                  title="View & Print Bathaque QR Pass"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      toast.loading('Generating QR Image...', { id: 'download-qr' });
+                                      await downloadBathaqueCardImage(customer);
+                                      toast.success('Loyalty Pass Image downloaded!', { id: 'download-qr' });
+                                    } catch (e) {
+                                      toast.error('Failed to download QR image', { id: 'download-qr' });
+                                    }
+                                  }}
+                                  className="text-gray-700 hover:text-emerald-600 transition-colors p-1 hover:bg-emerald-50 rounded-lg"
+                                  title="Download Bathaque QR Pass (PNG Image)"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                  </svg>
+                                </button>
+                              </>
+                            )}
+                          </>
+                        )}
                         <Link
                           to={`/customers/${customer.id}`}
                           className="text-blue-600 hover:text-blue-800 transition-colors"
@@ -746,16 +944,18 @@ const Customers = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                         </Link>
-                        <Link
-                          to={`/customers/${customer.id}/edit`}
-                          className="text-green-600 hover:text-green-800 transition-colors"
-                          title="Edit Customer"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </Link>
-                        {user?.role === 'admin' && (
+                        {customer.is_deleted !== 1 && (
+                          <Link
+                            to={`/customers/${customer.id}/edit`}
+                            className="text-green-600 hover:text-green-800 transition-colors"
+                            title="Edit Customer"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </Link>
+                        )}
+                        {user?.role === 'admin' && customer.is_deleted !== 1 && (
                           <button
                             onClick={() => handleDelete(customer.id, customer.name)}
                             className="text-red-600 hover:text-red-800 transition-colors"
@@ -788,9 +988,159 @@ const Customers = () => {
           </div>
         )}
       </div>
+      {/* QR Codes Flyer Modal */}
+      {showQRModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-55 flex items-center justify-center z-[100] p-4 overflow-y-auto print-overlay">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="bg-blue-600 p-5 text-white flex justify-between items-center no-print">
+              <div>
+                <h2 className="text-2xl font-bold">Printable Registration QR Code Flyer</h2>
+                <p className="text-blue-100 text-sm mt-1">Hang this flyer in your service lobby for customer self-registration</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-white text-blue-700 rounded-lg hover:bg-blue-50 font-bold transition flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print Flyer
+                </button>
+                <button
+                  onClick={() => setShowQRModal(false)}
+                  className="px-4 py-2 bg-blue-750 text-white rounded-lg hover:bg-blue-800 transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Flyer Area */}
+            <div className="p-8 bg-gray-100 flex justify-center overflow-y-auto max-h-[75vh] print-wrapper">
+              <div
+                id="printable-qr-flyer"
+                className="bg-white p-8 border-[6px] border-black rounded-3xl max-w-2xl w-full text-center space-y-6 shadow-md"
+                style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}
+              >
+                {/* Style sheet specifically to hide everything else on print */}
+                <style dangerouslySetInnerHTML={{__html: `
+                  @media print {
+                    .no-print {
+                      display: none !important;
+                    }
+                    body {
+                      background: white !important;
+                      color: black !important;
+                      margin: 0 !important;
+                      padding: 0 !important;
+                      -webkit-print-color-adjust: exact;
+                      print-color-adjust: exact;
+                    }
+                    .print-overlay {
+                      position: absolute !important;
+                      left: 0 !important;
+                      top: 0 !important;
+                      width: 100% !important;
+                      height: auto !important;
+                      background: white !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                      overflow: visible !important;
+                      display: block !important;
+                      z-index: auto !important;
+                    }
+                    .print-overlay > div {
+                      box-shadow: none !important;
+                      border: none !important;
+                      max-width: 100% !important;
+                      width: 100% !important;
+                      margin: 0 !important;
+                      padding: 0 !important;
+                      background: white !important;
+                    }
+                    .print-wrapper {
+                      padding: 0 !important;
+                      background: white !important;
+                      max-height: none !important;
+                      overflow: visible !important;
+                      display: block !important;
+                    }
+                    #printable-qr-flyer {
+                      border: 5px solid black !important;
+                      box-shadow: none !important;
+                      margin: 0 auto !important;
+                      padding: 16px 24px !important;
+                      page-break-inside: avoid !important;
+                      width: 100% !important;
+                      max-width: 580px !important;
+                      height: auto !important;
+                    }
+                  }
+                `}} />
+
+                {/* Brand Header */}
+                <div className="space-y-2">
+                  <span className="text-center leading-tight block">
+                    <span className="block text-4xl font-black italic tracking-tight text-black">SNIPER</span>
+                    <span className="block text-xs font-bold text-red-600 tracking-[0.25em] uppercase mt-1">Car Care</span>
+                  </span>
+                  <div className="h-0.5 bg-red-600 w-16 mx-auto rounded-full mt-3"></div>
+                </div>
+
+                {/* Call to Action */}
+                <div className="space-y-1">
+                  <h3 className="text-2xl font-black tracking-tight text-gray-900">SCAN TO REGISTER YOUR VEHICLE</h3>
+                  <p className="text-gray-650 text-xs max-w-md mx-auto">
+                    Skip the queue! Scan the QR code below matching your vehicle type to register details directly in our database.
+                  </p>
+                </div>
+
+                {/* Single QR Code Container */}
+                <div className="flex flex-col items-center justify-center pt-2">
+                  <div className="border-2 border-gray-250 p-6 rounded-2xl bg-gray-50 flex flex-col items-center space-y-3 shadow-sm max-w-[280px]">
+                    <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-inner">
+                      <img
+                        src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=http://saloon.snipercarcare.com/register"
+                        alt="Registration QR Code"
+                        className="w-44 h-44"
+                      />
+                    </div>
+                    <span className="text-[11px] font-bold text-gray-600 tracking-wide">Saloon & 4x4 / SUV</span>
+                  </div>
+                </div>
+
+                {/* Footer Info */}
+                <div className="pt-4 border-t border-gray-200 text-[10px] font-bold text-gray-500 tracking-wide uppercase">
+                  Thank you for choosing Sniper Car Care!
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bathaque Loyalty QR Pass Modal */}
+      {showBathaqueQrModal && selectedQrCustomer && (
+        <BathaqueQRModal
+          customer={selectedQrCustomer}
+          onClose={() => {
+            setShowBathaqueQrModal(false);
+            setSelectedQrCustomer(null);
+          }}
+        />
+      )}
     </div>
   );
 };
 
+const Customers = () => (
+  <CustomerErrorBoundary>
+    <CustomersContent />
+  </CustomerErrorBoundary>
+);
+
 export default Customers;
+
 

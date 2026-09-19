@@ -124,7 +124,7 @@ const FeedbackPage = () => {
               Your feedback has been submitted successfully. We truly appreciate you taking the time to share your experience with us.
             </p>
             <Link
-              to="/"
+              to={`/?plate=${encodeURIComponent(plate || '')}`}
               className="inline-flex items-center justify-center rounded-full bg-primary-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary-600"
             >
               Back to Home
@@ -140,7 +140,7 @@ const FeedbackPage = () => {
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <Link to="/" className="inline-block mb-4">
+          <Link to={`/?plate=${encodeURIComponent(plate || '')}`} className="inline-block mb-4">
             <span className="text-2xl font-semibold tracking-tight text-white">
               Sniper<span className="text-primary-400">CarCare</span>
             </span>

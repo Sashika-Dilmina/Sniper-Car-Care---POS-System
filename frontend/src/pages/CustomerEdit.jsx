@@ -13,6 +13,7 @@ const CustomerEdit = () => {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
+    bathaque_id: '',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -61,7 +62,10 @@ const CustomerEdit = () => {
       let emirate = '';
       let plateNumber = '';
       
-      if (parts.length >= 3) {
+      if (plateStr.startsWith('Garage - ') || plateStr.startsWith('Sniper car care - ')) {
+        emirate = plateStr.startsWith('Garage - ') ? 'Garage' : 'Sniper car care';
+        plateNumber = plateStr;
+      } else if (parts.length >= 3) {
         plateCode = parts[0];
         plateNumber = parts[parts.length - 1];
         emirate = parts.slice(1, parts.length - 1).join(' ');
@@ -72,6 +76,7 @@ const CustomerEdit = () => {
       setFormData({
         name: customer.name || '',
         phone: customer.phone || '+9715',
+        bathaque_id: customer.bathaque_id || '',
         emirate: emirate,
         plate_code: plateCode,
         plate_number: plateNumber,
@@ -96,7 +101,8 @@ const CustomerEdit = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.phone || !formData.plate_number || !formData.vehicle_type) {
+    const isNoVehicle = formData.emirate === 'Garage' || formData.emirate === 'Sniper car care';
+    if (!formData.name || !formData.phone || (!isNoVehicle && !formData.plate_number) || !formData.vehicle_type) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -109,10 +115,16 @@ const CustomerEdit = () => {
     }
 
     try {
-      await axios.put(`/api/customers/${id}`, {
+      const payload = {
         ...formData,
         phone: cleanPhone
-      });
+      };
+      if (isNoVehicle) {
+        payload.plate_code = '';
+        payload.plate_number = `${formData.emirate} - ${cleanPhone}`;
+      }
+
+      await axios.put(`/api/customers/${id}`, payload);
       toast.success('Customer updated successfully');
       navigate('/customers');
     } catch (error) {
@@ -176,6 +188,26 @@ const CustomerEdit = () => {
               <p className="text-xs text-gray-400 mt-1">Numbers only, minimum 9 digits</p>
             </div>
 
+            {/* Bathaque ID */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label htmlFor="bathaque_id" className="block text-sm font-bold text-gray-700">
+                  Bathaque ID (Optional)
+                </label>
+                <span className="text-[11px] text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded-full">Multi-Vehicle Loyalty</span>
+              </div>
+              <input
+                type="text"
+                id="bathaque_id"
+                name="bathaque_id"
+                value={formData.bathaque_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, bathaque_id: e.target.value.toUpperCase() }))}
+                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono font-bold tracking-wider uppercase text-red-600"
+                placeholder="e.g. BQ10293847"
+              />
+              <p className="text-xs text-gray-400 mt-1">Shared customer ID to pool wash stamps across multiple vehicles.</p>
+            </div>
+
             {/* Vehicle Model */}
             <div>
               <label htmlFor="vehicle_type" className="block text-sm font-bold text-gray-700 mb-2">
@@ -186,7 +218,8 @@ const CustomerEdit = () => {
                 name="vehicle_type"
                 value={formData.vehicle_type}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none notranslate"
+                translate="no"
                 required
               >
                 <option value="Saloon">Saloon</option>
@@ -220,46 +253,54 @@ const CustomerEdit = () => {
                     <option value="Umm Al Quwain">Umm Al Quwain</option>
                     <option value="Ras Al Khaimah">Ras Al Khaimah</option>
                     <option value="Fujairah">Fujairah</option>
+                    <option value="Garage">Garage</option>
+                    <option value="Sniper car care">Sniper car care</option>
                   </select>
                 </div>
 
                 {/* Plate Code */}
-                <div>
-                  <label htmlFor="plate_code" className="block text-sm font-bold text-gray-700 mb-2">
-                    Plate Code <span className="text-red-500">*</span>
-                  </label>
-                  <SearchableSelect
-                    options={plateCodes}
-                    value={formData.plate_code}
-                    onChange={(val) => setFormData(prev => ({ ...prev, plate_code: val }))}
-                    disabled={plateCodes.length === 0}
-                  />
-                </div>
+                {!(formData.emirate === 'Garage' || formData.emirate === 'Sniper car care') && (
+                  <div>
+                    <label htmlFor="plate_code" className="block text-sm font-bold text-gray-700 mb-2">
+                      Plate Code <span className="text-red-500">*</span>
+                    </label>
+                    <SearchableSelect
+                      options={plateCodes}
+                      value={formData.plate_code}
+                      onChange={(val) => setFormData(prev => ({ ...prev, plate_code: val }))}
+                      disabled={plateCodes.length === 0}
+                    />
+                  </div>
+                )}
 
                 {/* Plate Number */}
-                <div>
-                  <label htmlFor="plate_number" className="block text-sm font-bold text-gray-700 mb-2">
-                    Plate Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="plate_number"
-                    name="plate_number"
-                    value={formData.plate_number}
-                    onChange={(e) => setFormData(prev => ({ ...prev, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() }))}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono"
-                    required
-                    placeholder="12345"
-                  />
-                </div>
+                {!(formData.emirate === 'Garage' || formData.emirate === 'Sniper car care') && (
+                  <div>
+                    <label htmlFor="plate_number" className="block text-sm font-bold text-gray-700 mb-2">
+                      Plate Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="plate_number"
+                      name="plate_number"
+                      value={formData.plate_number}
+                      onChange={(e) => setFormData(prev => ({ ...prev, plate_number: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() }))}
+                      className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono"
+                      required={!(formData.emirate === 'Garage' || formData.emirate === 'Sniper car care')}
+                      placeholder="12345"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Plate Live Preview */}
-              <VehiclePlatePreview 
-                emirate={formData.emirate}
-                plateCode={formData.plate_code}
-                plateNumber={formData.plate_number}
-              />
+              {!(formData.emirate === 'Garage' || formData.emirate === 'Sniper car care') && (
+                <VehiclePlatePreview 
+                  emirate={formData.emirate}
+                  plateCode={formData.plate_code}
+                  plateNumber={formData.plate_number}
+                />
+              )}
             </div>
           </div>
 

@@ -100,23 +100,25 @@ const handleTapCallback = asyncHandler(async (req, res) => {
           [order_id, amount, method, 'completed', tap_id]
         );
 
-        // 4. Determine items and status (Services vs Products)
-        const [items] = await connection.query(
-          'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
-          [order_id]
-        );
-        const hasService = items.length === 0 || items.some(item => item.category === 'Services');
-        const targetStatus = hasService ? 'processing' : 'completed';
-        const serviceCompletedAt = hasService ? null : new Date();
-
-        // 5. Update order details
+        // 4. Fetch current order details
         const [orders] = await connection.query(
-          'SELECT total, vip_booking_id, customer_id, source FROM orders WHERE id = ?',
+          'SELECT status, service_completed_at, total, vip_booking_id, customer_id, source FROM orders WHERE id = ?',
           [order_id]
         );
 
         if (orders.length > 0) {
           const order = orders[0];
+          const isAlreadyCompleted = order.status === 'completed';
+
+          // 5. Determine items and status (Services vs Products)
+          const [items] = await connection.query(
+            'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
+            [order_id]
+          );
+          const hasService = items.length === 0 || items.some(item => item.category === 'Services');
+          const targetStatus = isAlreadyCompleted ? 'completed' : (hasService ? 'processing' : 'completed');
+          const serviceCompletedAt = targetStatus === 'completed' ? (order.service_completed_at || new Date()) : null;
+
           const orderTotal = parseFloat(order.total);
 
           // Calculate total paid
@@ -128,12 +130,12 @@ const handleTapCallback = asyncHandler(async (req, res) => {
           const newPaymentStatus = totalPaid >= orderTotal ? 'paid' : 'partial';
 
           await connection.query(
-            'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+            'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = COALESCE(?, service_completed_at) WHERE id = ?',
             [newPaymentStatus, targetStatus, serviceCompletedAt, order_id]
           );
 
-          // Update service status if order has services
-          if (hasService) {
+          // Update service status if order has services and is not already completed
+          if (hasService && !isAlreadyCompleted) {
             await connection.query(
               'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
               [order_id]
@@ -147,7 +149,7 @@ const handleTapCallback = asyncHandler(async (req, res) => {
               [newPaymentStatus === 'paid' ? 'confirmed' : 'pending', order.vip_booking_id]
             );
 
-            if (newPaymentStatus === 'paid') {
+            if (newPaymentStatus === 'paid' && !isAlreadyCompleted) {
               await connection.query(
                 `UPDATE orders 
                  SET status = 'processing', 
@@ -162,60 +164,20 @@ const handleTapCallback = asyncHandler(async (req, res) => {
               console.log(`[VIP] Auto-started VIP service booking ${order.vip_booking_id} after Tap payment`);
             }
           }
-
-          // Handle Loyalty Stamps for Website Bookings
-          const isWebsiteServiceBooking = 
-            order.customer_id &&
-            ((order.source || '').includes('customer_website') ||
-             order.source === 'customer_website_saloon' ||
-             order.source === 'customer_website_4x4');
-             
-          if (isWebsiteServiceBooking && orderTotal > 0 && hasService) {
-            await ensureLoyaltyRow(connection, order.customer_id);
-            await incrementWashStamp(connection, order.customer_id);
-          }
         }
 
         await connection.commit();
         connection.release();
-
-        // 6. Send Feedback SMS
-        const [orderData] = await connection.query(`
-          SELECT o.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type, c.id as customer_id
-          FROM orders o
-          JOIN customers c ON o.customer_id = c.id
-          WHERE o.id = ?
-        `, [order_id]);
-
-        if (orderData.length > 0) {
-          const o = orderData[0];
-          const phone = formatPhoneNumber(o.phone);
-          const feedbackUrl = buildFeedbackUrl({
-            vehicleType: o.vehicle_type || 'Saloon',
-            customerId: o.customer_id,
-            plate: o.vehicle_plate,
-            orderId: o.id
-          });
-
-          if (phone) {
-            try {
-              await sendReson8Message({
-                to: phone,
-                message: `Thank you for your payment at Sniper Car Care. We hope you liked our service! Please leave your feedback here: ${feedbackUrl}`,
-                campaignName: 'PAYMENT_FEEDBACK'
-              });
-              console.log(`[SMS] Feedback SMS sent to ${phone} after Tap payment for order ${order_id}`);
-            } catch (err) {
-              console.error('[SMS] Feedback SMS failed:', err.message);
-            }
-          }
-        }
 
         console.log(`[Tap Callback] Successful payment captured for order ${order_id}`);
         return res.redirect(`${finalRedirectUrl}${finalRedirectUrl.includes('?') ? '&' : '?'}status=success&order_id=${order_id}`);
       } catch (dbError) {
         await connection.rollback();
         connection.release();
+        if (dbError.code === 'ER_DUP_ENTRY') {
+          console.log(`[Tap Callback] Concurrently processed charge ${tap_id} already registered. Redirecting to success.`);
+          return res.redirect(`${finalRedirectUrl}${finalRedirectUrl.includes('?') ? '&' : '?'}status=success&order_id=${order_id}`);
+        }
         throw dbError;
       }
     } else {

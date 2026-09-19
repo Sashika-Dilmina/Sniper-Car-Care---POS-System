@@ -199,11 +199,12 @@ const VIPDashboard = () => {
     }
   };
 
-  const handleStatusChange = async (bookingId, newStatus) => {
+  const handleStatusChange = async (bookingId, newStatus, paymentMethod) => {
     setUpdatingBookingId(bookingId);
     try {
       await axios.patch(`/api/vip/bookings/${bookingId}`, {
-        status: newStatus
+        status: newStatus,
+        payment_method: paymentMethod
       }, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -247,13 +248,19 @@ const VIPDashboard = () => {
   };
 
   const deleteBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to delete this booking?')) return;
-
+    const reason = window.prompt('Please enter the reason for deleting this booking:');
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
+ 
     try {
       await axios.delete(`/api/vip/bookings/${bookingId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        },
+        data: { reason }
       });
       toast.success('Booking deleted successfully');
       fetchVIPBookings();
@@ -290,6 +297,13 @@ const VIPDashboard = () => {
       'cancelled': 'bg-red-100 text-red-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const isAppointmentToday = (dateStr) => {
+    if (!dateStr) return false;
+    const apptDate = new Date(dateStr).toDateString();
+    const todayDate = new Date().toDateString();
+    return apptDate === todayDate;
   };
 
   const calculateElapsedTime = (startedAt, completedAt) => {
@@ -392,10 +406,17 @@ const VIPDashboard = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {filteredBookings.map((booking) => (
-                      <tr key={booking.id} className="hover:bg-gray-50 transition">
+                      <tr key={booking.id} className={`hover:bg-gray-50 transition ${booking.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div>
-                            <p className="font-semibold text-gray-900">{booking.name}</p>
+                            <p className="font-semibold text-gray-900">
+                              {booking.name}
+                              {booking.is_deleted === 1 && (
+                                <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                                  Deleted (Reason: {booking.delete_reason})
+                                </span>
+                              )}
+                            </p>
                             <p className="text-sm text-gray-500">{booking.phone}</p>
                           </div>
                         </td>
@@ -439,7 +460,7 @@ const VIPDashboard = () => {
                             >
                               Action View
                             </button>
-                            {booking.status === 'in_progress' && (
+                            {booking.status === 'in_progress' && booking.is_deleted !== 1 && (
                               <button
                                 onClick={() => handleStatusChange(booking.id, 'completed')}
                                 className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold transition shadow-sm"
@@ -447,12 +468,14 @@ const VIPDashboard = () => {
                                 Done
                               </button>
                             )}
-                            <button
-                              onClick={() => deleteBooking(booking.id)}
-                              className="text-red-600 hover:text-red-900 font-semibold"
-                            >
-                              Delete
-                            </button>
+                            {booking.is_deleted !== 1 && (
+                              <button
+                                onClick={() => deleteBooking(booking.id)}
+                                className="text-red-600 hover:text-red-900 font-semibold"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -567,9 +590,11 @@ const VIPDashboard = () => {
                     <div>
                       <p className="text-xs text-gray-400 font-bold uppercase text-right">Payment Status</p>
                       <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded-full ${
-                        selectedBooking.order_payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        selectedBooking.status === 'cancelled' || selectedBooking.order_status === 'cancelled' || selectedBooking.order_payment_status === 'cancelled'
+                          ? 'bg-red-100 text-red-800 border border-red-200'
+                          : selectedBooking.order_payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
-                        {selectedBooking.order_payment_status || 'pending'}
+                        {(selectedBooking.status === 'cancelled' || selectedBooking.order_status === 'cancelled') ? 'cancelled' : (selectedBooking.order_payment_status || 'pending')}
                       </span>
                     </div>
                   </div>
@@ -630,7 +655,7 @@ const VIPDashboard = () => {
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
                       >
                         <option value="">Select time...</option>
-                        {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'].map(t => (
+                        {['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00'].map(t => (
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
@@ -685,23 +710,31 @@ const VIPDashboard = () => {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  {selectedBooking.status === 'confirmed' && (
-                    <button
-                      onClick={() => handleStatusChange(selectedBooking.id, 'in_progress')}
-                      disabled={updatingBookingId === selectedBooking.id}
-                      className="flex-1 min-w-[150px] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
-                    >
-                      ⚡ Start Service
-                    </button>
-                  )}
-                  {selectedBooking.status === 'in_progress' && (
-                    <button
-                      onClick={() => handleStatusChange(selectedBooking.id, 'completed')}
-                      disabled={updatingBookingId === selectedBooking.id}
-                      className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
-                    >
-                      ✓ Done (Complete Service)
-                    </button>
+                  {!isAppointmentToday(selectedBooking.appointment_date) && ['confirmed', 'in_progress'].includes(selectedBooking.status) ? (
+                    <div className="w-full bg-yellow-50 border border-yellow-200 text-yellow-800 p-3 rounded-lg text-xs font-bold text-center">
+                      ⚠️ VIP service can only be started/completed on the scheduled day. Please reschedule this booking to today to proceed.
+                    </div>
+                  ) : (
+                    <>
+                      {selectedBooking.status === 'confirmed' && (
+                        <button
+                          onClick={() => handleStatusChange(selectedBooking.id, 'in_progress')}
+                          disabled={updatingBookingId === selectedBooking.id}
+                          className="flex-1 min-w-[150px] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                        >
+                          ⚡ Start Service
+                        </button>
+                      )}
+                      {selectedBooking.status === 'in_progress' && (
+                        <button
+                          onClick={() => handleStatusChange(selectedBooking.id, 'completed', selectedPaymentMethod)}
+                          disabled={updatingBookingId === selectedBooking.id}
+                          className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
+                        >
+                          ✓ Done (Complete Service)
+                        </button>
+                      )}
+                    </>
                   )}
                   {['pending', 'confirmed', 'in_progress'].includes(selectedBooking.status) && (
                     <button

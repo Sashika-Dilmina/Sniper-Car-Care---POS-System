@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import axios from '../config/axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
@@ -10,9 +10,19 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [analytics, setAnalytics] = useState(null);
   const [vipAppointments, setVipAppointments] = useState([]);
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const getTodayDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [todayDate, setTodayDate] = useState(getTodayDateString());
+  const [startDate, setStartDate] = useState(getTodayDateString());
+  const [endDate, setEndDate] = useState(getTodayDateString());
   const [vipLoading, setVipLoading] = useState(true);
+  const [showAllVip, setShowAllVip] = useState(false);
   const [loading, setLoading] = useState(true);
   const [completedServices, setCompletedServices] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(true);
@@ -27,6 +37,7 @@ const Dashboard = () => {
   const [openingBalanceInput, setOpeningBalanceInput] = useState('');
   const [closedAmountInput, setClosedAmountInput] = useState('');
   const [registerNotes, setRegisterNotes] = useState('');
+  const [registerCloseError, setRegisterCloseError] = useState('');
 
   const fetchRegisterStatus = async () => {
     try {
@@ -76,7 +87,11 @@ const Dashboard = () => {
       toast.error('Please enter a valid cash drawer count.');
       return;
     }
+
+    // Rely on backend register check which correctly filters pending orders by the active register open date
+
     try {
+      setRegisterCloseError('');
       const resp = await axios.post('/api/registers/close', {
         closed_amount: parseFloat(closedAmountInput),
         notes: registerNotes
@@ -85,20 +100,26 @@ const Dashboard = () => {
         toast.success('Register closed successfully.');
         setClosedAmountInput('');
         setRegisterNotes('');
+        setRegisterCloseError('');
         setShowCloseRegisterModal(false);
         fetchRegisterStatus();
         navigate(`/reports?tab=registers&print_register_id=${resp.data.register_id}`);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to close register');
+      const errMsg = err.response?.data?.message || 'Failed to close register';
+      setRegisterCloseError(errMsg);
+      toast.error(errMsg, { duration: 6000 });
     }
   };
 
   const calculateDuration = (service) => {
-    if (!service.started_at || !service.completed_at) return null;
-    const start = new Date(service.started_at);
-    const end = new Date(service.completed_at);
+    const startedAt = service.started_at || service.service_started_at || service.created_at;
+    const completedAt = service.completed_at || service.service_completed_at;
+    if (!startedAt || !completedAt) return null;
+    const start = new Date(startedAt);
+    const end = new Date(completedAt);
     const diffMs = end - start;
+    if (diffMs <= 0) return 0;
     const diffMins = Math.round(diffMs / 60000);
     return diffMins;
   };
@@ -111,15 +132,16 @@ const Dashboard = () => {
     }
     const hours = Math.floor(mins / 60);
     const minutes = mins % 60;
-      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   };
 
-  const calculateElapsedTime = (startedAt, completedAt) => {
-    if (!startedAt) return '0 min';
-    const start = new Date(startedAt);
+  const calculateElapsedTime = (startedAt, completedAt, createdAt) => {
+    const effectiveStart = startedAt || createdAt;
+    if (!effectiveStart) return '0 min';
+    const start = new Date(effectiveStart);
     const end = completedAt ? new Date(completedAt) : new Date();
     const diffMs = end - start;
-    if (diffMs < 0) return '0 min';
+    if (diffMs <= 0) return '0 min';
     const diffMins = Math.floor(diffMs / 60000);
     
     if (diffMins < 60) {
@@ -139,6 +161,16 @@ const Dashboard = () => {
     }
 
     const interval = setInterval(() => {
+      const freshToday = getTodayDateString();
+      setTodayDate((prevToday) => {
+        if (freshToday !== prevToday) {
+          setStartDate((prevStart) => (prevStart === prevToday ? freshToday : prevStart));
+          setEndDate((prevEnd) => (prevEnd === prevToday ? freshToday : prevEnd));
+          return freshToday;
+        }
+        return prevToday;
+      });
+
       fetchAnalytics(true, startDate, endDate);
       fetchVIPAppointments(true);
       fetchRegisterStatus();
@@ -148,7 +180,7 @@ const Dashboard = () => {
     }, 7000);
 
     return () => clearInterval(interval);
-  }, [isAdmin, startDate, endDate]);
+  }, [isAdmin, startDate, endDate, todayDate]);
 
   const fetchCompletedServices = async (silent = false) => {
     if (!silent) setServicesLoading(true);
@@ -195,17 +227,21 @@ const Dashboard = () => {
     }
   };
 
+  const currentFetchIdRef = useRef(0);
+
   const fetchAnalytics = async (silent = false, start = startDate, end = endDate) => {
+    const requestId = ++currentFetchIdRef.current;
     if (!silent) setLoading(true);
     try {
       const response = await axios.get(`/api/analytics/dashboard?start_date=${start}&end_date=${end}`);
-      console.log('Analytics response:', response.data);
+      if (requestId !== currentFetchIdRef.current) return;
       if (response.data) {
         setAnalytics(response.data);
       } else {
         if (!silent) toast.error('No analytics data received');
       }
     } catch (error) {
+      if (requestId !== currentFetchIdRef.current) return;
       console.error('Analytics error:', error);
       if (!silent) {
         if (error.response?.status === 401) {
@@ -216,7 +252,6 @@ const Dashboard = () => {
           toast.error(error.response?.data?.message || 'Failed to load analytics');
         }
       }
-      // Set default empty data structure so page still renders
       setAnalytics({
         summary: { total_card_payments: 0, total_cash_payments: 0, total_profit: 0, four_wheel_orders: 0, saloon_orders: 0, completed_services: 0, total_customers: 0, pending_amount: 0, pending_count: 0 },
         top_customers: [],
@@ -227,7 +262,9 @@ const Dashboard = () => {
         recent_feedback: []
       });
     } finally {
-      if (!silent) setLoading(false);
+      if (requestId === currentFetchIdRef.current) {
+        if (!silent) setLoading(false);
+      }
     }
   };
 
@@ -332,7 +369,10 @@ const Dashboard = () => {
             <div className="flex gap-2">
               {activeRegister ? (
                 <button
-                  onClick={() => setShowCloseRegisterModal(true)}
+                  onClick={() => {
+                    setRegisterCloseError('');
+                    setShowCloseRegisterModal(true);
+                  }}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition"
                 >
                   🔒 Close Register
@@ -358,7 +398,7 @@ const Dashboard = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Card Payments</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  AED {(summary.total_card_payments || 0).toLocaleString()}
+                  AED {(summary.total_card_payments || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -367,7 +407,7 @@ const Dashboard = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Cash Payments</p>
                 <p className="text-2xl font-bold text-green-600">
-                  AED {(summary.total_cash_payments || 0).toLocaleString()}
+                  AED {(summary.total_cash_payments || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -376,7 +416,7 @@ const Dashboard = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Profit</p>
                 <p className="text-2xl font-bold text-gray-800">
-                  AED {(summary.total_profit || 0).toLocaleString()}
+                  AED {(summary.total_profit || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -406,7 +446,7 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow">
           <div>
-            <p className="text-gray-600 text-sm">Total Saloon Vehicle Orders</p>
+            <p className="text-gray-600 text-sm notranslate" translate="no">Total Saloon Vehicle Orders</p>
             <p className="text-2xl font-bold text-gray-800">
               {summary.saloon_orders || 0}
             </p>
@@ -424,7 +464,7 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow">
           <div>
-            <p className="text-gray-600 text-sm">Pending Saloon Vehicles</p>
+            <p className="text-gray-600 text-sm notranslate" translate="no">Pending Saloon Vehicles</p>
             <p className="text-2xl font-bold text-orange-600">
               {summary.pending_saloon_count || 0}
             </p>
@@ -436,6 +476,15 @@ const Dashboard = () => {
             <p className="text-gray-600 text-sm">Pending 4x4 Vehicles</p>
             <p className="text-2xl font-bold text-orange-600">
               {summary.pending_4x4_count || 0}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div>
+            <p className="text-gray-600 text-sm">Total VIP Pending Vehicles</p>
+            <p className="text-2xl font-bold text-purple-600">
+              {summary.pending_vip_count || 0}
             </p>
           </div>
         </div>
@@ -453,66 +502,90 @@ const Dashboard = () => {
       </div>
 
       {/* VIP Today's Appointments */}
-      {!vipLoading && vipAppointments.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">👑</span>
-              <h2 className="text-xl font-bold text-gray-900">VIP Appointments Today</h2>
+      {!vipLoading && vipAppointments.length > 0 && (() => {
+        const sortedAppointments = [...vipAppointments].sort((a, b) => {
+          const statusPriority = {
+            'in_progress': 1,
+            'confirmed': 2,
+            'pending': 3,
+            'completed': 4,
+            'cancelled': 5
+          };
+          return (statusPriority[a.status] || 99) - (statusPriority[b.status] || 99);
+        });
+        const visibleAppts = showAllVip ? sortedAppointments : sortedAppointments.slice(0, 2);
+
+        return (
+          <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">👑</span>
+                <h2 className="text-xl font-bold text-gray-900">VIP Appointments Today</h2>
+              </div>
+              <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-semibold">
+                {vipAppointments.length} appointment{vipAppointments.length > 1 ? 's' : ''}
+              </span>
             </div>
-            <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-semibold">
-              {vipAppointments.length} appointment{vipAppointments.length > 1 ? 's' : ''}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {vipAppointments.map((appt) => (
-              <div key={appt.id} className="border border-red-200 rounded-lg p-4 bg-red-50/30 hover:shadow-md transition">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-bold text-gray-900 text-lg">{appt.name}</p>
-                    <p className="text-sm text-gray-600">{appt.phone}</p>
-                  </div>
-                  <span className="text-xs font-bold text-red-600 bg-white px-2 py-1 rounded-full border border-red-200">
-                    VIP
-                  </span>
-                </div>
-                <div className="border-t border-red-100 pt-2 mt-2">
-                  <p className="text-sm"><span className="font-semibold">Vehicle:</span> {appt.vehicle_model}</p>
-                  <p className="text-sm"><span className="font-semibold">Type:</span> {appt.vehicle_type}</p>
-                  <p className="text-sm"><span className="font-semibold">Service:</span> {appt.service_type}</p>
-                  <p className="text-sm"><span className="font-semibold">Time:</span> {appt.appointment_time}</p>
-                </div>
-                <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2">
-                  <div className="flex flex-col">
-                    <span className={`px-2 py-1 text-xs rounded-full font-medium w-max ${
-                      appt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                      appt.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                      appt.status === 'completed' ? 'bg-gray-100 text-gray-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {appt.status === 'in_progress' ? 'In Progress' : 
-                       appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleAppts.map((appt) => (
+                <div key={appt.id} className="border border-red-200 rounded-lg p-4 bg-red-50/30 hover:shadow-md transition">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="font-bold text-gray-900 text-lg">{appt.name}</p>
+                      <p className="text-sm text-gray-600">{appt.phone}</p>
+                    </div>
+                    <span className="text-xs font-bold text-red-600 bg-white px-2 py-1 rounded-full border border-red-200">
+                      VIP
                     </span>
-                    {appt.status === 'in_progress' && (
-                      <span className="text-xs font-bold text-purple-700 mt-1 flex items-center gap-0.5">
-                        ⏱️ {calculateElapsedTime(appt.service_started_at, appt.service_completed_at)}
+                  </div>
+                  <div className="border-t border-red-100 pt-2 mt-2">
+                    <p className="text-sm"><span className="font-semibold">Vehicle:</span> {appt.vehicle_model}</p>
+                    <p className="text-sm"><span className="font-semibold">Type:</span> {appt.vehicle_type}</p>
+                    <p className="text-sm"><span className="font-semibold">Service:</span> {appt.service_type}</p>
+                    <p className="text-sm"><span className="font-semibold">Time:</span> {appt.appointment_time}</p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2">
+                    <div className="flex flex-col">
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium w-max ${
+                        appt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                        appt.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                        appt.status === 'completed' ? 'bg-gray-100 text-gray-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {appt.status === 'in_progress' ? 'In Progress' : 
+                         appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
                       </span>
+                      {appt.status === 'in_progress' && (
+                        <span className="text-xs font-bold text-purple-700 mt-1 flex items-center gap-0.5">
+                          ⏱️ {calculateElapsedTime(appt.service_started_at, appt.service_completed_at)}
+                        </span>
+                      )}
+                    </div>
+                    {appt.status === 'in_progress' && (
+                      <button
+                        onClick={() => handleCompleteVIPBooking(appt.id)}
+                        className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold transition shadow-sm"
+                      >
+                        Done
+                      </button>
                     )}
                   </div>
-                  {appt.status === 'in_progress' && (
-                    <button
-                      onClick={() => handleCompleteVIPBooking(appt.id)}
-                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold transition shadow-sm"
-                    >
-                      Done
-                    </button>
-                  )}
                 </div>
+              ))}
+            </div>
+            {sortedAppointments.length > 2 && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => setShowAllVip(!showAllVip)}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition"
+                >
+                  {showAllVip ? 'See Less' : 'See More'}
+                </button>
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Charts - Admin Only */}
       {isAdmin && (
@@ -581,7 +654,7 @@ const Dashboard = () => {
                   topCustomers.map((customer) => (
                     <tr key={customer.id} className="border-b hover:bg-gray-50">
                       <td className="p-2">{customer.name}</td>
-                      <td className="p-2">{customer.vehicle_plate}</td>
+                      <td className="p-2 notranslate" translate="no">{customer.vehicle_plate}</td>
                       <td className="p-2 text-right">{customer.order_count}</td>
                       <td className="p-2 text-right">
                         AED {parseFloat(customer.total_spent).toLocaleString()}
@@ -612,8 +685,7 @@ const Dashboard = () => {
               <thead>
                 <tr className="border-b">
                   <th className="text-left p-2">Order ID</th>
-                  <th className="text-left p-2">Customer</th>
-                  <th className="text-left p-2">Vehicle Plate</th>
+                  <th className="text-left p-2">Number Plate</th>
                   <th className="text-left p-2">Items</th>
                   <th className="text-right p-2">Total</th>
                   <th className="text-left p-2">Status</th>
@@ -637,8 +709,7 @@ const Dashboard = () => {
                             </span>
                           )}
                         </td>
-                        <td className="p-2">{order.customer_name || 'Walk-in'}</td>
-                        <td className="p-2 font-mono">{order.vehicle_plate || 'N/A'}</td>
+                        <td className="p-2 font-bold font-mono notranslate text-gray-900" translate="no">{order.vehicle_plate || 'N/A'}</td>
                         <td className="p-2">
                           {order.items && order.items.length > 0 ? (
                             <div className="flex flex-col gap-1 max-w-xs truncate">
@@ -659,10 +730,14 @@ const Dashboard = () => {
                           </span>
                         </td>
                         <td className="p-2">
-                          {order.credit_status ? (
+                          {order.payment_status === 'credit' ? (
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                              Credit
+                            </span>
+                          ) : order.credit_status ? (
                             order.credit_status === 'unpaid' ? (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800 font-semibold">
-                                Credit / Unpaid
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                                Credit
                               </span>
                             ) : order.credit_status === 'partially_paid' ? (
                               <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-800 font-semibold">
@@ -674,7 +749,7 @@ const Dashboard = () => {
                               </span>
                             )
                           ) : (
-                            <span className={`px-2 py-0.5 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : order.payment_status === 'free' ? 'bg-blue-100 text-blue-800 font-semibold uppercase' : 'bg-red-100 text-red-800'}`}>
                               {order.payment_status}
                             </span>
                           )}
@@ -726,7 +801,7 @@ const Dashboard = () => {
                     <td className="p-2">{customer.name}</td>
                     <td className="p-2">{customer.phone}</td>
                     <td className="p-2">{customer.vehicle_type || 'N/A'}</td>
-                    <td className="p-2">{customer.vehicle_plate || 'N/A'}</td>
+                    <td className="p-2 notranslate" translate="no">{customer.vehicle_plate || 'N/A'}</td>
                     <td className="p-2 text-right">{customer.joined_date}</td>
                   </tr>
                 ))
@@ -785,7 +860,9 @@ const Dashboard = () => {
                     )}
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <span>
-                        {feedback.vehicle_plate ? `Plate: ${feedback.vehicle_plate}` :
+                        {feedback.vehicle_plate ? (
+                          <>Plate: <span className="notranslate" translate="no">{feedback.vehicle_plate}</span></>
+                        ) :
                           feedback.customer_phone ? `Phone: ${feedback.customer_phone}` :
                             'Anonymous'}
                       </span>
@@ -836,7 +913,7 @@ const Dashboard = () => {
                         <td className="p-2 font-semibold text-gray-800">
                           {service.customer_name || <span className="text-gray-400 italic font-normal">Walk-in</span>}
                         </td>
-                        <td className="p-2 font-mono text-sm">{service.vehicle_plate || 'N/A'}</td>
+                        <td className="p-2 font-mono text-sm notranslate" translate="no">{service.vehicle_plate || 'N/A'}</td>
                         <td className="p-2">{service.service_name}</td>
                         <td className="p-2 text-center text-xs text-gray-500">
                           {service.started_at ? new Date(service.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A'}
@@ -921,6 +998,11 @@ const Dashboard = () => {
           <div className="bg-white rounded-lg max-w-lg w-full p-6 shadow-xl overflow-y-auto max-h-[90vh]">
             <h3 className="text-lg font-bold text-gray-900 mb-4 font-black text-left">Close Cash Register</h3>
             
+            {registerCloseError && (
+              <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded text-red-800 text-xs font-bold leading-relaxed text-left">
+                ⚠️ {registerCloseError}
+              </div>
+            )}
             {registerReport && (
               <div className="bg-gray-50 p-4 rounded-lg border text-sm space-y-2 mb-4 text-left">
                 <div className="flex justify-between">
@@ -935,12 +1017,12 @@ const Dashboard = () => {
                   <span className="text-gray-600">Cash Expenses:</span>
                   <span className="font-semibold text-red-600">- AED {registerReport.cash_expense.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between border-t pt-2 font-bold">
-                  <span>Expected Cash in Drawer:</span>
-                  <span>AED {registerReport.amount_in_cash_drawer.toFixed(2)}</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Free Washes Value:</span>
+                  <span className="font-semibold text-green-600">AED {parseFloat(registerReport.free_wash_amount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2 text-xs text-gray-500">
-                  <span>Other Sales (Card, Bank, Tap):</span>
+                  <span>Card, Bank, TAP Sales:</span>
                   <span>AED {(registerReport.card_payments.total + registerReport.bank_transfer + registerReport.other_payments).toFixed(2)}</span>
                 </div>
               </div>
