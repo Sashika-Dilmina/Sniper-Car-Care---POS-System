@@ -5,6 +5,7 @@ const {
   getProduct,
   createProduct,
   updateProduct,
+  toggleActive,
   deleteProduct,
   updateStock,
   uploadImage
@@ -25,6 +26,7 @@ router.route('/:id')
   .delete(deleteProduct);
 
 router.patch('/:id/stock', updateStock);
+router.patch('/:id/toggle-active', toggleActive);
 
 module.exports = router;
 

@@ -337,7 +337,21 @@ const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const vehiclePlate = searchParams.get('plate') || '';
+  const vehiclePlate = searchParams.get('plate') || localStorage.getItem('sniper_customer_plate') || '';
+  const customerIdParam = searchParams.get('customer_id') || localStorage.getItem('sniper_customer_id') || '';
+
+  useEffect(() => {
+    const urlPlate = searchParams.get('plate');
+    const urlCustId = searchParams.get('customer_id');
+    if (urlPlate) {
+      localStorage.setItem('sniper_customer_plate', urlPlate);
+    } else if (vehiclePlate) {
+      localStorage.setItem('sniper_customer_plate', vehiclePlate);
+    }
+    if (urlCustId) {
+      localStorage.setItem('sniper_customer_id', urlCustId);
+    }
+  }, [searchParams, vehiclePlate]);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showVIPModal, setShowVIPModal] = useState(false);
   const [vipStep, setVipStep] = useState(1);
@@ -375,6 +389,23 @@ const LandingPage = () => {
   const [freeWashCap, setFreeWashCap] = useState(0);
   const [packages, setPackages] = useState([]);
   const [dbProducts, setDbProducts] = useState([]);
+  const [realFeedbacks, setRealFeedbacks] = useState([]);
+  const [bookingSuccessData, setBookingSuccessData] = useState(null);
+  const [customerNote, setCustomerNote] = useState('');
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
+  const [extraServicesList, setExtraServicesList] = useState([]);
+  const [selectedExtraServices, setSelectedExtraServices] = useState([]);
+  const [isExtraServicesOpen, setIsExtraServicesOpen] = useState(false);
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+
+  useEffect(() => {
+    if (bookingSuccessData) {
+      axios.get('/api/public/extra-services?vehicle_type=Saloon')
+        .then(res => setExtraServicesList(res.data.products || []))
+        .catch(err => console.error('Extra services error:', err));
+    }
+  }, [bookingSuccessData]);
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productForm, setProductForm] = useState({
@@ -420,7 +451,7 @@ const LandingPage = () => {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        const response = await axios.get('/api/public/products?category=Services&vehicle_type=Saloon');
+        const response = await axios.get('/api/public/products?vehicle_type=Saloon');
         const mappedPackages = (response.data.products || []).map(p => ({
           id: p.id,
           name: p.name,
@@ -445,6 +476,20 @@ const LandingPage = () => {
     };
     fetchServices();
     fetchDbProducts();
+
+    const fetchLatestFeedbacks = async () => {
+      try {
+        const response = await axios.get('/api/feedback/public/latest');
+        if (response.data.success && Array.isArray(response.data.feedback) && response.data.feedback.length > 0) {
+          setRealFeedbacks(response.data.feedback);
+        }
+      } catch (err) {
+        console.log('Error fetching latest feedback:', err.message);
+      }
+    };
+    fetchLatestFeedbacks();
+    const feedbackInterval = setInterval(fetchLatestFeedbacks, 10000);
+    return () => clearInterval(feedbackInterval);
   }, []);
 
   // Real-time order status notifications
@@ -551,13 +596,17 @@ const LandingPage = () => {
     }
   }, [location]);
 
-  // Fetch customer info by plate number
+  // Fetch customer info by plate number or customer_id
   useEffect(() => {
     const fetchCustomerInfo = async () => {
-      if (!vehiclePlate) return;
+      if (!vehiclePlate && !customerIdParam) return;
 
       try {
-        const response = await axios.get(`/api/public/customer/by-plate?plate=${vehiclePlate}`);
+        const params = new URLSearchParams();
+        if (customerIdParam) params.append('customer_id', customerIdParam);
+        if (vehiclePlate) params.append('plate', vehiclePlate);
+
+        const response = await axios.get(`/api/public/customer/by-plate?${params.toString()}`);
         if (response.data.customer) {
           setCustomerInfo(response.data.customer);
           setWashStamps(
@@ -570,7 +619,7 @@ const LandingPage = () => {
             name: response.data.customer.name || '',
             phone: response.data.customer.phone || '+9715',
             vehicle_type: response.data.customer.vehicle_type || 'Saloon',
-            vehicle_plate: vehiclePlate,
+            vehicle_plate: response.data.customer.vehicle_plate || vehiclePlate,
             notes: ''
           });
           // Auto-scroll to services section so the customer can tap a service immediately
@@ -587,7 +636,7 @@ const LandingPage = () => {
     };
 
     fetchCustomerInfo();
-  }, [vehiclePlate]);
+  }, [vehiclePlate, customerIdParam]);
 
   // Fetch plate codes dynamically based on selected Emirate
   useEffect(() => {
@@ -699,6 +748,9 @@ const LandingPage = () => {
   }, [vipBookingForm.appointment_date]);
 
   const submitBooking = async (service, form) => {
+    if (isSubmittingBooking) return;
+    setIsSubmittingBooking(true);
+
     const isVip = service.name.toLowerCase().includes('vip') || service.category === 'VIP';
     if (isVip) {
       try {
@@ -716,6 +768,8 @@ const LandingPage = () => {
       } catch (error) {
         console.error('VIP Booking error:', error);
         toast.error(error.response?.data?.message || 'Failed to book VIP service. Please try again.');
+      } finally {
+        setIsSubmittingBooking(false);
       }
       return;
     }
@@ -740,7 +794,7 @@ const LandingPage = () => {
         'double soap'
       ];
       const isServiceEligible = eligibleFreeServices.some(s => sNameLower.includes(s)) && !sNameLower.includes('vip');
-      const isFreeWashApplied = isEligibleForFreeWash && isServiceEligible && servicePrice <= freeWashCap;
+      const isFreeWashApplied = false; // Automatic free wash discount disabled per user requirement
 
       if (isFreeWashApplied) {
         // If it is a free wash, we create the order immediately (no payment needed)
@@ -755,7 +809,7 @@ const LandingPage = () => {
           source: 'customer_website_saloon',
           status: 'pending',
           payment_status: 'free', 
-          notes: form.notes || `One-Tap Booking via Website - ${service.name}`
+          notes: form.notes ? form.notes.trim() : null
         };
 
         const response = await axios.post('/api/public/orders', orderData);
@@ -784,24 +838,29 @@ const LandingPage = () => {
           notes: ''
         });
       } else {
-        // Paid booking: Defer order creation until payment method selection!
-        const tempBooking = {
+        // Paid booking: Create order directly in database!
+        const orderNotes = form.notes 
+          ? `One-Tap Booking via Website - ${service.name} (${form.notes.trim()})`
+          : `One-Tap Booking via Website - ${service.name}`;
+
+        const orderData = {
           customer_id: customerInfo?.id || null,
           customer_name: form.name,
           customer_phone: form.phone,
           vehicle_plate: form.vehicle_plate || null,
           vehicle_type: form.vehicle_type,
-          service_id: service.id,
-          service_name: service.name,
+          items: [],
           total: servicePrice,
           source: 'customer_website_saloon',
-          notes: form.notes || `One-Tap Booking via Website - ${service.name}`
+          status: 'pending',
+          payment_status: 'pending',
+          notes: orderNotes
         };
 
-        sessionStorage.setItem('temp_booking', JSON.stringify(tempBooking));
-        sessionStorage.removeItem('current_order_id');
+        const response = await axios.post('/api/public/orders', orderData);
+        const order = response.data.order;
 
-        toast.success('Redirecting to payment...');
+        toast.success('Thank you! Your booking has been received successfully! 🚗', { duration: 5000 });
         setShowBookingModal(false);
         setSelectedService(null);
         setBookingForm({
@@ -814,13 +873,24 @@ const LandingPage = () => {
           notes: ''
         });
 
-        setTimeout(() => {
-          navigate(`/payment?plate=${encodeURIComponent(form.vehicle_plate || '')}`);
-        }, 1500);
+        const savedPlate = form.vehicle_plate || vehiclePlate || localStorage.getItem('sniper_customer_plate') || '';
+        if (savedPlate) {
+          localStorage.setItem('sniper_customer_plate', savedPlate);
+        }
+
+        setCustomerNote('');
+        setNoteSaved(false);
+        setBookingSuccessData({
+          orderId: order?.id,
+          serviceName: service.name,
+          vehiclePlate: savedPlate
+        });
       }
     } catch (error) {
       console.error('Booking error:', error);
       toast.error(error.response?.data?.message || 'Failed to book service. Please try again.');
+    } finally {
+      setIsSubmittingBooking(false);
     }
   };
 
@@ -1043,26 +1113,21 @@ const LandingPage = () => {
   };
 
   const handleServiceClick = (service) => {
-    // If we have customer info from the plate, do ONE-TAP BOOKING
+    setSelectedService(service);
+
     if (customerInfo) {
-      const autoForm = {
-        name: customerInfo.name || 'Existing Customer',
-        phone: customerInfo.phone || '',
-        vehicle_plate: vehiclePlate || customerInfo.vehicle_plate || '',
-        notes: `One-Tap Booking via Website - ${service.name} (Quick Book via Plate Link: ${vehiclePlate})`
-      };
-
-      // Show a loading toast for immediate feedback
-      const loadingToast = toast.loading('Booking your service...');
-
-      submitBooking(service, autoForm).finally(() => {
-        toast.dismiss(loadingToast);
+      // Customer is recognized! Directly submit booking without showing registration modal
+      submitBooking(service, {
+        name: customerInfo.name,
+        phone: customerInfo.phone || '+9715',
+        vehicle_type: customerInfo.vehicle_type || 'Saloon',
+        vehicle_plate: customerInfo.vehicle_plate || vehiclePlate,
+        notes: ''
       });
       return;
     }
 
-    // Otherwise, show the manual booking modal
-    setSelectedService(service);
+    // Unrecognized customer -> show registration/booking modal
     setShowBookingModal(true);
 
     const parts = (vehiclePlate || '').trim().split(/\s+/);
@@ -1129,7 +1194,9 @@ const LandingPage = () => {
       if (n.includes('just water') || n.includes('water wash') || n.includes('quick wash')) return 5;
       return 100;
     };
-    return getOrder(a.name) - getOrder(b.name);
+    const orderDiff = getOrder(a.name) - getOrder(b.name);
+    if (orderDiff !== 0) return orderDiff;
+    return (a.id || 0) - (b.id || 0);
   });
 
   const displayPackages = sortedPackages.filter(pkg => !pkg.name.toLowerCase().includes('vip'));
@@ -1215,6 +1282,7 @@ const LandingPage = () => {
         </Reveal>
       </section>
 
+      {/*
       <section className="w-full px-2 sm:px-4 py-1 sm:py-2">
         <Reveal>
           <div className="w-full max-w-6xl mx-auto template-card border-red-100 bg-gradient-to-br from-white via-white to-red-50/40 px-2 py-2 sm:p-4 rounded-xl shadow-sm flex items-center justify-between">
@@ -1227,6 +1295,7 @@ const LandingPage = () => {
           </div>
         </Reveal>
       </section>
+      */}
 
       <section id="services" className="w-full max-w-6xl mx-auto px-3 sm:px-4 pb-10">
         <Reveal>
@@ -1252,9 +1321,21 @@ const LandingPage = () => {
                   <img 
                     src={getServiceImage(pkg)} 
                     alt={pkg.name} 
+                    onError={(e) => {
+                      const cleanName = (pkg.name || '').replace(/\(Free Wash\)/i, '').trim();
+                      e.currentTarget.src = images.byServiceName[cleanName] || images.defaultService;
+                    }}
                     className={`w-full h-full ${isFullBody ? 'object-cover' : 'object-contain'} group-hover:scale-105 transition-transform duration-500 ease-out`}
                   />
                   <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2.5 sm:p-3 text-white flex justify-between items-end pointer-events-none">
+                    <div className="min-w-0 flex-1 pr-1">
+                      <p className="font-extrabold text-xs sm:text-sm leading-tight text-white drop-shadow truncate">{pkg.name}</p>
+                    </div>
+                    <span className="text-xs font-black bg-red-600 px-2 py-0.5 rounded text-white shadow shrink-0">
+                      AED {pkg.price}
+                    </span>
+                  </div>
                 </div>
               </Reveal>
             );
@@ -1262,37 +1343,39 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <section id="vip" className="mx-auto max-w-6xl px-4 pb-10">
-        <Reveal>
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
-              if (vipPkg) {
-                handleServiceClick(vipPkg);
-              } else {
-                openVIPModal();
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+      {packages.some(p => p.name.toLowerCase().includes('vip')) && (
+        <section id="vip" className="mx-auto max-w-6xl px-4 pb-10">
+          <Reveal>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
                 const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
-                if (vipPkg) handleServiceClick(vipPkg);
-                else openVIPModal();
-              }
-            }}
-            className="group relative w-full rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
-          >
-            <img 
-              src={images.vip} 
-              alt="VIP Service" 
-              className="w-full h-auto object-contain group-hover:scale-[1.02] transition-transform duration-500 ease-out" 
-            />
-            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          </div>
-        </Reveal>
-      </section>
+                if (vipPkg) {
+                  handleServiceClick(vipPkg);
+                } else {
+                  openVIPModal();
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const vipPkg = packages.find(p => p.name.toLowerCase().includes('vip'));
+                  if (vipPkg) handleServiceClick(vipPkg);
+                  else openVIPModal();
+                }
+              }}
+              className="group relative w-full rounded-2xl overflow-hidden shadow-sm border border-gray-150 bg-white cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-600 transition-all duration-300"
+            >
+              <img 
+                src={images.vip} 
+                alt="VIP Service" 
+                className="w-full h-auto object-contain group-hover:scale-[1.02] transition-transform duration-500 ease-out" 
+              />
+              <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </div>
+          </Reveal>
+        </section>
+      )}
 
       <section id="products" className="mx-auto max-w-6xl px-4 pb-10 bg-gray-50 py-10 -mx-0">
         <Reveal>
@@ -1396,10 +1479,18 @@ const LandingPage = () => {
           </div>
         </Reveal>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {testimonials.map((testimonial, index) => (
-            <Reveal key={testimonial.name} delay={index * 100}>
+          {(realFeedbacks.length > 0 
+            ? realFeedbacks.map(f => ({
+                name: f.customer_name || 'Valued Customer',
+                location: f.vehicle_type ? `${f.vehicle_type} Client` : 'Verified Client',
+                quote: f.comment || 'Outstanding detailing and top-quality service!',
+                rating: f.rating || 5
+              }))
+            : testimonials
+          ).map((testimonial, index) => (
+            <Reveal key={testimonial.name + index} delay={index * 100}>
               <div className="template-card p-6 h-full">
-                <div className="text-amber-500 text-sm mb-3">{'★'.repeat(testimonial.rating)}</div>
+                <div className="text-amber-500 text-sm mb-3">{'★'.repeat(testimonial.rating || 5)}</div>
                 <p className="text-sm text-gray-600 leading-relaxed notranslate" translate="no">&ldquo;{testimonial.quote}&rdquo;</p>
                 <div className="mt-4 text-sm font-bold text-gray-900">{testimonial.name}</div>
                 <div className="text-[10px] uppercase tracking-widest text-gray-400">{testimonial.location}</div>
@@ -1432,8 +1523,8 @@ const LandingPage = () => {
                 
                 {item.title === 'CUSTOMER SUPPORT' && showSupportOptions && (
                   <div className="mt-3 flex gap-2 w-full justify-center" onClick={(e) => e.stopPropagation()}>
-                    <a href="tel:+971555371811" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">Call</a>
-                    <a href="https://wa.me/971555371811" target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">WhatsApp</a>
+                    <a href="tel:+971542655588" className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">Call (054 265 5588)</a>
+                    <a href="https://wa.me/971542655588" target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-4 py-2 rounded-lg font-bold shadow-sm transition">WhatsApp</a>
                   </div>
                 )}
               </div>
@@ -1965,6 +2056,152 @@ const LandingPage = () => {
         </div>
       )}
 
+      {/* Thank You Booking Confirmation Modal */}
+      {bookingSuccessData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl border border-gray-100 transform transition-all scale-100">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl shadow-inner animate-bounce">
+              🎉
+            </div>
+            <h2 className="text-2xl font-black text-gray-900 mb-2">Thank You for Your Booking!</h2>
+            <p className="text-gray-600 text-sm mb-6">
+              Your booking request for <span className="font-bold text-red-600">{bookingSuccessData.serviceName}</span> has been received successfully!
+            </p>
+
+            {bookingSuccessData.vehiclePlate && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Vehicle Plate</p>
+                <p className="text-lg font-black font-mono text-gray-800">{bookingSuccessData.vehiclePlate}</p>
+              </div>
+            )}
+
+            {/* Note Box for Staff */}
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 text-left shadow-sm">
+              <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <span>📝</span> Add a Note for Staff (Optional)
+              </label>
+              <p className="text-[11px] text-amber-700 mb-2">
+                Need any special instructions or preferences? Let our staff know:
+              </p>
+              <textarea
+                value={customerNote}
+                onChange={(e) => setCustomerNote(e.target.value)}
+                rows={2}
+                disabled={noteSaved}
+                className="w-full p-2.5 text-xs text-gray-900 bg-white border border-amber-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none disabled:bg-gray-100 disabled:text-gray-500"
+                placeholder="e.g. Please pay special attention to interior vacuuming..."
+              />
+              <button
+                type="button"
+                disabled={isSavingNote || noteSaved}
+                onClick={async () => {
+                  if (!bookingSuccessData?.orderId && !customerNote.trim()) return;
+                  setIsSavingNote(true);
+                  try {
+                    if (bookingSuccessData?.orderId) {
+                      await axios.patch(`/api/public/orders/${bookingSuccessData.orderId}/note`, { note: customerNote });
+                    }
+                    setNoteSaved(true);
+                    toast.success('Note sent to staff! Thank you.', { icon: '📝' });
+                  } catch (err) {
+                    console.error('Note update error:', err);
+                    toast.error('Could not save note. Please try again.');
+                  } finally {
+                    setIsSavingNote(false);
+                  }
+                }}
+                className={`w-full mt-2 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1 ${
+                  noteSaved 
+                    ? 'bg-green-600 text-white cursor-default' 
+                    : 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm active:scale-95'
+                }`}
+              >
+                {noteSaved ? '✓ Note Sent to Staff' : isSavingNote ? 'Saving...' : '💾 Send Note to Staff'}
+              </button>
+            </div>
+
+            {/* Extra Services Dropdown */}
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 mb-6 text-left shadow-sm">
+              <button
+                type="button"
+                onClick={() => setIsExtraServicesOpen(!isExtraServicesOpen)}
+                className="w-full flex items-center justify-between font-bold text-xs text-purple-900 uppercase tracking-wider focus:outline-none"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span>✨</span> Extra Services (Optional)
+                </span>
+                <span className="text-sm">{isExtraServicesOpen ? '▲' : '▼'}</span>
+              </button>
+
+              {isExtraServicesOpen && (
+                <div className="mt-3 space-y-2 pt-2 border-t border-purple-200">
+                  {extraServicesList.length > 0 ? (
+                    extraServicesList.map((service) => (
+                      <label key={service.id} className="flex items-center justify-between p-2 rounded-xl bg-white border border-purple-100 hover:border-purple-300 cursor-pointer transition">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedExtraServices.includes(service.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedExtraServices([...selectedExtraServices, service.id]);
+                              } else {
+                                setSelectedExtraServices(selectedExtraServices.filter(id => id !== service.id));
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                          />
+                          <span className="text-xs font-bold text-gray-800">{service.name}</span>
+                        </div>
+                        <span className="text-xs font-black text-purple-700">AED {parseFloat(service.price).toLocaleString()}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 text-center py-2">No extra services available right now.</p>
+                  )}
+
+                  {extraServicesList.length > 0 && (
+                    <button
+                      type="button"
+                      disabled={selectedExtraServices.length === 0}
+                      onClick={async () => {
+                        if (!bookingSuccessData?.orderId || selectedExtraServices.length === 0) return;
+                        try {
+                          await axios.post(`/api/public/orders/${bookingSuccessData.orderId}/extra-services`, { service_ids: selectedExtraServices });
+                          toast.success('Extra services added to your order! Total updated.', { icon: '✨' });
+                        } catch (err) {
+                          console.error('Error adding extra services:', err);
+                          toast.error('Failed to add extra services.');
+                        }
+                      }}
+                      className="w-full mt-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95"
+                    >
+                      ✓ Save Selected Extra Services
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  const plate = bookingSuccessData.vehiclePlate || localStorage.getItem('sniper_customer_plate');
+                  setBookingSuccessData(null);
+                  if (plate) {
+                    window.location.href = `/?plate=${encodeURIComponent(plate)}`;
+                  } else {
+                    window.location.href = '/';
+                  }
+                }}
+                className="w-full py-3.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-2xl transition shadow-lg shadow-red-500/20 active:scale-95 text-base flex items-center justify-center gap-2"
+              >
+                <span>🏠</span> Return to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

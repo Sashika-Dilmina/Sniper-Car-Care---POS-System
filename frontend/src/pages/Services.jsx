@@ -50,7 +50,7 @@ const Services = () => {
   const fetchServices = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/products?category=Services');
+      const response = await axios.get('/api/products');
       setServices(response.data.products || []);
     } catch (error) {
       toast.error('Failed to load services');
@@ -157,15 +157,20 @@ const Services = () => {
       return;
     }
 
+    let categoryVal = formData.category || 'Services';
+    if (activeTab === 'Saloon Extra Service') categoryVal = 'Saloon Extra Service';
+    else if (activeTab === '4x4 Extra Service') categoryVal = '4x4 Extra Service';
+
     const serviceData = {
       name: formData.name,
       description: formData.description,
-      category: 'Services',
+      category: categoryVal,
       price: parseFloat(formData.price),
       purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0,
       stock: 0,
       image_url: formData.image_url,
-      vehicle_type: formData.vehicle_type
+      vehicle_type: formData.vehicle_type,
+      is_active: editingService ? (editingService.is_active !== undefined ? editingService.is_active : 1) : 1
     };
 
     try {
@@ -189,6 +194,7 @@ const Services = () => {
     setFormData({
       name: service.name,
       description: service.description || '',
+      category: service.category || 'Services',
       price: service.price,
       purchase_price: service.purchase_price || '',
       vehicle_type: service.vehicle_type || 'Saloon',
@@ -197,12 +203,22 @@ const Services = () => {
     setShowModal(true);
   };
 
+  const handleToggleActive = async (service) => {
+    try {
+      await axios.patch(`/api/products/${service.id}/toggle-active`);
+      toast.success(`Service ${service.is_active === 0 ? 'activated' : 'deactivated'}`);
+      fetchServices();
+    } catch (error) {
+      toast.error('Failed to toggle active status');
+    }
+  };
+
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this service package? This will remove it from the customer websites.')) return;
+    if (!window.confirm('Are you sure you want to permanently delete this service?')) return;
 
     try {
       await axios.delete(`/api/products/${id}`);
-      toast.success('Service deleted successfully');
+      toast.success('Service permanently deleted');
       fetchServices();
     } catch (error) {
       toast.error('Failed to delete service');
@@ -214,16 +230,30 @@ const Services = () => {
     setFormData({
       name: '',
       description: '',
+      category: activeTab.includes('Extra Service') ? activeTab : 'Services',
       price: '',
       purchase_price: '',
-      vehicle_type: activeTab,
+      vehicle_type: activeTab.includes('4x4') ? '4x4' : 'Saloon',
       image_url: ''
     });
   };
 
-  const filteredServices = services.filter(
-    (service) => service.vehicle_type === activeTab
-  );
+  const filteredServices = services.filter((service) => {
+    if (activeTab === 'Saloon Extra Service') {
+      return service.category === 'Saloon Extra Service' || (service.category === 'Extra Service' && (service.vehicle_type === 'Saloon' || service.vehicle_type === 'Both'));
+    }
+    if (activeTab === '4x4 Extra Service') {
+      return service.category === '4x4 Extra Service' || (service.category === 'Extra Service' && service.vehicle_type === '4x4');
+    }
+    return (
+      service.category !== 'Saloon Extra Service' &&
+      service.category !== '4x4 Extra Service' &&
+      service.category !== 'Extra Service' &&
+      service.category !== 'Car Freshner' &&
+      service.category !== 'Acce' &&
+      (service.vehicle_type === activeTab || service.vehicle_type === 'Both' || !service.vehicle_type)
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -249,13 +279,13 @@ const Services = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-gray-200 overflow-x-auto">
         <button
           onClick={() => {
             setActiveTab('Saloon');
             setFormData(prev => ({ ...prev, vehicle_type: 'Saloon' }));
           }}
-          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all duration-200 ${
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
             activeTab === 'Saloon'
               ? 'border-primary-600 text-primary-600 bg-primary-50/50 rounded-t-lg'
               : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -268,13 +298,39 @@ const Services = () => {
             setActiveTab('4x4');
             setFormData(prev => ({ ...prev, vehicle_type: '4x4' }));
           }}
-          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all duration-200 ${
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
             activeTab === '4x4'
               ? 'border-primary-600 text-primary-600 bg-primary-50/50 rounded-t-lg'
               : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           }`}
         >
           🚙 4x4 Services
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('Saloon Extra Service');
+            setFormData(prev => ({ ...prev, vehicle_type: 'Saloon' }));
+          }}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
+            activeTab === 'Saloon Extra Service'
+              ? 'border-primary-600 text-primary-600 bg-primary-50/50 rounded-t-lg'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          ⚡ Saloon Extra Services
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('4x4 Extra Service');
+            setFormData(prev => ({ ...prev, vehicle_type: '4x4' }));
+          }}
+          className={`py-3 px-6 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
+            activeTab === '4x4 Extra Service'
+              ? 'border-primary-600 text-primary-600 bg-primary-50/50 rounded-t-lg'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          ⚡ 4x4 Extra Services
         </button>
       </div>
 
@@ -287,7 +343,7 @@ const Services = () => {
           {filteredServices.map((service) => (
             <div
               key={service.id}
-              className="bg-white rounded-xl border border-gray-150 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex flex-col group"
+              className={`bg-white rounded-xl border border-gray-150 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex flex-col group ${service.is_active === 0 ? 'opacity-70 bg-gray-50' : ''}`}
             >
               <div className="relative h-44 bg-gray-100 overflow-hidden shrink-0 border-b">
                 {service.image_url ? (
@@ -322,25 +378,43 @@ const Services = () => {
               
               <div className="p-5 flex flex-col flex-grow justify-between">
                 <div>
-                  <h3 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-primary-600 transition-colors">
-                    {service.name}
-                  </h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-primary-600 transition-colors">
+                      {service.name}
+                    </h3>
+                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                      service.is_active !== 0 ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-200 text-gray-700 border-gray-300'
+                    }`}>
+                      {service.is_active !== 0 ? '👁️ Active' : '👁️‍🗨️ Hidden'}
+                    </span>
+                  </div>
                   <p className="text-gray-500 text-sm mt-2 line-clamp-3 leading-relaxed">
                     {service.description || <span className="italic">No description provided.</span>}
                   </p>
                 </div>
 
                 {user?.role === 'admin' && (
-                  <div className="flex justify-end gap-3 pt-5 mt-4 border-t border-gray-100">
+                  <div className="flex justify-end items-center gap-2 pt-5 mt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => handleToggleActive(service)}
+                      className={`px-3 py-1.5 text-xs font-semibold border rounded-lg transition flex items-center gap-1 ${
+                        service.is_active !== 0
+                          ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
+                          : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
+                      }`}
+                      title={service.is_active !== 0 ? 'Visible on website (Click to hide)' : 'Hidden from website (Click to show)'}
+                    >
+                      {service.is_active !== 0 ? '👁️ Active' : '👁️‍🗨️ Inactive'}
+                    </button>
                     <button
                       onClick={() => handleEdit(service)}
-                      className="px-3.5 py-1.5 text-sm font-semibold border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                      className="px-3 py-1.5 text-xs font-semibold border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDelete(service.id)}
-                      className="px-3.5 py-1.5 text-sm font-semibold border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
+                      className="px-3 py-1.5 text-xs font-semibold border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
                     >
                       Delete
                     </button>
@@ -404,7 +478,7 @@ const Services = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+                <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                     Vehicle Type
                   </label>
@@ -416,7 +490,21 @@ const Services = () => {
                   >
                     <option value="Saloon">Saloon</option>
                     <option value="4x4">4x4</option>
+                    <option value="Both">Both (Saloon & 4x4)</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Category
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
+                    placeholder="Services, Offer, VIP..."
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">

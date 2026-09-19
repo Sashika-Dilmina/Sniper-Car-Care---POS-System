@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import axios from '../config/axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
@@ -37,6 +37,7 @@ const Dashboard = () => {
   const [openingBalanceInput, setOpeningBalanceInput] = useState('');
   const [closedAmountInput, setClosedAmountInput] = useState('');
   const [registerNotes, setRegisterNotes] = useState('');
+  const [registerCloseError, setRegisterCloseError] = useState('');
 
   const fetchRegisterStatus = async () => {
     try {
@@ -90,6 +91,7 @@ const Dashboard = () => {
     // Rely on backend register check which correctly filters pending orders by the active register open date
 
     try {
+      setRegisterCloseError('');
       const resp = await axios.post('/api/registers/close', {
         closed_amount: parseFloat(closedAmountInput),
         notes: registerNotes
@@ -98,20 +100,26 @@ const Dashboard = () => {
         toast.success('Register closed successfully.');
         setClosedAmountInput('');
         setRegisterNotes('');
+        setRegisterCloseError('');
         setShowCloseRegisterModal(false);
         fetchRegisterStatus();
         navigate(`/reports?tab=registers&print_register_id=${resp.data.register_id}`);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to close register');
+      const errMsg = err.response?.data?.message || 'Failed to close register';
+      setRegisterCloseError(errMsg);
+      toast.error(errMsg, { duration: 6000 });
     }
   };
 
   const calculateDuration = (service) => {
-    if (!service.started_at || !service.completed_at) return null;
-    const start = new Date(service.started_at);
-    const end = new Date(service.completed_at);
+    const startedAt = service.started_at || service.service_started_at || service.created_at;
+    const completedAt = service.completed_at || service.service_completed_at;
+    if (!startedAt || !completedAt) return null;
+    const start = new Date(startedAt);
+    const end = new Date(completedAt);
     const diffMs = end - start;
+    if (diffMs <= 0) return 0;
     const diffMins = Math.round(diffMs / 60000);
     return diffMins;
   };
@@ -124,15 +132,16 @@ const Dashboard = () => {
     }
     const hours = Math.floor(mins / 60);
     const minutes = mins % 60;
-      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   };
 
-  const calculateElapsedTime = (startedAt, completedAt) => {
-    if (!startedAt) return '0 min';
-    const start = new Date(startedAt);
+  const calculateElapsedTime = (startedAt, completedAt, createdAt) => {
+    const effectiveStart = startedAt || createdAt;
+    if (!effectiveStart) return '0 min';
+    const start = new Date(effectiveStart);
     const end = completedAt ? new Date(completedAt) : new Date();
     const diffMs = end - start;
-    if (diffMs < 0) return '0 min';
+    if (diffMs <= 0) return '0 min';
     const diffMins = Math.floor(diffMs / 60000);
     
     if (diffMins < 60) {
@@ -218,17 +227,21 @@ const Dashboard = () => {
     }
   };
 
+  const currentFetchIdRef = useRef(0);
+
   const fetchAnalytics = async (silent = false, start = startDate, end = endDate) => {
+    const requestId = ++currentFetchIdRef.current;
     if (!silent) setLoading(true);
     try {
       const response = await axios.get(`/api/analytics/dashboard?start_date=${start}&end_date=${end}`);
-      console.log('Analytics response:', response.data);
+      if (requestId !== currentFetchIdRef.current) return;
       if (response.data) {
         setAnalytics(response.data);
       } else {
         if (!silent) toast.error('No analytics data received');
       }
     } catch (error) {
+      if (requestId !== currentFetchIdRef.current) return;
       console.error('Analytics error:', error);
       if (!silent) {
         if (error.response?.status === 401) {
@@ -239,7 +252,6 @@ const Dashboard = () => {
           toast.error(error.response?.data?.message || 'Failed to load analytics');
         }
       }
-      // Set default empty data structure so page still renders
       setAnalytics({
         summary: { total_card_payments: 0, total_cash_payments: 0, total_profit: 0, four_wheel_orders: 0, saloon_orders: 0, completed_services: 0, total_customers: 0, pending_amount: 0, pending_count: 0 },
         top_customers: [],
@@ -250,7 +262,9 @@ const Dashboard = () => {
         recent_feedback: []
       });
     } finally {
-      if (!silent) setLoading(false);
+      if (requestId === currentFetchIdRef.current) {
+        if (!silent) setLoading(false);
+      }
     }
   };
 
@@ -355,7 +369,10 @@ const Dashboard = () => {
             <div className="flex gap-2">
               {activeRegister ? (
                 <button
-                  onClick={() => setShowCloseRegisterModal(true)}
+                  onClick={() => {
+                    setRegisterCloseError('');
+                    setShowCloseRegisterModal(true);
+                  }}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition"
                 >
                   🔒 Close Register
@@ -381,7 +398,7 @@ const Dashboard = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Card Payments</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  AED {(summary.total_card_payments || 0).toLocaleString()}
+                  AED {(summary.total_card_payments || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -390,7 +407,7 @@ const Dashboard = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Cash Payments</p>
                 <p className="text-2xl font-bold text-green-600">
-                  AED {(summary.total_cash_payments || 0).toLocaleString()}
+                  AED {(summary.total_cash_payments || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -399,7 +416,7 @@ const Dashboard = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Profit</p>
                 <p className="text-2xl font-bold text-gray-800">
-                  AED {(summary.total_profit || 0).toLocaleString()}
+                  AED {(summary.total_profit || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -637,7 +654,7 @@ const Dashboard = () => {
                   topCustomers.map((customer) => (
                     <tr key={customer.id} className="border-b hover:bg-gray-50">
                       <td className="p-2">{customer.name}</td>
-                      <td className="p-2">{customer.vehicle_plate}</td>
+                      <td className="p-2 notranslate" translate="no">{customer.vehicle_plate}</td>
                       <td className="p-2 text-right">{customer.order_count}</td>
                       <td className="p-2 text-right">
                         AED {parseFloat(customer.total_spent).toLocaleString()}
@@ -668,8 +685,7 @@ const Dashboard = () => {
               <thead>
                 <tr className="border-b">
                   <th className="text-left p-2">Order ID</th>
-                  <th className="text-left p-2">Customer</th>
-                  <th className="text-left p-2">Vehicle Plate</th>
+                  <th className="text-left p-2">Number Plate</th>
                   <th className="text-left p-2">Items</th>
                   <th className="text-right p-2">Total</th>
                   <th className="text-left p-2">Status</th>
@@ -693,8 +709,7 @@ const Dashboard = () => {
                             </span>
                           )}
                         </td>
-                        <td className="p-2">{order.customer_name || 'Walk-in'}</td>
-                        <td className="p-2 font-mono">{order.vehicle_plate || 'N/A'}</td>
+                        <td className="p-2 font-bold font-mono notranslate text-gray-900" translate="no">{order.vehicle_plate || 'N/A'}</td>
                         <td className="p-2">
                           {order.items && order.items.length > 0 ? (
                             <div className="flex flex-col gap-1 max-w-xs truncate">
@@ -715,10 +730,14 @@ const Dashboard = () => {
                           </span>
                         </td>
                         <td className="p-2">
-                          {order.credit_status ? (
+                          {order.payment_status === 'credit' ? (
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                              Credit
+                            </span>
+                          ) : order.credit_status ? (
                             order.credit_status === 'unpaid' ? (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800 font-semibold">
-                                Credit / Unpaid
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                                Credit
                               </span>
                             ) : order.credit_status === 'partially_paid' ? (
                               <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-800 font-semibold">
@@ -730,7 +749,7 @@ const Dashboard = () => {
                               </span>
                             )
                           ) : (
-                            <span className={`px-2 py-0.5 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : order.payment_status === 'free' ? 'bg-blue-100 text-blue-800 font-semibold uppercase' : 'bg-red-100 text-red-800'}`}>
                               {order.payment_status}
                             </span>
                           )}
@@ -782,7 +801,7 @@ const Dashboard = () => {
                     <td className="p-2">{customer.name}</td>
                     <td className="p-2">{customer.phone}</td>
                     <td className="p-2">{customer.vehicle_type || 'N/A'}</td>
-                    <td className="p-2">{customer.vehicle_plate || 'N/A'}</td>
+                    <td className="p-2 notranslate" translate="no">{customer.vehicle_plate || 'N/A'}</td>
                     <td className="p-2 text-right">{customer.joined_date}</td>
                   </tr>
                 ))
@@ -841,7 +860,9 @@ const Dashboard = () => {
                     )}
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <span>
-                        {feedback.vehicle_plate ? `Plate: ${feedback.vehicle_plate}` :
+                        {feedback.vehicle_plate ? (
+                          <>Plate: <span className="notranslate" translate="no">{feedback.vehicle_plate}</span></>
+                        ) :
                           feedback.customer_phone ? `Phone: ${feedback.customer_phone}` :
                             'Anonymous'}
                       </span>
@@ -892,7 +913,7 @@ const Dashboard = () => {
                         <td className="p-2 font-semibold text-gray-800">
                           {service.customer_name || <span className="text-gray-400 italic font-normal">Walk-in</span>}
                         </td>
-                        <td className="p-2 font-mono text-sm">{service.vehicle_plate || 'N/A'}</td>
+                        <td className="p-2 font-mono text-sm notranslate" translate="no">{service.vehicle_plate || 'N/A'}</td>
                         <td className="p-2">{service.service_name}</td>
                         <td className="p-2 text-center text-xs text-gray-500">
                           {service.started_at ? new Date(service.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A'}
@@ -977,6 +998,11 @@ const Dashboard = () => {
           <div className="bg-white rounded-lg max-w-lg w-full p-6 shadow-xl overflow-y-auto max-h-[90vh]">
             <h3 className="text-lg font-bold text-gray-900 mb-4 font-black text-left">Close Cash Register</h3>
             
+            {registerCloseError && (
+              <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded text-red-800 text-xs font-bold leading-relaxed text-left">
+                ⚠️ {registerCloseError}
+              </div>
+            )}
             {registerReport && (
               <div className="bg-gray-50 p-4 rounded-lg border text-sm space-y-2 mb-4 text-left">
                 <div className="flex justify-between">
@@ -996,7 +1022,7 @@ const Dashboard = () => {
                   <span className="font-semibold text-green-600">AED {parseFloat(registerReport.free_wash_amount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2 text-xs text-gray-500">
-                  <span>Other Sales (Card, Bank, Tap):</span>
+                  <span>Card, Bank, TAP Sales:</span>
                   <span>AED {(registerReport.card_payments.total + registerReport.bank_transfer + registerReport.other_payments).toFixed(2)}</span>
                 </div>
               </div>

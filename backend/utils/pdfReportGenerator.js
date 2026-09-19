@@ -251,6 +251,7 @@ function generatePDFReport(tab, data, params, outputPath) {
         currentY = drawRow('Net Sales', `AED ${parseFloat(summary.net_sales || 0).toFixed(2)}`, currentY, true);
         currentY = drawRow('  - Cash Sales', `AED ${parseFloat(summary.cash_sales || 0).toFixed(2)}`, currentY);
         currentY = drawRow('  - Card Sales', `AED ${parseFloat(summary.card_sales || 0).toFixed(2)}`, currentY);
+        currentY = drawRow('  - TAP Sales', `AED ${parseFloat(summary.tap_sales || 0).toFixed(2)}`, currentY);
         currentY = drawRow('  - Credit Sales', `AED ${parseFloat(summary.credit_sales || 0).toFixed(2)}`, currentY);
         currentY = drawRow('  - Bank Transfer Sales', `AED ${parseFloat(summary.bank_transfer_sales || 0).toFixed(2)}`, currentY);
         currentY = drawRow('Cost of Goods/Services Sold', `AED ${parseFloat(summary.total_cost || 0).toFixed(2)}`, currentY, true);
@@ -270,7 +271,8 @@ function generatePDFReport(tab, data, params, outputPath) {
         currentY = drawRow('  - Bank Recoveries', `AED ${parseFloat(summary.bank_recovery || 0).toFixed(2)}`, currentY);
         currentY = drawRow('Total Inventory Purchases', `AED ${parseFloat(summary.total_purchases || 0).toFixed(2)}`, currentY);
         currentY = drawRow('Total Business Expenses', `AED ${parseFloat(summary.total_expenses || 0).toFixed(2)}`, currentY);
-        currentY = drawRow('Free Washes Total', `AED ${parseFloat(summary.free_wash_total || 0).toFixed(2)} (${summary.free_wash_count || 0} washes)`, currentY);
+        currentY = drawRow('Saloon Free Wash', `AED ${parseFloat(summary.saloon_free_wash_total || 0).toFixed(2)} (${summary.saloon_free_wash_count || 0} washes)`, currentY);
+        currentY = drawRow('4*4 Free Wash', `AED ${parseFloat(summary.fourx4_free_wash_total || 0).toFixed(2)} (${summary.fourx4_free_wash_count || 0} washes)`, currentY);
 
         currentY += 20;
 
@@ -505,6 +507,22 @@ function generatePDFReport(tab, data, params, outputPath) {
             profit: parseFloat(item.profit).toFixed(2)
           }));
 
+          // Add summary totals row
+          const totalQty = items.reduce((sum, item) => sum + parseInt(item.quantity || 0), 0);
+          const totalSelling = items.reduce((sum, item) => sum + parseFloat(item.selling_price || 0), 0);
+          const totalNet = items.reduce((sum, item) => sum + parseFloat(item.net_price || 0), 0);
+          const totalCost = items.reduce((sum, item) => sum + parseFloat(item.cost_price || 0), 0);
+          const totalProfit = items.reduce((sum, item) => sum + parseFloat(item.profit || 0), 0);
+
+          rows.push({
+            name: 'TOTAL',
+            quantity: totalQty.toString(),
+            selling: totalSelling.toFixed(2),
+            net: totalNet.toFixed(2),
+            cost: totalCost.toFixed(2),
+            profit: totalProfit.toFixed(2)
+          });
+
           newY = drawTableHeaders(headers, cols, newY);
           return drawTableRows(rows, cols, newY) + 20;
         };
@@ -551,7 +569,7 @@ function generatePDFReport(tab, data, params, outputPath) {
         currentY = drawRow('  - Card Credit Recoveries', `AED ${parseFloat(report.card_payments.recovery).toFixed(3)}`, currentY);
         currentY = drawRow('Cheque Sales', `AED ${parseFloat(report.cheque_payments).toFixed(3)}`, currentY);
         currentY = drawRow('Bank Transfer Sales', `AED ${parseFloat(report.bank_transfer).toFixed(3)}`, currentY);
-        currentY = drawRow('Other Sales (Apple/Samsung/Tap)', `AED ${parseFloat(report.other_payments).toFixed(3)}`, currentY);
+        currentY = drawRow('TAP Sales', `AED ${parseFloat(report.other_payments).toFixed(3)}`, currentY);
         currentY = drawRow('Credit Sales', `AED ${parseFloat(report.credit_sales).toFixed(3)}`, currentY);
         currentY = drawRow('Free Washes Amount', `AED ${parseFloat(report.free_wash_amount || 0).toFixed(3)}`, currentY);
         currentY = drawRow('Total Register Sales', `AED ${parseFloat(report.total_sales).toFixed(3)}`, currentY, true);
@@ -572,6 +590,11 @@ function generatePDFReport(tab, data, params, outputPath) {
   });
 }
 
+/**
+ * Generates an Invoice PDF for an order.
+ * @param {object} order - The order object with items, customer details, and totals
+ * @param {string} outputPath - Path to write the PDF file
+ */
 function generateInvoicePDF(order, outputPath) {
   return new Promise((resolve, reject) => {
     try {
@@ -579,132 +602,135 @@ function generateInvoicePDF(order, outputPath) {
       const writeStream = fs.createWriteStream(outputPath);
       doc.pipe(writeStream);
 
-      // Colors
       const primaryColor = '#1e3a8a'; // Deep blue
       const secondaryColor = '#eab308'; // Amber/Gold
       const darkColor = '#1f2937'; // Dark charcoal
-      const grayLine = '#e5e7eb'; // Light gray line
+      const lightBg = '#f9fafb'; // Light gray background
       const white = '#ffffff';
 
       // Header Banner
-      doc.rect(0, 0, 595.28, 90).fill(darkColor);
-      
+      doc.rect(0, 0, 595.28, 85).fill(darkColor);
+
       doc.fillColor(secondaryColor)
          .fontSize(22)
          .font('Helvetica-Bold')
-         .text('SNIPER CAR CARE', 40, 22);
-         
+         .text('SNIPER CAR CARE', 40, 20);
+
       doc.fillColor(white)
-         .fontSize(9)
+         .fontSize(10)
          .font('Helvetica')
-         .text('ANPR POS & AUTOMATED VEHICLE CARE SYSTEM', 40, 48);
+         .text('AUTO DETAILING & CAR CARE CENTER', 40, 48);
 
       doc.fillColor(white)
-         .fontSize(16)
+         .fontSize(18)
          .font('Helvetica-Bold')
-         .text('TAX INVOICE', 400, 30, { align: 'right', width: 155 });
+         .text('INVOICE / RECEIPT', 380, 25, { align: 'right', width: 175 });
 
-      let currentY = 110;
+      doc.fillColor(secondaryColor)
+         .fontSize(12)
+         .font('Helvetica-Bold')
+         .text(`#${order.id}`, 380, 48, { align: 'right', width: 175 });
 
-      // Invoice Details Block (Grid layout)
-      doc.fillColor(darkColor).fontSize(10).font('Helvetica-Bold').text('Invoice To:', 40, currentY);
-      doc.font('Helvetica-Bold').text('Invoice Details:', 350, currentY);
-      
-      currentY += 15;
-      
-      doc.font('Helvetica').fillColor('#4b5563');
-      doc.text(`Customer: ${order.customer_name || 'Walk-in Customer'}`, 40, currentY);
-      doc.text(`Invoice No: #INV-${order.id}`, 350, currentY);
-      
-      currentY += 15;
-      
-      doc.text(`Phone: ${order.customer_phone || order.phone || 'N/A'}`, 40, currentY);
-      doc.text(`Date: ${new Date(order.created_at).toLocaleString()}`, 350, currentY);
-      
-      currentY += 15;
-      
-      doc.text(`Plate: ${order.vehicle_plate || 'N/A'}`, 40, currentY);
-      doc.text(`Payment: ${order.payment_method?.toUpperCase()} (${order.payment_status?.toUpperCase()})`, 350, currentY);
+      let currentY = 105;
 
-      currentY += 15;
-      doc.text(`Vehicle: ${order.vehicle_type || 'N/A'}`, 40, currentY);
+      // Meta Info Box (Customer & Vehicle Info + Order Info)
+      doc.rect(40, currentY, 515, 95).fill(lightBg).stroke('#e5e7eb');
 
-      currentY += 30;
+      // Left Column: Customer & Vehicle Details
+      doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text('CUSTOMER & VEHICLE DETAILS', 55, currentY + 12);
+      doc.fillColor(darkColor).fontSize(9).font('Helvetica');
+      doc.text(`Customer Name: ${order.customer_name || 'Walk-in Customer'}`, 55, currentY + 30);
+      doc.text(`Phone: ${order.customer_phone || 'N/A'}`, 55, currentY + 45);
+      doc.text(`Plate Number: ${order.vehicle_plate || 'N/A'}`, 55, currentY + 60);
+      doc.text(`Vehicle Type: ${order.vehicle_type || 'N/A'}`, 55, currentY + 75);
 
-      // Draw horizontal dividing line
-      doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor(grayLine).lineWidth(1).stroke();
+      // Right Column: Invoice Info
+      doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text('ORDER INFORMATION', 320, currentY + 12);
+      doc.fillColor(darkColor).fontSize(9).font('Helvetica');
+      const orderDate = order.created_at ? new Date(order.created_at).toLocaleString() : new Date().toLocaleString();
+      doc.text(`Date: ${orderDate}`, 320, currentY + 30);
+      doc.text(`Order Status: ${(order.status || 'completed').toUpperCase()}`, 320, currentY + 45);
+      doc.text(`Payment Status: ${(order.payment_status || 'paid').toUpperCase()}`, 320, currentY + 60);
+      doc.text(`Payment Method: ${(order.payment_method || order.method || 'Cash').toUpperCase()}`, 320, currentY + 75);
 
-      currentY += 20;
+      currentY += 115;
 
-      // Table Header
-      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(10);
-      doc.text('Item Description', 40, currentY);
-      doc.text('Qty', 320, currentY, { width: 30, align: 'center' });
-      doc.text('Price (AED)', 380, currentY, { width: 80, align: 'right' });
-      doc.text('Total (AED)', 470, currentY, { width: 85, align: 'right' });
+      // Items Table Header
+      doc.rect(40, currentY, 515, 25).fill(primaryColor);
+      doc.fillColor(white).fontSize(10).font('Helvetica-Bold');
+      doc.text('ITEM / SERVICE', 50, currentY + 7);
+      doc.text('CATEGORY', 270, currentY + 7);
+      doc.text('QTY', 370, currentY + 7, { width: 40, align: 'center' });
+      doc.text('PRICE (AED)', 420, currentY + 7, { width: 60, align: 'right' });
+      doc.text('TOTAL (AED)', 485, currentY + 7, { width: 60, align: 'right' });
 
-      currentY += 15;
-      doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor(grayLine).lineWidth(0.5).stroke();
-      currentY += 10;
+      currentY += 25;
 
-      // Table Items
-      doc.font('Helvetica').fillColor('#374151');
+      // Items Rows
       const items = order.items || [];
-      let subtotal = 0;
+      if (items.length === 0) {
+        doc.rect(40, currentY, 515, 25).fill(white).stroke('#e5e7eb');
+        doc.fillColor(darkColor).fontSize(9).font('Helvetica').text('No item details recorded', 50, currentY + 8);
+        currentY += 25;
+      } else {
+        items.forEach((item, index) => {
+          const rowBg = index % 2 === 0 ? white : lightBg;
+          doc.rect(40, currentY, 515, 24).fill(rowBg).stroke('#f3f4f6');
 
-      for (const item of items) {
-        const itemQty = parseInt(item.quantity || 1);
-        const itemPrice = parseFloat(item.price || 0);
-        const itemTotal = itemQty * itemPrice;
-        subtotal += itemTotal;
+          const qty = item.quantity || 1;
+          const unitPrice = parseFloat(item.price || item.unit_price || 0);
+          const lineTotal = unitPrice * qty;
 
-        // Check page overflow
-        if (currentY > 720) {
-          doc.addPage();
-          currentY = 40;
-        }
+          doc.fillColor(darkColor).fontSize(9).font('Helvetica');
+          doc.text(item.product_name || item.name || 'Service', 50, currentY + 7, { width: 210, ellipsis: true });
+          doc.text(item.category || 'Service', 270, currentY + 7, { width: 90, ellipsis: true });
+          doc.text(String(qty), 370, currentY + 7, { width: 40, align: 'center' });
+          doc.text(unitPrice.toFixed(2), 420, currentY + 7, { width: 60, align: 'right' });
+          doc.font('Helvetica-Bold').text(lineTotal.toFixed(2), 485, currentY + 7, { width: 60, align: 'right' });
 
-        doc.text(item.product_name || 'N/A', 40, currentY, { width: 260 });
-        doc.text(itemQty.toString(), 320, currentY, { width: 30, align: 'center' });
-        doc.text(itemPrice.toFixed(2), 380, currentY, { width: 80, align: 'right' });
-        doc.text(itemTotal.toFixed(2), 470, currentY, { width: 85, align: 'right' });
-
-        currentY += 20;
+          currentY += 24;
+        });
       }
 
-      currentY += 10;
-      doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor(grayLine).lineWidth(1).stroke();
       currentY += 15;
 
-      // Summary Section (align right)
-      const summaryX = 350;
-      const valX = 470;
-      const valWidth = 85;
+      // Summary Section
+      const itemsTotal = items.reduce((acc, i) => acc + (parseFloat(i.price || i.unit_price || 0) * (i.quantity || 1)), 0);
+      const discount = parseFloat(order.discount || 0);
+      const grandTotal = parseFloat(order.total !== undefined && order.total !== null ? order.total : itemsTotal - discount);
+      const subtotal = grandTotal + discount;
 
-      doc.font('Helvetica').fillColor('#4b5563');
-      doc.text('Subtotal:', summaryX, currentY);
-      doc.text(`AED ${subtotal.toFixed(2)}`, valX, currentY, { width: valWidth, align: 'right' });
-      
-      currentY += 15;
-      doc.text('Discount:', summaryX, currentY);
-      doc.text(`AED ${parseFloat(order.discount || 0).toFixed(2)}`, valX, currentY, { width: valWidth, align: 'right' });
+      // Summary Box on Right Side
+      doc.rect(330, currentY, 225, 75).fill(lightBg).stroke('#d1d5db');
+      let summaryY = currentY + 10;
 
-      currentY += 15;
-      doc.moveTo(summaryX, currentY).lineTo(555, currentY).strokeColor(grayLine).lineWidth(0.5).stroke();
-      currentY += 10;
+      doc.fillColor(darkColor).fontSize(9).font('Helvetica');
+      doc.text('Subtotal:', 345, summaryY);
+      doc.text(`AED ${subtotal.toFixed(2)}`, 450, summaryY, { width: 90, align: 'right' });
+      summaryY += 16;
 
-      doc.font('Helvetica-Bold').fillColor(primaryColor).fontSize(12);
-      doc.text('Total Amount:', summaryX, currentY);
-      doc.text(`AED ${parseFloat(order.total || 0).toFixed(2)}`, valX, currentY, { width: valWidth, align: 'right' });
+      if (discount > 0) {
+        doc.fillColor('#dc2626').text('Discount:', 345, summaryY);
+        doc.text(`- AED ${discount.toFixed(2)}`, 450, summaryY, { width: 90, align: 'right' });
+        summaryY += 16;
+      }
 
-      // Thank you message
-      currentY += 60;
-      doc.fillColor('#9ca3af')
-         .fontSize(9)
-         .font('Helvetica-Oblique')
-         .text('Thank you for choosing Sniper Car Care!', 40, currentY, { align: 'center', width: 515 });
+      doc.font('Helvetica-Bold').fontSize(11).fillColor(primaryColor);
+      doc.text('Grand Total:', 345, summaryY);
+      doc.text(`AED ${grandTotal.toFixed(2)}`, 450, summaryY, { width: 90, align: 'right' });
 
-      doc.text('For support or booking, contact us on +971 50 855 4405', 40, currentY + 15, { align: 'center', width: 515 });
+      // Notes if available
+      if (order.notes) {
+        doc.fillColor(darkColor).fontSize(9).font('Helvetica-Bold').text('Notes:', 40, currentY + 10);
+        doc.font('Helvetica-Oblique').fontSize(8).fillColor('#4b5563').text(String(order.notes), 40, currentY + 24, { width: 270 });
+      }
+
+      currentY += 90;
+
+      // Footer Banner
+      doc.rect(40, currentY, 515, 30).fill('#1f2937');
+      doc.fillColor(secondaryColor).fontSize(10).font('Helvetica-Bold')
+         .text('Thank you for choosing Sniper Car Care!', 40, currentY + 10, { align: 'center', width: 515 });
 
       doc.end();
       writeStream.on('finish', () => resolve(outputPath));

@@ -96,13 +96,17 @@ const updateExpense = asyncHandler(async (req, res) => {
 // @access  Private (Admin)
 const deleteExpense = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { reason } = req.body;
 
   const [expenses] = await pool.query('SELECT id FROM expenses WHERE id = ?', [id]);
   if (expenses.length === 0) {
     return res.status(404).json({ success: false, message: 'Expense record not found' });
   }
 
-  await pool.query('DELETE FROM expenses WHERE id = ?', [id]);
+  await pool.query(
+    'UPDATE expenses SET is_deleted = 1, delete_reason = ? WHERE id = ?',
+    [reason || 'No reason specified', id]
+  );
   res.json({ success: true, message: 'Expense record deleted successfully' });
 });
 

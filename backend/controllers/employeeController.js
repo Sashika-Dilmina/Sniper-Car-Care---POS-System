@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 // @access  Private (Admin only)
 const getEmployees = asyncHandler(async (req, res) => {
   const [employees] = await pool.query(`
-    SELECT id, name, email, role, created_at, updated_at
+    SELECT id, name, email, role, is_deleted, delete_reason, created_at, updated_at
     FROM users
     WHERE role IN ('admin', 'staff')
     ORDER BY created_at DESC
@@ -133,13 +133,17 @@ const updateEmployee = asyncHandler(async (req, res) => {
 // @access  Private (Admin only)
 const deleteEmployee = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { reason } = req.body;
 
   const [employees] = await pool.query('SELECT id FROM users WHERE id = ?', [id]);
   if (employees.length === 0) {
     return res.status(404).json({ message: 'Employee not found' });
   }
 
-  await pool.query('DELETE FROM users WHERE id = ?', [id]);
+  await pool.query(
+    'UPDATE users SET is_deleted = 1, delete_reason = ? WHERE id = ?',
+    [reason || 'No reason specified', id]
+  );
 
   res.json({ message: 'Employee deleted successfully' });
 });

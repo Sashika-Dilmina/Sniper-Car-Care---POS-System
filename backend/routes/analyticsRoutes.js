@@ -35,7 +35,7 @@ router.get('/reports/supplier-payments', authorize('admin'), getSupplierPaymentR
 router.get('/reports/purchases', authorize('admin'), getPurchasesReport);
 router.get('/reports/profit-loss', authorize('admin'), getProfitLossReport);
 router.get('/reports/stock', authorize('admin'), getStockReport);
-router.get('/reports/commission', authorize('admin'), getCommissionReport);
+router.get('/reports/commission', authorize('admin', 'staff'), getCommissionReport);
 router.get('/reports/service-sales', authorize('admin'), getServiceSalesReport);
 
 module.exports = router;

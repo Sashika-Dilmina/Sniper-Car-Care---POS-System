@@ -489,6 +489,7 @@ const Reports = () => {
     { id: 'service_sales', label: 'Service Sales Report' },
   ] : [
     { id: 'registers', label: 'Cash Register Sessions' },
+    { id: 'commission', label: 'Commission Report' },
   ];
 
   const handleWhatsAppShare = async () => {
@@ -771,33 +772,33 @@ const Reports = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Orders</p>
-                  <p className="text-2xl font-bold">{dailyReport.orders?.total_orders || 0}</p>
+                  <p className="text-2xl font-bold notranslate">{dailyReport.orders?.total_orders || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Sales</p>
-                  <p className="text-2xl font-bold text-primary-600">
+                  <p className="text-2xl font-bold text-primary-600 notranslate">
                     AED {parseFloat(dailyReport.orders?.total_sales !== undefined ? dailyReport.orders.total_sales : dailyReport.orders?.total_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Services</p>
-                  <p className="text-2xl font-bold">{dailyReport.services?.total_services || 0}</p>
+                  <p className="text-2xl font-bold notranslate">{dailyReport.services?.total_services || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Services Sales</p>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-2xl font-bold text-green-600 notranslate">
                     AED {parseFloat(dailyReport.services?.services_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600 notranslate" translate="no">Saloon Free Washes</p>
-                  <p className="text-2xl font-bold text-indigo-600">
+                  <p className="text-sm text-gray-600">Saloon Free Washes</p>
+                  <p className="text-2xl font-bold text-indigo-600 notranslate">
                     AED {parseFloat(dailyReport.orders?.saloon_free_washes_value || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">4x4 Free Washes</p>
-                  <p className="text-2xl font-bold text-purple-600">
+                  <p className="text-2xl font-bold text-purple-600 notranslate">
                     AED {parseFloat(dailyReport.orders?.four_wheel_free_washes_value || 0).toLocaleString()}
                   </p>
                 </div>
@@ -831,35 +832,107 @@ const Reports = () => {
                 </div>
               )}
 
-              {dailyReport.top_products && dailyReport.top_products.length > 0 && (
+              {/* Top Services & Products Sections */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Saloon Services */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <h3 className="text-lg font-semibold mb-3">Top Saloon Services</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-2 text-left">Product</th>
-                          <th className="px-4 py-2 text-left">Category</th>
-                          <th className="px-4 py-2 text-right">Quantity</th>
-                          <th className="px-4 py-2 text-right">Revenue</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Service</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {dailyReport.top_products.map((product, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="px-4 py-2">{product.name}</td>
-                            <td className="px-4 py-2">{product.category}</td>
-                            <td className="px-4 py-2 text-right">{product.quantity_sold}</td>
-                            <td className="px-4 py-2 text-right">
-                              AED {parseFloat(product.revenue || 0).toLocaleString()}
-                            </td>
+                        {dailyReport.top_services_saloon && dailyReport.top_services_saloon.length > 0 ? (
+                          dailyReport.top_services_saloon.map((service, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{service.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{service.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(service.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No saloon services sold</td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>
                 </div>
-              )}
+
+                {/* 4x4 Services */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Top 4x4 Services</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Service</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyReport.top_services_4x4 && dailyReport.top_services_4x4.length > 0 ? (
+                          dailyReport.top_services_4x4.map((service, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{service.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{service.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(service.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No 4x4 services sold</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Physical Products */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Product</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyReport.top_products && dailyReport.top_products.length > 0 ? (
+                          dailyReport.top_products.map((product, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{product.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{product.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(product.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No products sold</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -928,9 +1001,16 @@ const Reports = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {paymentReport.payment_methods.map((pm, idx) => (
+                        {paymentReport.payment_methods.map((pm, idx) => {
+                          const displayMethod = (m) => {
+                            if (m === 'saloon_free') return 'Saloon Free Wash';
+                            if (m === '4x4_free') return '4x4 Free Wash';
+                            if (m === 'tap') return 'TAP';
+                            return m.charAt(0).toUpperCase() + m.slice(1);
+                          };
+                          return (
                           <tr key={idx} className="border-b">
-                            <td className="px-4 py-2 capitalize">{pm.method}</td>
+                            <td className="px-4 py-2 font-semibold">{displayMethod(pm.method)}</td>
                             <td className="px-4 py-2 text-right">{pm.transaction_count}</td>
                             <td className="px-4 py-2 text-right">{pm.completed_count}</td>
                             <td className="px-4 py-2 text-right">{pm.pending_count}</td>
@@ -939,7 +1019,8 @@ const Reports = () => {
                               AED {parseFloat(pm.total_amount || 0).toLocaleString()}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1297,6 +1378,10 @@ const Reports = () => {
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.card_sales || 0).toFixed(3)}</span>
                       </div>
                       <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">TAP Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.tap_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
                         <span className="text-gray-500">Credit Sale</span>
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.credit_sales || 0).toFixed(3)}</span>
                       </div>
@@ -1367,8 +1452,12 @@ const Reports = () => {
                     <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Other Activities:</h3>
                     <div className="space-y-1.5 pl-2">
                       <div className="flex justify-between">
-                        <span className="text-gray-700">Free Washes Value</span>
-                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.free_wash_total || 0).toFixed(3)} ({plReport.summary.free_wash_count || 0} washes)</span>
+                        <span className="text-gray-700">Saloon Free Wash</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.saloon_free_wash_total || 0).toFixed(3)} ({plReport.summary.saloon_free_wash_count || 0} washes)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">4*4 Free Wash</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.fourx4_free_wash_total || 0).toFixed(3)} ({plReport.summary.fourx4_free_wash_count || 0} washes)</span>
                       </div>
                     </div>
                   </div>
@@ -1489,8 +1578,17 @@ const Reports = () => {
           </div>
 
           {commissionReport && (
-            <div className="space-y-0 print-full-width">
-              <div className="overflow-x-auto border border-gray-200 rounded-lg mt-4">
+            <div className="space-y-6 print-full-width">
+              {/* Report Header */}
+              <div className="text-center border-b pb-4 mb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <p className="text-sm font-semibold text-gray-500">Business Location: Kalba Sharjah</p>
+                <h2 className="text-xl font-bold mt-2">Commission Report</h2>
+                <p className="text-sm text-gray-600">
+                  Period: {commissionStartDate} to {commissionEndDate}
+                </p>
+              </div>
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b">
@@ -1642,8 +1740,17 @@ const Reports = () => {
           </div>
 
           {serviceSalesReport && (
-            <div className="space-y-0 print-full-width">
-              <div className="overflow-x-auto border border-gray-200 rounded-lg mt-4">
+            <div className="space-y-6 print-full-width">
+              {/* Report Header */}
+              <div className="text-center border-b pb-4 mb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <p className="text-sm font-semibold text-gray-500">Business Location: Kalba Sharjah</p>
+                <h2 className="text-xl font-bold mt-2">Service Wise Report</h2>
+                <p className="text-sm text-gray-600">
+                  Period: {serviceSalesStartDate} to {serviceSalesEndDate}
+                </p>
+              </div>
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b">
@@ -1676,6 +1783,27 @@ const Reports = () => {
                         <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No Saloon services found</td>
                       </tr>
                     )}
+                    {/* Saloon Total Row */}
+                    {serviceSalesReport.saloon && serviceSalesReport.saloon.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
 
                     {/* Spacer */}
                     <tr className="border-b">
@@ -1702,6 +1830,27 @@ const Reports = () => {
                         <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No 4x4 services found</td>
                       </tr>
                     )}
+                    {/* 4x4 Total Row */}
+                    {serviceSalesReport.fourx4 && serviceSalesReport.fourx4.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
 
                     {/* Spacer */}
                     <tr className="border-b">
@@ -1726,6 +1875,27 @@ const Reports = () => {
                     ) : (
                       <tr className="border-b">
                         <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No VIP services found</td>
+                      </tr>
+                    )}
+                    {/* VIP Total Row */}
+                    {serviceSalesReport.vip && serviceSalesReport.vip.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -2142,7 +2312,7 @@ const Reports = () => {
                     <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Other Sale</span>
+                    <span>TAP Sale</span>
                     <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -2168,6 +2338,15 @@ const Reports = () => {
                   <div className="flex justify-between font-bold">
                     <span>Cash In Drawer</span>
                     <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Staff Return</span>
+                    <span>
+                      {(selectedRegisterReport.closed_amount !== null
+                        ? selectedRegisterReport.closed_amount
+                        : 0.00
+                      ).toFixed(3)}
+                    </span>
                   </div>
                   <div className="flex justify-between font-bold">
                     <span>Difference Amount</span>
@@ -2220,7 +2399,7 @@ const Reports = () => {
               <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Other Sale</span>
+              <span>TAP Sale</span>
               <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
@@ -2246,6 +2425,15 @@ const Reports = () => {
             <div className="flex justify-between font-bold">
               <span>Cash In Drawer</span>
               <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Staff Return</span>
+              <span>
+                {(selectedRegisterReport.closed_amount !== null
+                  ? selectedRegisterReport.closed_amount
+                  : 0.00
+                ).toFixed(3)}
+              </span>
             </div>
             <div className="flex justify-between font-bold">
               <span>Difference Amount</span>

@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
+const { ensureBathaqueLoyalty, getBathaqueLoyalty } = require('../utils/bathaqueLoyalty');
 
 // @desc    Get all customers
 // @route   GET /api/customers
@@ -12,16 +13,19 @@ const getCustomers = asyncHandler(async (req, res) => {
            COUNT(DISTINCT o.id) as total_orders,
            COALESCE(SUM(o.total), 0) as total_spent,
            COALESCE(l.points, 0) as loyalty_points,
-           COALESCE(l.wash_stamps, 0) as wash_stamps,
-           (SELECT p2.method 
-            FROM payments p2 
-            INNER JOIN orders o2 ON p2.order_id = o2.id
-            WHERE o2.customer_id = c.id 
-            ORDER BY p2.created_at DESC 
-            LIMIT 1) as last_payment_method
+           COALESCE(bl.wash_stamps, l.wash_stamps, 0) as wash_stamps,
+           (
+             SELECT p2.method 
+             FROM payments p2 
+             JOIN orders o2 ON p2.order_id = o2.id 
+             WHERE o2.customer_id = c.id 
+             ORDER BY p2.id DESC 
+             LIMIT 1
+           ) as last_payment_method
     FROM customers c
-    LEFT JOIN orders o ON c.id = o.customer_id
+    LEFT JOIN orders o ON c.id = o.customer_id AND (o.is_deleted = 0 OR o.is_deleted IS NULL) AND o.status != 'cancelled'
     LEFT JOIN loyalty l ON c.id = l.customer_id
+    LEFT JOIN bathaque_loyalty bl ON c.bathaque_id = bl.bathaque_id
     WHERE 1=1
   `;
   const params = [];
@@ -49,7 +53,7 @@ const getCustomers = asyncHandler(async (req, res) => {
   }
 
   if (sort_loyalty && sort_loyalty !== 'all') {
-    orderClauses.push(`loyalty_points ${sort_loyalty === 'asc' ? 'ASC' : 'DESC'}`);
+    orderClauses.push(`wash_stamps ${sort_loyalty === 'asc' ? 'ASC' : 'DESC'}`);
   }
 
   // If no sorting is specified, default to most recent customers
@@ -72,14 +76,33 @@ const getCustomer = asyncHandler(async (req, res) => {
 
   const [customers] = await pool.query(`
     SELECT c.*, 
-           COALESCE(l.points, 0) as loyalty_points
+           COALESCE(l.points, 0) as loyalty_points,
+           COALESCE(bl.wash_stamps, l.wash_stamps, 0) as wash_stamps,
+           COALESCE(bl.total_washes, 0) as bathaque_total_washes,
+           COALESCE(bl.free_washes_earned, 0) as bathaque_free_washes_earned,
+           COALESCE(bl.free_washes_redeemed, 0) as bathaque_free_washes_redeemed
     FROM customers c
     LEFT JOIN loyalty l ON c.id = l.customer_id
+    LEFT JOIN bathaque_loyalty bl ON c.bathaque_id = bl.bathaque_id
     WHERE c.id = ?
   `, [id]);
 
   if (customers.length === 0) {
     return res.status(404).json({ message: 'Customer not found' });
+  }
+
+  const customer = customers[0];
+
+  // If customer has a bathaque_id, fetch any other vehicles linked to the same bathaque_id
+  let linkedVehicles = [];
+  if (customer.bathaque_id) {
+    const [linked] = await pool.query(
+      `SELECT id, name, phone, vehicle_plate, vehicle_type, province 
+       FROM customers 
+       WHERE bathaque_id = ? AND id != ? AND (is_deleted = 0 OR is_deleted IS NULL)`,
+      [customer.bathaque_id, id]
+    );
+    linkedVehicles = linked;
   }
 
   // Get customer orders with credit status
@@ -94,7 +117,7 @@ const getCustomer = asyncHandler(async (req, res) => {
     [id]
   );
 
-  res.json({ customer: customers[0], orders });
+  res.json({ customer: { ...customer, linked_vehicles: linkedVehicles }, orders });
 });
 
 // Helper to parse Plate string into Emirate, Code and Plate Number
@@ -149,7 +172,8 @@ function parsePlateComponents(plateStr) {
 // @route   POST /api/customers
 // @access  Private
 const createCustomer = asyncHandler(async (req, res) => {
-  const { name, phone, vehicle_plate, vehicle_type, province } = req.body;
+  const { name, phone, vehicle_plate, vehicle_type, province, bathaque_id } = req.body;
+  const cleanBathaqueId = bathaque_id ? bathaque_id.toString().trim() : null;
 
   let finalPlate = vehicle_plate;
   if (req.body.plate_code && req.body.emirate && req.body.plate_number) {
@@ -173,8 +197,8 @@ const createCustomer = asyncHandler(async (req, res) => {
   const finalProvince = province || req.body.emirate || null;
 
   const [result] = await pool.query(
-    'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
-    [name, phone, finalPlate, vehicle_type, finalProvince]
+    'INSERT INTO customers (name, phone, bathaque_id, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?, ?)',
+    [name, phone, cleanBathaqueId, finalPlate, vehicle_type, finalProvince]
   );
 
   // Parse components and insert into vehicles table
@@ -191,6 +215,15 @@ const createCustomer = asyncHandler(async (req, res) => {
   // Initialize loyalty points
   await pool.query('INSERT INTO loyalty (customer_id, points) VALUES (?, ?)', [result.insertId, 0]);
 
+  // Ensure Bathaque loyalty row if ID is provided
+  if (cleanBathaqueId) {
+    try {
+      await ensureBathaqueLoyalty(pool, cleanBathaqueId);
+    } catch (bErr) {
+      console.error('[Bathaque] Failed to ensure loyalty row:', bErr.message);
+    }
+  }
+
   const [newCustomer] = await pool.query('SELECT * FROM customers WHERE id = ?', [result.insertId]);
 
   res.status(201).json({ message: 'Customer created successfully', customer: newCustomer[0] });
@@ -201,7 +234,8 @@ const createCustomer = asyncHandler(async (req, res) => {
 // @access  Private
 const updateCustomer = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, phone, vehicle_plate, vehicle_type, province } = req.body;
+  const { name, phone, vehicle_plate, vehicle_type, province, bathaque_id } = req.body;
+  const cleanBathaqueId = bathaque_id !== undefined ? (bathaque_id ? bathaque_id.toString().trim() : null) : undefined;
 
   const [customers] = await pool.query('SELECT id FROM customers WHERE id = ?', [id]);
   if (customers.length === 0) {
@@ -214,10 +248,34 @@ const updateCustomer = asyncHandler(async (req, res) => {
   }
   const finalProvince = province || req.body.emirate || null;
 
-  await pool.query(
-    'UPDATE customers SET name = ?, phone = ?, vehicle_plate = ?, vehicle_type = ?, province = ? WHERE id = ?',
-    [name, phone, finalPlate, vehicle_type, finalProvince, id]
+  // Check if another customer has the same plate
+  const [existingCheck] = await pool.query(
+    'SELECT id FROM customers WHERE vehicle_plate = ? AND id != ?',
+    [finalPlate, id]
   );
+
+  if (existingCheck.length > 0) {
+    return res.status(400).json({ message: 'Another customer with this vehicle plate already exists' });
+  }
+
+  if (cleanBathaqueId !== undefined) {
+    await pool.query(
+      'UPDATE customers SET name = ?, phone = ?, bathaque_id = ?, vehicle_plate = ?, vehicle_type = ?, province = ? WHERE id = ?',
+      [name, phone, cleanBathaqueId, finalPlate, vehicle_type, finalProvince, id]
+    );
+    if (cleanBathaqueId) {
+      try {
+        await ensureBathaqueLoyalty(pool, cleanBathaqueId);
+      } catch (bErr) {
+        console.error('[Bathaque] Failed to ensure loyalty row on update:', bErr.message);
+      }
+    }
+  } else {
+    await pool.query(
+      'UPDATE customers SET name = ?, phone = ?, vehicle_plate = ?, vehicle_type = ?, province = ? WHERE id = ?',
+      [name, phone, finalPlate, vehicle_type, finalProvince, id]
+    );
+  }
 
   // Sync vehicles table
   const { plateCode, emirate: parsedEmirate, plateNumber } = parsePlateComponents(finalPlate);
@@ -247,13 +305,17 @@ const updateCustomer = asyncHandler(async (req, res) => {
 // @access  Private (Admin only)
 const deleteCustomer = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { reason } = req.body;
 
   const [customers] = await pool.query('SELECT id FROM customers WHERE id = ?', [id]);
   if (customers.length === 0) {
     return res.status(404).json({ message: 'Customer not found' });
   }
 
-  await pool.query('DELETE FROM customers WHERE id = ?', [id]);
+  await pool.query(
+    'UPDATE customers SET is_deleted = 1, delete_reason = ? WHERE id = ?',
+    [reason || 'No reason specified', id]
+  );
 
   res.json({ message: 'Customer deleted successfully' });
 });

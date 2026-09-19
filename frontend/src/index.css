@@ -35,3 +35,20 @@ code {
   }
 }
 
+/* Google Translate Layout Overrides */
+body {
+  top: 0px !important;
+  position: static !important;
+}
+
+.goog-te-banner-frame,
+iframe.goog-te-banner-frame,
+.goog-te-balloon-frame {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+.goog-te-spinner-pos {
+  display: none !important;
+}
+

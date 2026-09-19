@@ -71,31 +71,41 @@ const createOrder = asyncHandler(async (req, res) => {
     }
 
     if (!finalCustomerId && customer_name && customer_phone && vehicle_plate) {
-      try {
-        const [newCustomer] = await connection.query(
-          'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
-          [customer_name, customer_phone, vehicle_plate, vehicleType, province]
-        );
-        finalCustomerId = newCustomer.insertId;
+      // Check if customer with same plate exists
+      const [existing] = await connection.query(
+        'SELECT id FROM customers WHERE vehicle_plate = ?',
+        [vehicle_plate]
+      );
+      
+      if (existing.length > 0) {
+        finalCustomerId = existing[0].id;
+      } else {
         try {
-          await ensureLoyaltyRow(connection, finalCustomerId);
-        } catch (loyaltyInitErr) {
-          if (loyaltyInitErr.code !== 'ER_BAD_FIELD_ERROR') {
-            throw loyaltyInitErr;
-          }
-        }
-      } catch (error) {
-        // If customer already exists (duplicate vehicle_plate), try to fetch it
-        if (error.code === 'ER_DUP_ENTRY') {
-          const [customers] = await connection.query(
-            'SELECT id FROM customers WHERE vehicle_plate = ?',
-            [vehicle_plate]
+          const [newCustomer] = await connection.query(
+            'INSERT INTO customers (name, phone, vehicle_plate, vehicle_type, province) VALUES (?, ?, ?, ?, ?)',
+            [customer_name, customer_phone, vehicle_plate, vehicleType, province]
           );
-          if (customers.length > 0) {
-            finalCustomerId = customers[0].id;
+          finalCustomerId = newCustomer.insertId;
+          try {
+            await ensureLoyaltyRow(connection, finalCustomerId);
+          } catch (loyaltyInitErr) {
+            if (loyaltyInitErr.code !== 'ER_BAD_FIELD_ERROR') {
+              throw loyaltyInitErr;
+            }
           }
-        } else {
-          throw error;
+        } catch (error) {
+          // If customer already exists (duplicate vehicle_plate), try to fetch it
+          if (error.code === 'ER_DUP_ENTRY') {
+            const [customers] = await connection.query(
+              'SELECT id FROM customers WHERE vehicle_plate = ?',
+              [vehicle_plate]
+            );
+            if (customers.length > 0) {
+              finalCustomerId = customers[0].id;
+            }
+          } else {
+            throw error;
+          }
         }
       }
     }
@@ -138,9 +148,29 @@ const createOrder = asyncHandler(async (req, res) => {
       orderNotes = orderNotes ? `${customerInfo}\n${orderNotes}` : customerInfo;
     }
 
-    // Create order with notes
+    // Deduplication check: prevent creating duplicate order within 10 seconds
+    const [recentOrders] = await connection.query(`
+      SELECT id FROM orders 
+      WHERE ((customer_id IS NOT NULL AND customer_id = ?) OR (notes IS NOT NULL AND notes LIKE ?))
+        AND total = ? 
+        AND created_at >= TIMESTAMPADD(SECOND, -10, CURRENT_TIMESTAMP)
+      ORDER BY id DESC LIMIT 1
+    `, [finalCustomerId || 0, `%${vehicle_plate || 'NOMATCH'}%`, total]);
+
+    if (recentOrders.length > 0) {
+      const [existing] = await connection.query('SELECT * FROM orders WHERE id = ?', [recentOrders[0].id]);
+      await connection.commit();
+      connection.release();
+      return res.status(200).json({
+        message: 'Order created successfully',
+        order: existing[0],
+        deduplicated: true
+      });
+    }
+
+    // Create order with notes and initial service_started_at timestamp
     const [orderResult] = await connection.query(
-      'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, notes, service_started_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
       [
         finalCustomerId || null,
         total,
@@ -195,11 +225,13 @@ const createOrder = asyncHandler(async (req, res) => {
 
         let serviceName = 'Car Care Service';
         if (notes && notes.includes('One-Tap Booking via Website - ')) {
-          serviceName = notes.replace('One-Tap Booking via Website - ', '');
+          serviceName = notes.replace('One-Tap Booking via Website - ', '').split('(')[0].trim();
         } else if (notes) {
           serviceName = notes;
         }
 
+        /*
+        // Free wash rewards logic temporarily commented out
         if (currentStamps >= 5) {
           const { calculateFreeWashCap } = require('../utils/freeWashCap');
           const cap = await calculateFreeWashCap(connection, finalCustomerId);
@@ -240,12 +272,13 @@ const createOrder = asyncHandler(async (req, res) => {
             );
           }
         } else {
+        */
           // Paid booking, do not increment stamps yet!
           await connection.query(
             'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, order_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [finalCustomerId, serviceName, vehicleType, total, notes, status || 'pending', orderId]
           );
-        }
+        // }
       } catch (loyaltyErr) {
         if (loyaltyErr.code !== 'ER_BAD_FIELD_ERROR') {
           throw loyaltyErr;
@@ -348,23 +381,27 @@ const confirmOrder = asyncHandler(async (req, res) => {
     const isPendingPayment = payment_method === 'cash' || payment_method === 'card';
     const paymentStatus = isPendingPayment ? 'pending' : 'paid';
 
+    // Fetch existing order status
+    const [existingOrders] = await connection.query('SELECT status, service_completed_at FROM orders WHERE id = ?', [order_id]);
+    const isAlreadyCompleted = existingOrders.length > 0 && existingOrders[0].status === 'completed';
+
     // Check if order contains only products
     const [items] = await connection.query(
       'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
       [order_id]
     );
     const hasService = items.length === 0 || items.some(item => item.category === 'Services');
-    const targetStatus = hasService ? 'processing' : 'completed';
-    const serviceCompletedAt = hasService ? null : new Date();
+    const targetStatus = isAlreadyCompleted ? 'completed' : (hasService ? 'processing' : 'completed');
+    const serviceCompletedAt = targetStatus === 'completed' ? (existingOrders[0]?.service_completed_at || new Date()) : null;
 
     // Update order status and set service_started_at / service_completed_at
     await connection.query(
-      'UPDATE orders SET status = ?, payment_status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+      'UPDATE orders SET status = ?, payment_status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = COALESCE(?, service_completed_at) WHERE id = ?',
       [targetStatus, paymentStatus, serviceCompletedAt, order_id]
     );
 
-    // Also update associated services to 'in_progress' if the order has service items
-    if (hasService) {
+    // Also update associated services to 'in_progress' if the order has service items and is not already completed
+    if (hasService && !isAlreadyCompleted) {
       await connection.query(
         'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
         [order_id]
@@ -455,23 +492,27 @@ const confirmPayment = asyncHandler(async (req, res) => {
           [order_id, amount, method || 'card', 'completed', payment_intent_id]
         );
 
+        // Fetch existing order status
+        const [existingOrders] = await connection.query('SELECT status, service_completed_at FROM orders WHERE id = ?', [order_id]);
+        const isAlreadyCompleted = existingOrders.length > 0 && existingOrders[0].status === 'completed';
+
         // Check if order contains only products
         const [items] = await connection.query(
           'SELECT oi.*, p.category FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
           [order_id]
         );
         const hasService = items.length === 0 || items.some(item => item.category === 'Services');
-        const targetStatus = hasService ? 'processing' : 'completed';
-        const serviceCompletedAt = hasService ? null : new Date();
+        const targetStatus = isAlreadyCompleted ? 'completed' : (hasService ? 'processing' : 'completed');
+        const serviceCompletedAt = targetStatus === 'completed' ? (existingOrders[0]?.service_completed_at || new Date()) : null;
 
         // Update order payment status and set status
         await connection.query(
-          'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = ? WHERE id = ?',
+          'UPDATE orders SET payment_status = ?, status = ?, service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP), service_completed_at = COALESCE(?, service_completed_at) WHERE id = ?',
           ['paid', targetStatus, serviceCompletedAt, order_id]
         );
 
-        // Also update associated services to 'in_progress' if the order has service items
-        if (hasService) {
+        // Also update associated services to 'in_progress' if the order has service items and is not already completed
+        if (hasService && !isAlreadyCompleted) {
           await connection.query(
             'UPDATE services SET status = "in_progress", started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE order_id = ?',
             [order_id]
@@ -500,6 +541,11 @@ const confirmPayment = asyncHandler(async (req, res) => {
       } catch (error) {
         await connection.rollback();
         connection.release();
+        if (error.code === 'ER_DUP_ENTRY') {
+          return res.json({
+            message: 'Payment confirmed successfully'
+          });
+        }
         throw error;
       }
     } else {
@@ -510,11 +556,120 @@ const confirmPayment = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Update order note from customer website Thank You page
+// @route   PATCH /api/public/orders/:id/note or PUT /api/public/orders/:id/note
+// @access  Public
+const updateOrderNote = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { notes, note } = req.body;
+  let noteText = (notes !== undefined ? notes : note) || '';
+
+  const [orders] = await pool.query('SELECT id, notes FROM orders WHERE id = ?', [id]);
+  if (orders.length === 0) {
+    return res.status(404).json({ message: 'Order not found' });
+  }
+
+  let updatedNote = noteText.trim();
+  // Strip old default prefix "One-Tap Booking via Website - ..."
+  if (updatedNote.includes('One-Tap Booking via Website - ')) {
+    updatedNote = updatedNote.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim();
+  }
+
+  await pool.query('UPDATE orders SET notes = ? WHERE id = ?', [updatedNote || null, id]);
+
+  res.json({
+    success: true,
+    message: 'Note updated successfully',
+    notes: updatedNote
+  });
+});
+
+// @desc    Add extra services to order from Thank You page dropdown
+// @route   POST /api/public/orders/:id/extra-services
+// @access  Public
+const addExtraServices = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { service_ids, items } = req.body; // array of product IDs or objects
+
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
+
+  try {
+    const [orders] = await connection.query('SELECT id, total FROM orders WHERE id = ?', [id]);
+    if (orders.length === 0) {
+      connection.release();
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    let productIds = [];
+    if (Array.isArray(service_ids)) {
+      productIds = service_ids;
+    } else if (Array.isArray(items)) {
+      productIds = items.map(i => typeof i === 'object' ? i.id || i.product_id : i);
+    }
+
+    let addedTotal = 0;
+    const addedItems = [];
+
+    if (productIds.length > 0) {
+      const [products] = await connection.query(
+        'SELECT id, name, price FROM products WHERE id IN (?)',
+        [productIds]
+      );
+
+      for (const p of products) {
+        // Prevent duplicate order items for same extra service
+        const [existing] = await connection.query(
+          'SELECT id FROM order_items WHERE order_id = ? AND product_id = ?',
+          [id, p.id]
+        );
+
+        if (existing.length === 0) {
+          const itemPrice = parseFloat(p.price) || 0;
+          await connection.query(
+            'INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, 1, ?)',
+            [id, p.id, itemPrice]
+          );
+          addedTotal += itemPrice;
+          addedItems.push({ product_id: p.id, product_name: p.name, price: itemPrice });
+        }
+      }
+
+      if (addedTotal > 0) {
+        await connection.query(
+          'UPDATE orders SET total = total + ? WHERE id = ?',
+          [addedTotal, id]
+        );
+      }
+    }
+
+    await connection.commit();
+    connection.release();
+
+    const [updatedOrder] = await pool.query('SELECT id, total FROM orders WHERE id = ?', [id]);
+
+    res.json({
+      success: true,
+      message: 'Extra services added successfully',
+      added_total: addedTotal,
+      new_total: updatedOrder[0]?.total,
+      items: addedItems
+    });
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+    throw error;
+  }
+});
+
 module.exports = {
   createOrder,
   getOrder,
   confirmOrder,
   createPaymentIntent,
-  confirmPayment
+  confirmPayment,
+  updateOrderNote,
+  addExtraServices
 };
+
 

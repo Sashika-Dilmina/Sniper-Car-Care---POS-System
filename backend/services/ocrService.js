@@ -58,8 +58,10 @@ async function extractPlate(filePath) {
     // Hikvision ANPR cameras often overlay "Plate No.: XXXXX Vehicle Color:" on the image.
     // By removing all spaces, we can catch it even if it breaks across lines.
     const noSpaceText = text.replace(/\s+/g, '');
-    const overlayMatch = noSpaceText.match(/PlateNo\.?[:\s]*([A-Za-z0-9\-]+?)(?:Vehicle|Uehicle|Color|Type)/i);
+    const overlayMatch = noSpaceText.match(/PlateNo\.?[:\s]*([A-Za-z0-9\-]+?)(?:Vehicle|Uehicle|Color|Type|Country|Region|Direction|Validity|Size|Province|Category|Plate|Device|Capture|Time|Moving|Camera)/i);
     
+    const isPlateCrop = path.basename(filePath).toLowerCase().includes('plate');
+
     if (overlayMatch && overlayMatch[1] && overlayMatch[1].length >= 3) {
       let extractedFromOverlay = overlayMatch[1].toUpperCase();
       
@@ -68,6 +70,10 @@ async function extractPlate(filePath) {
         console.log(`[OCR] 🎯 Successfully extracted plate from Camera AI Overlay: ${extractedFromOverlay}`);
         return extractedFromOverlay;
       } else {
+        if (!isPlateCrop) {
+          console.warn(`[OCR] Camera AI Overlay reports UNKNOWN on full vehicle picture. Skipping raw OCR fallback to avoid noise.`);
+          return null;
+        }
         console.warn(`[OCR] Camera AI Overlay reports UNKNOWN. Falling back to raw text extraction...`);
       }
     }
@@ -113,6 +119,14 @@ async function extractPlate(filePath) {
 
     if (cleanedPlate.length > 30) {
       console.warn(`[OCR] Cleaned candidate too long (noise): ${cleanedPlate.substring(0, 30)}...`);
+      return null;
+    }
+
+    // Strict UAE Plate Format Validation to filter out random OCR gibberish noise
+    const cleanedPlateNoSpace = cleanedPlate.replace(/\s+/g, '');
+    const isValidFormat = /^(?:[A-Z]{1,3}|\d{1,2})?\d{3,6}$/.test(cleanedPlateNoSpace);
+    if (!isValidFormat) {
+      console.warn(`[OCR] Cleaned candidate does not match valid UAE plate format: ${cleanedPlate}`);
       return null;
     }
 

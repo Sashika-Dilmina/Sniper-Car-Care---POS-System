@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
-const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 right-6' }) => {
-  const [currentLang, setCurrentLang] = useState(localStorage.getItem('user_lang') || 'en');
+const LanguageSelector = ({ variant = 'floating', positionClass = 'top-5 right-6' }) => {
+  const [currentLang, setCurrentLang] = useState(localStorage.getItem('user_lang') || 'ar');
 
   // Apply document direction and language layout
   useEffect(() => {
@@ -13,6 +13,28 @@ const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 righ
       document.documentElement.lang = 'en';
     }
   }, [currentLang]);
+
+  // Set default language to Arabic on first load
+  useEffect(() => {
+    if (!localStorage.getItem('user_lang')) {
+      localStorage.setItem('user_lang', 'ar');
+      const setCookie = (name, value, days) => {
+        let expires = "";
+        if (days) {
+          const date = new Date();
+          date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+          expires = "; expires=" + date.toUTCString();
+        }
+        document.cookie = name + "=" + (value || "") + expires + "; path=/;";
+        const hostParts = window.location.hostname.split('.');
+        if (hostParts.length > 1) {
+          const domain = hostParts.slice(-2).join('.');
+          document.cookie = name + "=" + (value || "") + expires + "; path=/; domain=." + domain + ";";
+        }
+      };
+      setCookie('googtrans', '/en/ar', 365);
+    }
+  }, []);
 
   // Keep checking if translation needs to be triggered on mount/load
   useEffect(() => {
@@ -27,36 +49,14 @@ const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 righ
       }
     };
 
-    // Try applying translation immediately and periodically
+    // Apply translation once immediately and once after brief load window
     applyTranslation();
-    const interval = setInterval(applyTranslation, 500);
-
-    // Periodically enforce body top layout correction to defeat Google's top: 40px injection
-    const fixGoogleLayout = () => {
-      if (document.body && document.body.style.top !== '0px') {
-        document.body.style.top = '0px';
-      }
-      if (document.body && document.body.style.position !== 'static') {
-        document.body.style.position = 'static';
-      }
-      const frames = document.getElementsByClassName('goog-te-banner-frame');
-      for (let i = 0; i < frames.length; i++) {
-        frames[i].style.display = 'none';
-        frames[i].style.visibility = 'hidden';
-      }
-      const iframes = document.getElementsByTagName('iframe');
-      for (let i = 0; i < iframes.length; i++) {
-        if (iframes[i].className.includes('goog-te-banner-frame') || iframes[i].id.includes('goog-te-banner-frame')) {
-          iframes[i].style.display = 'none';
-          iframes[i].style.visibility = 'hidden';
-        }
-      }
-    };
-    const layoutInterval = setInterval(fixGoogleLayout, 300);
+    const t1 = setTimeout(applyTranslation, 500);
+    const t2 = setTimeout(applyTranslation, 1500);
 
     return () => {
-      clearInterval(interval);
-      clearInterval(layoutInterval);
+      clearTimeout(t1);
+      clearTimeout(t2);
     };
   }, [currentLang]);
 

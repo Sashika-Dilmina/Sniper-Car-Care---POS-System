@@ -35,9 +35,9 @@ const Purchases = () => {
 
   const categories = ['Product', 'Service', 'Equipment', 'Chemicals', 'Other'];
 
-  const fetchData = async () => {
+  const fetchData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [purchasesRes, suppliersRes, productsRes] = await Promise.all([
         axios.get('/api/purchases'),
         axios.get('/api/suppliers'),
@@ -54,14 +54,20 @@ const Purchases = () => {
         setDbProductsList(productsRes.data.products || []);
       }
     } catch (error) {
-      toast.error('Failed to load purchases data');
+      if (!silent) toast.error('Failed to load purchases data');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(false);
+
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 7000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleOpenAddModal = () => {
@@ -160,9 +166,14 @@ const Purchases = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this purchase record?')) return;
+    const reason = window.prompt('Please enter the reason for deleting this purchase record:');
+    if (reason === null) return; // Cancelled
+    if (reason.trim() === '') {
+      toast.error('Deletion cancelled. A reason is required.');
+      return;
+    }
     try {
-      const response = await axios.delete(`/api/purchases/${id}`);
+      const response = await axios.delete(`/api/purchases/${id}`, { data: { reason } });
       if (response.data.success) {
         toast.success('Purchase record deleted');
         fetchData();
@@ -174,26 +185,34 @@ const Purchases = () => {
 
   // Filtered purchases
   const filteredPurchases = purchases.filter(p => {
-    const matchesSearch = p.item_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (p.notes && p.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (!p || typeof p !== 'object') return false;
+
+    const itemName = String(p.item_name || '').toLowerCase();
+    const notes = String(p.notes || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = itemName.includes(q) || notes.includes(q);
     
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     const matchesSupplier = selectedSupplierId === 'All' || String(p.supplier_id) === String(selectedSupplierId);
     
     let matchesDate = true;
+    const pDateStr = String(p.purchase_date || '').slice(0, 10);
     if (startDate && endDate) {
-      const pDate = new Date(p.purchase_date).toISOString().split('T')[0];
-      matchesDate = pDate >= startDate && pDate <= endDate;
+      matchesDate = pDateStr >= startDate && pDateStr <= endDate;
+    } else if (startDate) {
+      matchesDate = pDateStr >= startDate;
+    } else if (endDate) {
+      matchesDate = pDateStr <= endDate;
     }
 
     return matchesSearch && matchesCategory && matchesSupplier && matchesDate;
   });
 
-  // Calculate totals
-  const totalPurchasesCost = filteredPurchases.reduce((sum, p) => sum + parseFloat(p.total_price), 0);
-  const paidPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'paid').reduce((sum, p) => sum + parseFloat(p.total_price), 0);
-  const pendingPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'pending').reduce((sum, p) => sum + parseFloat(p.total_price), 0);
-  const partialPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'partial').reduce((sum, p) => sum + parseFloat(p.total_price), 0);
+  // Calculate totals robustly
+  const totalPurchasesCost = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
+  const paidPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'paid').reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
+  const pendingPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'pending').reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
+  const partialPurchasesCost = filteredPurchases.filter(p => p.payment_status === 'partial').reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -315,13 +334,18 @@ const Purchases = () => {
                 </tr>
               ) : filteredPurchases.length > 0 ? (
                 filteredPurchases.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50/50 transition">
+                  <tr key={p.id} className={`hover:bg-gray-50/50 transition ${p.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {new Date(p.purchase_date).toLocaleDateString('en-GB')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
                       <div>{p.item_name}</div>
                       {p.notes && <div className="text-xs text-gray-400 font-normal mt-0.5">{p.notes}</div>}
+                      {p.is_deleted === 1 && (
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                          Deleted (Reason: {p.delete_reason})
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">
@@ -348,18 +372,22 @@ const Purchases = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-xs capitalize text-gray-600 font-bold">{p.payment_method}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleOpenEditModal(p)}
-                        className="text-primary-600 hover:text-primary-950 font-bold mr-3"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(p.id)}
-                        className="text-red-600 hover:text-red-800 font-bold"
-                      >
-                        Delete
-                      </button>
+                      {p.is_deleted !== 1 && (
+                        <>
+                          <button
+                            onClick={() => handleOpenEditModal(p)}
+                            className="text-primary-600 hover:text-primary-950 font-bold mr-3"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="text-red-600 hover:text-red-800 font-bold"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))

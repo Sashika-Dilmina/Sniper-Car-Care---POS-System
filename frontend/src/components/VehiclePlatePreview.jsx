@@ -7,7 +7,8 @@ const VehiclePlatePreview = ({ emirate, plateCode, plateNumber }) => {
 
   // Arabic equivalents for the Emirates
   const getArabicEmirate = (name) => {
-    switch (name.toLowerCase()) {
+    const safeName = String(name || '').toLowerCase();
+    switch (safeName) {
       case 'dubai': return 'دبي';
       case 'abu dhabi': return 'أبو ظبي';
       case 'sharjah': return 'الشارقة';
