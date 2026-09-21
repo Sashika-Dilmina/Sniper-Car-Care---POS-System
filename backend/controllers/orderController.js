@@ -29,6 +29,17 @@ const getOrders = asyncHandler(async (req, res) => {
              FROM payments p 
              WHERE p.order_id = o.id AND p.status = 'completed'
            ) as payment_methods,
+           (
+             SELECT GROUP_CONCAT(DISTINCT 
+               CASE 
+                 WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'TAP'
+                 WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+                 ELSE p.method
+               END
+             )
+             FROM payments p 
+             WHERE p.order_id = o.id AND p.status = 'completed'
+           ) as payment_method,
            -- Service time: Duration from service start to service completion
            -- Start: o.service_started_at (fallback: o.created_at)
            -- End: o.service_completed_at (if completed) or CURRENT_TIMESTAMP (if in progress)
@@ -171,7 +182,18 @@ const getOrder = asyncHandler(async (req, res) => {
              )
              FROM payments p 
              WHERE p.order_id = o.id AND p.status = 'completed'
-           ) as payment_methods
+           ) as payment_methods,
+           (
+             SELECT GROUP_CONCAT(DISTINCT 
+               CASE 
+                 WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'TAP'
+                 WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+                 ELSE p.method
+               END
+             )
+             FROM payments p 
+             WHERE p.order_id = o.id AND p.status = 'completed'
+           ) as payment_method
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
@@ -225,7 +247,7 @@ const getOrder = asyncHandler(async (req, res) => {
   }
 
   // Get payments
-  const [payments] = await pool.query('SELECT * FROM payments WHERE order_id = ?', [id]);
+  const [payments] = await pool.query('SELECT * FROM payments WHERE order_id = ? ORDER BY created_at ASC', [id]);
   order.payments = payments;
 
   res.json({ order });
@@ -791,7 +813,19 @@ const getOrderInvoicePDF = asyncHandler(async (req, res) => {
            COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
            COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
            cc.status as credit_status,
-           cc.remaining_amount as credit_remaining
+           cc.remaining_amount as credit_remaining,
+           (
+             SELECT GROUP_CONCAT(DISTINCT 
+               CASE 
+                 WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'TAP'
+                 WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+                 WHEN p.method = 'bank_transfer' THEN 'Bank Transfer'
+                 ELSE p.method
+               END
+             )
+             FROM payments p 
+             WHERE p.order_id = o.id AND p.status = 'completed'
+           ) as payment_methods
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id

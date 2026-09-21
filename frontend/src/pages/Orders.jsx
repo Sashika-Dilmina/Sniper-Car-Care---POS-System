@@ -473,8 +473,10 @@ const Orders = () => {
                               'bg-red-100 text-red-800'
                           }`}>
                           {order.payment_status === 'paid' 
-                            ? `Paid (${(order.payment_method || order.method || 'Cash').charAt(0).toUpperCase() + (order.payment_method || order.method || 'Cash').slice(1)})` 
-                            : order.payment_status}
+                            ? 'Paid' 
+                            : order.payment_status === 'free'
+                            ? 'Free'
+                            : (order.payment_status ? order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1) : 'Pending')}
                         </span>
                       )}
                     </td>
