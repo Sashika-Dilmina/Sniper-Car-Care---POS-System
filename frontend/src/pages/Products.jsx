@@ -68,9 +68,9 @@ const Products = () => {
   }, []);
 
   useEffect(() => {
-    // Check for low stock products and show alert (only for Products category)
-    const lowStockProducts = products.filter(product => product.category === 'Products' && product.stock <= 5 && product.stock > 0);
-    const outOfStockProducts = products.filter(product => product.category === 'Products' && product.stock === 0);
+    // Check for low stock products and show alert (only for physical products)
+    const lowStockProducts = products.filter(product => product.stock !== undefined && product.stock !== null && product.stock <= 5 && product.stock > 0);
+    const outOfStockProducts = products.filter(product => product.stock !== undefined && product.stock !== null && product.stock <= 0);
 
     if (lowStockProducts.length > 0) {
       toast.error(`⚠️ Low Stock Alert: ${lowStockProducts.length} product(s) have 5 or fewer items in stock!`, {
@@ -87,10 +87,17 @@ const Products = () => {
     }
   }, [products]);
 
+  const isProductCategory = (cat) => {
+    if (!cat) return false;
+    const c = cat.trim().toLowerCase();
+    return c === 'car freshner' || c === 'car freshener' || c === 'acce' || c === 'accessories';
+  };
+
   const fetchProducts = async () => {
     try {
       const response = await axios.get('/api/products');
-      const filtered = (response.data.products || []).filter(p => p.category !== 'Services');
+      // Strictly filter to retail products (Car Freshner & Acce). Exclude all services and extra services.
+      const filtered = (response.data.products || []).filter(p => isProductCategory(p.category));
       setProducts(filtered);
     } catch (error) {
       toast.error('Failed to load products');
@@ -102,9 +109,11 @@ const Products = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const stockVal = formData.stock === '' ? 0 : parseInt(formData.stock, 10);
+
     // Validate stock is not negative
-    if (formData.stock < 0) {
-      toast.error('Stock cannot be negative');
+    if (isNaN(stockVal) || stockVal < 0) {
+      toast.error('Stock count cannot be negative');
       return;
     }
 
@@ -119,12 +128,19 @@ const Products = () => {
       return;
     }
 
+    const payload = {
+      ...formData,
+      stock: stockVal,
+      price: parseFloat(formData.price) || 0,
+      purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0
+    };
+
     try {
       if (editingProduct) {
-        await axios.put(`/api/products/${editingProduct.id}`, formData);
+        await axios.put(`/api/products/${editingProduct.id}`, payload);
         toast.success('Product updated successfully');
       } else {
-        await axios.post('/api/products', formData);
+        await axios.post('/api/products', payload);
         toast.success('Product created successfully');
       }
       setShowModal(false);
@@ -152,7 +168,7 @@ const Products = () => {
       category: product.category,
       price: product.price,
       purchase_price: product.purchase_price || '',
-      stock: product.stock,
+      stock: product.stock !== undefined && product.stock !== null ? product.stock : 0,
       image_url: product.image_url || ''
     });
     setShowModal(true);
@@ -224,8 +240,8 @@ const Products = () => {
     product.category?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const lowStockProducts = filteredProducts.filter(product => product.category === 'Products' && product.stock <= 5 && product.stock > 0);
-  const outOfStockProducts = filteredProducts.filter(product => product.category === 'Products' && product.stock === 0);
+  const lowStockProducts = filteredProducts.filter(product => product.stock !== undefined && product.stock !== null && product.stock <= 5 && product.stock > 0);
+  const outOfStockProducts = filteredProducts.filter(product => product.stock !== undefined && product.stock !== null && product.stock <= 0);
 
   return (
     <div className="space-y-6">
@@ -537,6 +553,21 @@ const Products = () => {
                   <option value="Car Freshner">Car Freshner</option>
                   <option value="Acce">Acce</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Stock Count
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="1"
+                  value={formData.stock}
+                  onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                  className="w-full px-4 py-2 border rounded-lg"
+                  placeholder="Enter available stock quantity (e.g. 20)"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

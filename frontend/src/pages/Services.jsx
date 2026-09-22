@@ -243,7 +243,7 @@ const Services = () => {
       return service.category === 'Saloon Extra Service' || (service.category === 'Extra Service' && (service.vehicle_type === 'Saloon' || service.vehicle_type === 'Both'));
     }
     if (activeTab === '4x4 Extra Service') {
-      return service.category === '4x4 Extra Service' || (service.category === 'Extra Service' && service.vehicle_type === '4x4');
+      return service.category === '4x4 Extra Service' || (service.category === 'Extra Service' && (service.vehicle_type === '4x4' || service.vehicle_type === 'Both'));
     }
     return (
       service.category !== 'Saloon Extra Service' &&
