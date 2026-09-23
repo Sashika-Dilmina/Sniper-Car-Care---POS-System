@@ -435,6 +435,13 @@ const createOrder = asyncHandler(async (req, res) => {
       if (orderBathaqueId) {
         await redeemBathaqueFreeWash(connection, orderBathaqueId);
       }
+    } else if (orderStatus === 'completed') {
+      try {
+        const { awardLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
+        await awardLoyaltyStampsForOrder(connection, orderId);
+      } catch (lErr) {
+        console.error('[Order] Error awarding stamps on createOrder:', lErr.message);
+      }
     }
 
     // Fetch customer vehicle type if customer_id exists
@@ -631,74 +638,12 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     }
 
     // Handle Loyalty Stamps for Completed Orders
-    const targetBathaqueId = order.bathaque_id;
-    const targetCustomerId = order.customer_id || order.customer_id_ref;
-
-    // 1. If order was marked as free wash, redeem/reset Bathaque loyalty
-    if (status === 'completed' && (order.payment_status === 'free' || parseFloat(order.total) === 0) && targetBathaqueId) {
+    if (status === 'completed') {
       try {
-        await redeemBathaqueFreeWash(connection, targetBathaqueId);
-      } catch (rErr) {
-        console.error('[Bathaque] Error redeeming free wash:', rErr.message);
-      }
-    }
-
-    // 2. If order has eligible service and total > 0 (paid wash), increment stamp!
-    if (status === 'completed' && parseFloat(order.total) > 0) {
-      const [servicesList] = await connection.query(
-        'SELECT service_name FROM services WHERE order_id = ?',
-        [id]
-      );
-      const [itemsList] = await connection.query(
-        'SELECT p.name, p.category FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
-        [id]
-      );
-
-      const eligibleFreeServices = [
-        'full body service',
-        'full body wash',
-        'ceramic wash',
-        'double soap'
-      ];
-
-      let hasEligibleService = false;
-
-      // Check services names
-      for (let s of servicesList) {
-        const sName = s.service_name.toLowerCase().trim();
-        if (eligibleFreeServices.some(e => sName.includes(e)) || sName.includes('vip')) {
-          hasEligibleService = true;
-          break;
-        }
-      }
-
-      // Check items names
-      if (!hasEligibleService) {
-        for (let item of itemsList) {
-          const pName = item.name.toLowerCase().trim();
-          if (eligibleFreeServices.some(e => pName.includes(e)) || item.category === 'VIP' || pName.includes('vip')) {
-            hasEligibleService = true;
-            break;
-          }
-        }
-      }
-
-      if (hasEligibleService) {
-        const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
-        if (!isExemptEmirate) {
-          if (targetBathaqueId) {
-            try {
-              await incrementBathaqueStamp(connection, targetBathaqueId);
-            } catch (bErr) {
-              console.error('[Bathaque] Error incrementing stamp:', bErr.message);
-            }
-          }
-          if (targetCustomerId) {
-            const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
-            await ensureLoyaltyRow(connection, targetCustomerId);
-            await incrementWashStamp(connection, targetCustomerId);
-          }
-        }
+        const { awardLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
+        await awardLoyaltyStampsForOrder(connection, id);
+      } catch (lErr) {
+        console.error('[Order] Error awarding loyalty stamps:', lErr.message);
       }
     }
 

@@ -154,6 +154,12 @@ const updateServiceStatus = asyncHandler(async (req, res) => {
         'UPDATE orders SET status = "completed", service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP), service_started_at = COALESCE(service_started_at, created_at, CURRENT_TIMESTAMP) WHERE id = ? AND status IN ("pending", "processing")',
         [service.order_id]
       );
+      try {
+        const { awardLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
+        await awardLoyaltyStampsForOrder(pool, service.order_id);
+      } catch (lErr) {
+        console.error('[ServiceController] Error awarding loyalty stamps:', lErr.message);
+      }
     }
   }
 
