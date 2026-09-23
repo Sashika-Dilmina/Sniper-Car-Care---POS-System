@@ -696,6 +696,41 @@ const Sales = () => {
 
 
 
+  // Helper to get exact payment portion for a given filter
+  const getOrderPaymentAmount = (order, filter) => {
+    if (order.status === 'cancelled') return 0;
+    if (order.payment_status === 'free') return 0;
+
+    if (!filter || filter === 'all') {
+      return parseFloat(order.total || 0);
+    }
+
+    if (order.payments && Array.isArray(order.payments) && order.payments.length > 0) {
+      const matchingPayments = order.payments.filter(p => {
+        const m = String(p.method || '').toLowerCase();
+        if (filter === 'cash') return m === 'cash';
+        if (filter === 'card') return m === 'card' || m === 'mastercard' || m === 'visa';
+        if (filter === 'tap') return m === 'tap' || m === 'apple_pay' || m === 'samsung_pay';
+        if (filter === 'bank_transfer') return m === 'bank_transfer' || m === 'bank' || m === 'transfer';
+        if (filter === 'credit') return m === 'credit';
+        return false;
+      });
+
+      if (matchingPayments.length > 0) {
+        return matchingPayments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+      }
+    }
+
+    if (filter === 'credit') {
+      if (order.credit_status === 'unpaid' || order.credit_status === 'partially_paid' || order.payment_status === 'credit') {
+        return parseFloat(order.remaining_amount ?? order.total ?? 0);
+      }
+      return 0;
+    }
+
+    return parseFloat(order.total || 0);
+  };
+
   // Filter Ledger Orders
   const filteredLedgerOrders = ledgerOrders.filter(order => {
     const customer = (order.customer_name || 'Walk-in').toLowerCase();
@@ -711,25 +746,36 @@ const Sales = () => {
       const pStatus = String(order.payment_status || '').toLowerCase();
       const cStatus = String(order.credit_status || '').toLowerCase();
 
-      if (ledgerPaymentFilter === 'cash') {
-        const matches = pmStr.includes('cash') || pStatus === 'cash';
-        if (!matches) return false;
-      } else if (ledgerPaymentFilter === 'card') {
-        const matches = pmStr.includes('card') || pmStr.includes('mastercard') || pmStr.includes('visa') || pStatus === 'card';
-        if (!matches) return false;
-      } else if (ledgerPaymentFilter === 'tap') {
-        const matches = pmStr.includes('tap') || pmStr.includes('apple_pay') || pmStr.includes('samsung_pay');
-        if (!matches) return false;
-      } else if (ledgerPaymentFilter === 'bank_transfer') {
-        const matches = pmStr.includes('bank') || pmStr.includes('transfer');
-        if (!matches) return false;
-      } else if (ledgerPaymentFilter === 'credit') {
-        const matches = cStatus === 'unpaid' || cStatus === 'partially_paid' || pmStr.includes('credit') || pStatus === 'credit';
-        if (!matches) return false;
-      } else if (ledgerPaymentFilter === 'free') {
-        const matches = pStatus === 'free' || pmStr.includes('free');
-        if (!matches) return false;
+      let matches = false;
+      if (order.payments && Array.isArray(order.payments) && order.payments.length > 0) {
+        matches = order.payments.some(p => {
+          const m = String(p.method || '').toLowerCase();
+          if (ledgerPaymentFilter === 'cash') return m === 'cash';
+          if (ledgerPaymentFilter === 'card') return m === 'card' || m === 'mastercard' || m === 'visa';
+          if (ledgerPaymentFilter === 'tap') return m === 'tap' || m === 'apple_pay' || m === 'samsung_pay';
+          if (ledgerPaymentFilter === 'bank_transfer') return m === 'bank_transfer' || m === 'bank' || m === 'transfer';
+          if (ledgerPaymentFilter === 'credit') return m === 'credit';
+          return false;
+        });
       }
+
+      if (!matches) {
+        if (ledgerPaymentFilter === 'cash') {
+          matches = pmStr.includes('cash') || pStatus === 'cash';
+        } else if (ledgerPaymentFilter === 'card') {
+          matches = pmStr.includes('card') || pmStr.includes('mastercard') || pmStr.includes('visa') || pStatus === 'card';
+        } else if (ledgerPaymentFilter === 'tap') {
+          matches = pmStr.includes('tap') || pmStr.includes('apple_pay') || pmStr.includes('samsung_pay');
+        } else if (ledgerPaymentFilter === 'bank_transfer') {
+          matches = pmStr.includes('bank') || pmStr.includes('transfer');
+        } else if (ledgerPaymentFilter === 'credit') {
+          matches = cStatus === 'unpaid' || cStatus === 'partially_paid' || pmStr.includes('credit') || pStatus === 'credit';
+        } else if (ledgerPaymentFilter === 'free') {
+          matches = pStatus === 'free' || pmStr.includes('free');
+        }
+      }
+
+      if (!matches) return false;
     }
 
     return true;
@@ -738,10 +784,10 @@ const Sales = () => {
   // Ledger stats (excluding cancelled orders)
   const totalSalesCount = filteredLedgerOrders.filter(o => o.status !== 'cancelled').length;
   const totalDiscount = filteredLedgerOrders.reduce((sum, o) => sum + (o.status === 'cancelled' ? 0 : parseFloat(o.discount || 0)), 0);
-  const totalRevenue = filteredLedgerOrders.reduce((sum, o) => sum + (o.status === 'cancelled' ? 0 : parseFloat(o.total || 0)), 0);
-
-  console.log('DEBUG: filteredLedgerOrders =', filteredLedgerOrders);
-  console.log('DEBUG: totalRevenue =', totalRevenue);
+  const totalRevenue = filteredLedgerOrders.reduce((sum, o) => {
+    if (o.status === 'cancelled') return sum;
+    return sum + getOrderPaymentAmount(o, ledgerPaymentFilter);
+  }, 0);
 
   const renderCatalogCard = (product) => {
     const isService = product.category !== 'Products';
@@ -1759,6 +1805,39 @@ const Sales = () => {
                                 return 'bg-red-50 text-red-700';
                               };
 
+                              if (order.payments && Array.isArray(order.payments) && order.payments.length > 1) {
+                                return (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {order.payments.map((p, idx) => {
+                                      const m = String(p.method || '').toLowerCase();
+                                      const isFilterMatch = ledgerPaymentFilter !== 'all' && (
+                                        (ledgerPaymentFilter === 'cash' && m === 'cash') ||
+                                        (ledgerPaymentFilter === 'card' && (m === 'card' || m === 'mastercard' || m === 'visa')) ||
+                                        (ledgerPaymentFilter === 'tap' && (m === 'tap' || m === 'apple_pay' || m === 'samsung_pay')) ||
+                                        (ledgerPaymentFilter === 'bank_transfer' && (m === 'bank_transfer' || m === 'bank' || m === 'transfer')) ||
+                                        (ledgerPaymentFilter === 'credit' && m === 'credit')
+                                      );
+                                      return (
+                                        <span
+                                          key={idx}
+                                          className={`px-2 py-0.5 text-xs rounded-lg font-bold border transition ${
+                                            isFilterMatch ? 'ring-2 ring-primary-500 shadow-sm ' : ''
+                                          }${
+                                            m === 'card' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                            m === 'cash' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            m === 'tap' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                            m === 'bank_transfer' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
+                                            'bg-purple-50 text-purple-700 border-purple-200'
+                                          }`}
+                                        >
+                                          {m === 'bank_transfer' ? 'Bank' : m === 'tap' ? 'TAP' : (m.charAt(0).toUpperCase() + m.slice(1))}: AED {parseFloat(p.amount || 0).toFixed(2)}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${getPaymentBadgeClass()}`}>
                                   {getPaymentLabel()}
@@ -1769,6 +1848,15 @@ const Sales = () => {
                           <td className="px-6 py-4 whitespace-nowrap font-extrabold text-gray-900 text-right">
                             {order.payment_status === 'free' ? (
                               <span className="text-green-600 font-bold">AED {parseFloat(order.discount).toFixed(2)} (Free)</span>
+                            ) : ledgerPaymentFilter !== 'all' && order.payments && order.payments.length > 1 ? (
+                              <div>
+                                <div className="text-primary-700 font-black">
+                                  AED {getOrderPaymentAmount(order, ledgerPaymentFilter).toFixed(2)}
+                                </div>
+                                <div className="text-[11px] text-gray-400 font-normal">
+                                  Total: AED {parseFloat(order.total).toFixed(2)}
+                                </div>
+                              </div>
                             ) : (
                               `AED ${parseFloat(order.total).toFixed(2)}`
                             )}

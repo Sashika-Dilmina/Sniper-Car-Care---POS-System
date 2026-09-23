@@ -131,15 +131,26 @@ const getOrders = asyncHandler(async (req, res) => {
 
   const [orders] = await pool.query(query, params);
 
-  // Batch fetch order items in 1 query for ultra-fast response
+  // Batch fetch order items and payments in parallel for ultra-fast response
   if (orders.length > 0) {
     const orderIds = orders.map(o => o.id);
-    const [allItems] = await pool.query(`
-      SELECT oi.*, p.name as product_name, p.category, p.price as unit_price
-      FROM order_items oi
-      LEFT JOIN products p ON oi.product_id = p.id
-      WHERE oi.order_id IN (?)
-    `, [orderIds]);
+    const [itemsResult, paymentsResult] = await Promise.all([
+      pool.query(`
+        SELECT oi.*, p.name as product_name, p.category, p.price as unit_price
+        FROM order_items oi
+        LEFT JOIN products p ON oi.product_id = p.id
+        WHERE oi.order_id IN (?)
+      `, [orderIds]),
+      pool.query(`
+        SELECT order_id, amount, method, status
+        FROM payments
+        WHERE order_id IN (?) AND status = 'completed'
+        ORDER BY id ASC
+      `, [orderIds])
+    ]);
+
+    const allItems = itemsResult[0];
+    const allPayments = paymentsResult[0];
 
     const itemsByOrderId = {};
     for (const item of allItems) {
@@ -149,8 +160,20 @@ const getOrders = asyncHandler(async (req, res) => {
       itemsByOrderId[item.order_id].push(item);
     }
 
+    const paymentsByOrderId = {};
+    for (const p of allPayments) {
+      if (!paymentsByOrderId[p.order_id]) {
+        paymentsByOrderId[p.order_id] = [];
+      }
+      paymentsByOrderId[p.order_id].push({
+        method: p.method,
+        amount: parseFloat(p.amount || 0)
+      });
+    }
+
     for (let order of orders) {
       order.items = itemsByOrderId[order.id] || [];
+      order.payments = paymentsByOrderId[order.id] || [];
     }
   }
 

@@ -118,13 +118,26 @@ const recoverCreditPayment = asyncHandler(async (req, res) => {
       [newRemaining, newStatus, id]
     );
 
-    // 4. Insert into the main payments table to link the payment to the order
+    // 4. Insert into the main payments table to link the real payment (cash/card/etc.) to the order
     await connection.query(
       'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
       [credit.order_id, payAmt, payment_method, 'completed']
     );
 
-    // 5. If fully paid, update the order's payment status to 'paid'
+    // 5. Adjust or delete the 'credit' placeholder in payments to ensure total payments match order total
+    const [creditPlaceholders] = await connection.query(
+      'SELECT id, amount FROM payments WHERE order_id = ? AND method = "credit" ORDER BY id ASC LIMIT 1',
+      [credit.order_id]
+    );
+    if (creditPlaceholders.length > 0) {
+      if (newRemaining <= 0) {
+        await connection.query('DELETE FROM payments WHERE id = ?', [creditPlaceholders[0].id]);
+      } else {
+        await connection.query('UPDATE payments SET amount = ? WHERE id = ?', [newRemaining, creditPlaceholders[0].id]);
+      }
+    }
+
+    // 6. If fully paid, update the order's payment status to 'paid'
     if (newRemaining === 0) {
       await connection.query(
         "UPDATE orders SET payment_status = 'paid' WHERE id = ?",

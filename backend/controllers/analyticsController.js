@@ -377,42 +377,43 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
   }
 
   // Orders summary (revenue from paid/free orders only)
+  // Orders summary (all non-cancelled orders for target date, matching Sales Ledger)
   const [ordersSummary] = await pool.query(
     useSession
       ? `SELECT 
           COUNT(*) as total_orders,
-          COALESCE(SUM(CASE WHEN payment_status = 'free' THEN discount WHEN payment_status = 'paid' THEN total ELSE 0 END), 0) as total_revenue,
-          COALESCE(SUM(CASE WHEN payment_status IN ('paid', 'free') THEN discount ELSE 0 END), 0) as total_discounts,
-          COUNT(CASE WHEN payment_status IN ('paid', 'free') THEN 1 END) as paid_orders,
+          COALESCE(SUM(total), 0) as total_revenue,
+          COALESCE(SUM(discount), 0) as total_discounts,
+          COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) as paid_orders,
           COUNT(CASE WHEN payment_status = 'pending' THEN 1 END) as pending_orders
         FROM orders
         WHERE created_at >= ? AND created_at <= COALESCE(?, CURRENT_TIMESTAMP) AND (is_deleted = 0 OR is_deleted IS NULL) AND status != 'cancelled'`
       : `SELECT 
           COUNT(*) as total_orders,
-          COALESCE(SUM(CASE WHEN payment_status = 'free' THEN discount WHEN payment_status = 'paid' THEN total ELSE 0 END), 0) as total_revenue,
-          COALESCE(SUM(CASE WHEN payment_status IN ('paid', 'free') THEN discount ELSE 0 END), 0) as total_discounts,
-          COUNT(CASE WHEN payment_status IN ('paid', 'free') THEN 1 END) as paid_orders,
+          COALESCE(SUM(total), 0) as total_revenue,
+          COALESCE(SUM(discount), 0) as total_discounts,
+          COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) as paid_orders,
           COUNT(CASE WHEN payment_status = 'pending' THEN 1 END) as pending_orders
         FROM orders
         WHERE DATE(created_at) = ? AND (is_deleted = 0 OR is_deleted IS NULL) AND status != 'cancelled'`,
     useSession ? [startTime, endTime] : [targetDate]
   );
 
-  // Services summary (paid/free orders only)
+  // Services summary (non-cancelled orders)
   const [servicesSummary] = await pool.query(
     useSession
       ? `SELECT 
           COUNT(*) as total_services,
-          COALESCE(SUM(CASE WHEN o.payment_status IN ('paid', 'free') THEN s.price ELSE 0 END), 0) as services_revenue,
-          COUNT(CASE WHEN s.status = 'completed' AND o.payment_status IN ('paid', 'free') THEN 1 END) as completed_services,
+          COALESCE(SUM(s.price), 0) as services_revenue,
+          COUNT(CASE WHEN s.status = 'completed' THEN 1 END) as completed_services,
           COUNT(CASE WHEN s.status = 'in_progress' THEN 1 END) as in_progress_services
         FROM services s
         JOIN orders o ON s.order_id = o.id
         WHERE s.created_at >= ? AND s.created_at <= COALESCE(?, CURRENT_TIMESTAMP) AND (o.is_deleted = 0 OR o.is_deleted IS NULL) AND o.status != 'cancelled'`
       : `SELECT 
           COUNT(*) as total_services,
-          COALESCE(SUM(CASE WHEN o.payment_status IN ('paid', 'free') THEN s.price ELSE 0 END), 0) as services_revenue,
-          COUNT(CASE WHEN s.status = 'completed' AND o.payment_status IN ('paid', 'free') THEN 1 END) as completed_services,
+          COALESCE(SUM(s.price), 0) as services_revenue,
+          COUNT(CASE WHEN s.status = 'completed' THEN 1 END) as completed_services,
           COUNT(CASE WHEN s.status = 'in_progress' THEN 1 END) as in_progress_services
         FROM services s
         JOIN orders o ON s.order_id = o.id
@@ -437,7 +438,7 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
           ), 0) as total_amount
         FROM payments p
         JOIN orders o ON p.order_id = o.id
-        WHERE o.created_at >= ? AND o.created_at <= COALESCE(?, CURRENT_TIMESTAMP) AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND o.status != 'cancelled'
+        WHERE o.created_at >= ? AND o.created_at <= COALESCE(?, CURRENT_TIMESTAMP) AND p.status = 'completed' AND o.status != 'cancelled'
         GROUP BY 
           CASE 
             WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
@@ -459,7 +460,7 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
           ), 0) as total_amount
         FROM payments p
         JOIN orders o ON p.order_id = o.id
-        WHERE DATE(o.created_at) = ? AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND o.status != 'cancelled'
+        WHERE DATE(o.created_at) = ? AND p.status = 'completed' AND o.status != 'cancelled'
         GROUP BY 
           CASE 
             WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
@@ -626,15 +627,15 @@ const getDailyBusinessSummary = asyncHandler(async (req, res) => {
   const saloonFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === 'Saloon')?.total_amount || 0;
   const fourWheelFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === '4x4')?.total_amount || 0;
 
-  // Get sum of order totals (excluding cancelled ones and unpaid ones) for that date (net sales = subtotal - discount)
+  // Get sum of order totals for non-cancelled orders for that date (net sales = subtotal - discount)
   const [ordersTotalSum] = await pool.query(
     useSession
       ? `SELECT COALESCE(SUM(total), 0) as total_net_sales
         FROM orders
-        WHERE created_at >= ? AND created_at <= COALESCE(?, CURRENT_TIMESTAMP) AND status != 'cancelled' AND payment_status IN ('paid', 'free')`
+        WHERE created_at >= ? AND created_at <= COALESCE(?, CURRENT_TIMESTAMP) AND status != 'cancelled' AND (is_deleted = 0 OR is_deleted IS NULL)`
       : `SELECT COALESCE(SUM(total), 0) as total_net_sales
         FROM orders
-        WHERE DATE(created_at) = ? AND status != 'cancelled' AND payment_status IN ('paid', 'free')`,
+        WHERE DATE(created_at) = ? AND status != 'cancelled' AND (is_deleted = 0 OR is_deleted IS NULL)`,
     useSession ? [startTime, endTime] : [targetDate]
   );
   const totalSales = parseFloat(ordersTotalSum[0].total_net_sales || 0);
@@ -857,7 +858,7 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
     LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
-    WHERE 1=1 ${dateFilter} AND o.status != 'cancelled' AND p.status = 'completed' AND o.payment_status IN ('paid', 'free')
+    WHERE 1=1 ${dateFilter} AND o.status != 'cancelled' AND p.status = 'completed'
     GROUP BY 
       CASE 
         WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
@@ -882,7 +883,7 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
       ), 0) as total_amount
     FROM payments p
     JOIN orders o ON p.order_id = o.id
-    WHERE 1=1 ${dateFilter} AND o.status != 'cancelled' AND p.status = 'completed' AND o.payment_status IN ('paid', 'free')
+    WHERE 1=1 ${dateFilter} AND o.status != 'cancelled'
     GROUP BY p.status
   `, params);
 
@@ -1209,17 +1210,17 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
     [bankRecoveryResult]
   ] = await Promise.all([
     // 1. Cash Sales
-    pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
+    pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
     // 2. Card Sales
-    pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method IN ('card', 'visa', 'mastercard', 'master_card', 'master') AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
+    pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method IN ('card', 'visa', 'mastercard', 'master_card', 'master') AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
     // 3. Tap Sales
-    pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method IN ('tap', 'apple_pay', 'samsung_pay', 'tap_payments') AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
+    pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method IN ('tap', 'apple_pay', 'samsung_pay', 'tap_payments') AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
     // 4. Bank Transfer Sales
-    pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
-    // 5. Credit Sales
-    pool.query("SELECT COALESCE(SUM(cc.amount), 0) as total FROM customer_credits cc JOIN orders o ON cc.order_id = o.id WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
+    pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
+    // 5. Credit Sales (Unpaid credit remaining for orders in this period)
+    pool.query("SELECT COALESCE(SUM(cc.remaining_amount), 0) as total FROM customer_credits cc JOIN orders o ON cc.order_id = o.id WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?", [start_date, end_date]),
     // 6. Discounts & Count
-    pool.query("SELECT COALESCE(SUM(discount), 0) as total_discounts, COUNT(*) as sales_count FROM orders WHERE status != 'cancelled' AND payment_status IN ('paid', 'free') AND DATE(created_at) BETWEEN ? AND ?", [start_date, end_date]),
+    pool.query("SELECT COALESCE(SUM(discount), 0) as total_discounts, COUNT(*) as sales_count FROM orders WHERE status != 'cancelled' AND DATE(created_at) BETWEEN ? AND ?", [start_date, end_date]),
     // 7. Free Washes breakdown
     pool.query(`SELECT COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') as vehicle_type, COALESCE(SUM(o.discount), 0) as total_amount, COUNT(o.id) as washes_count FROM orders o LEFT JOIN customers c ON o.customer_id = c.id LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id WHERE o.status != 'cancelled' AND o.payment_status = 'free' AND DATE(o.created_at) BETWEEN ? AND ? GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')`, [start_date, end_date]),
     // 8. Cost of Order Items
@@ -1260,8 +1261,8 @@ const getProfitLossReport = asyncHandler(async (req, res) => {
   const totalDiscounts = parseFloat(discountsResult[0].total_discounts || 0);
   const salesCount = discountsResult[0].sales_count || 0;
 
-  const netSales = cashSales + cardSales + tapSales + bankSales + creditSales + freeWashTotal;
-  const totalSales = netSales + totalDiscounts - freeWashTotal;
+  const netSales = cashSales + cardSales + tapSales + bankSales + creditSales;
+  const totalSales = netSales + totalDiscounts;
 
   const itemsCost = parseFloat(itemsCostResult[0].total || 0);
   const servicesCost = parseFloat(servicesCostResult[0].total || 0);
@@ -1325,20 +1326,20 @@ const getReportPDF = asyncHandler(async (req, res) => {
     const targetDate = date || new Date().toISOString().split('T')[0];
     const [ordersSummary] = await pool.query(
       `SELECT COUNT(*) as total_orders, 
-              COALESCE(SUM(CASE WHEN payment_status = 'free' THEN discount WHEN payment_status = 'paid' THEN total ELSE 0 END), 0) as total_revenue, 
-              COALESCE(SUM(CASE WHEN payment_status IN ('paid', 'free') THEN discount ELSE 0 END), 0) as total_discounts,
-              COUNT(CASE WHEN payment_status IN ('paid', 'free') THEN 1 END) as paid_orders, 
+              COALESCE(SUM(total), 0) as total_revenue, 
+              COALESCE(SUM(discount), 0) as total_discounts,
+              COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) as paid_orders, 
               COUNT(CASE WHEN payment_status = 'pending' THEN 1 END) as pending_orders 
-       FROM orders WHERE DATE(created_at) = ?`,
+       FROM orders WHERE DATE(created_at) = ? AND (is_deleted = 0 OR is_deleted IS NULL) AND status != 'cancelled'`,
       [targetDate]
     );
     const [servicesSummary] = await pool.query(
       `SELECT COUNT(*) as total_services, 
-              COALESCE(SUM(CASE WHEN o.payment_status IN ('paid', 'free') THEN s.price ELSE 0 END), 0) as services_revenue,
-              COUNT(CASE WHEN s.status = 'completed' AND o.payment_status IN ('paid', 'free') THEN 1 END) as completed_services 
+              COALESCE(SUM(s.price), 0) as services_revenue,
+              COUNT(CASE WHEN s.status = 'completed' THEN 1 END) as completed_services 
        FROM services s 
        JOIN orders o ON s.order_id = o.id 
-       WHERE DATE(s.created_at) = ?`,
+       WHERE DATE(s.created_at) = ? AND (o.is_deleted = 0 OR o.is_deleted IS NULL) AND o.status != 'cancelled'`,
       [targetDate]
     );
     const [paymentMethods] = await pool.query(
@@ -1356,7 +1357,7 @@ const getReportPDF = asyncHandler(async (req, res) => {
           END
         ), 0) as total_amount 
        FROM payments p JOIN orders o ON p.order_id = o.id 
-       WHERE DATE(o.created_at) = ? AND p.status = 'completed' AND o.payment_status IN ('paid', 'free')
+       WHERE DATE(o.created_at) = ? AND p.status = 'completed' AND o.status != 'cancelled'
        GROUP BY 
         CASE 
           WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
@@ -1366,7 +1367,7 @@ const getReportPDF = asyncHandler(async (req, res) => {
       [targetDate]
     );
     const [topProducts] = await pool.query(
-      `SELECT p.name, p.category, SUM(oi.quantity) as quantity_sold, SUM(oi.quantity * oi.price) as revenue FROM order_items oi JOIN products p ON oi.product_id = p.id JOIN orders o ON oi.order_id = o.id WHERE DATE(o.created_at) = ? AND o.payment_status IN ('paid', 'free') GROUP BY p.id ORDER BY revenue DESC LIMIT 10`,
+      `SELECT p.name, p.category, SUM(oi.quantity) as quantity_sold, SUM(oi.quantity * oi.price) as revenue FROM order_items oi JOIN products p ON oi.product_id = p.id JOIN orders o ON oi.order_id = o.id WHERE DATE(o.created_at) = ? AND o.status != 'cancelled' GROUP BY p.id ORDER BY revenue DESC LIMIT 10`,
       [targetDate]
     );
     reportData = {
@@ -1377,27 +1378,27 @@ const getReportPDF = asyncHandler(async (req, res) => {
     };
   } else if (tab === 'business_summary') {
     const [cashSalesResult] = await pool.query(
-      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND DATE(o.created_at) BETWEEN ? AND ?",
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'cash' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
       [start_date, end_date]
     );
     const [cardSalesResult] = await pool.query(
-      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method IN ('card', 'visa', 'mastercard', 'master_card', 'master') AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND DATE(o.created_at) BETWEEN ? AND ?",
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method IN ('card', 'visa', 'mastercard', 'master_card', 'master') AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
       [start_date, end_date]
     );
     const [tapSalesResult] = await pool.query(
-      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method IN ('tap', 'apple_pay', 'samsung_pay', 'tap_payments') AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND DATE(o.created_at) BETWEEN ? AND ?",
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method IN ('tap', 'apple_pay', 'samsung_pay', 'tap_payments') AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
       [start_date, end_date]
     );
     const [bankSalesResult] = await pool.query(
-      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status = 'completed' AND o.payment_status IN ('paid', 'free') AND DATE(o.created_at) BETWEEN ? AND ?",
+      "SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status != 'cancelled' AND p.method = 'bank_transfer' AND p.status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?",
       [start_date, end_date]
     );
     const [creditSalesResult] = await pool.query(
-      "SELECT COALESCE(SUM(cc.amount), 0) as total FROM customer_credits cc JOIN orders o ON cc.order_id = o.id WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?",
+      "SELECT COALESCE(SUM(cc.remaining_amount), 0) as total FROM customer_credits cc JOIN orders o ON cc.order_id = o.id WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?",
       [start_date, end_date]
     );
     const [discountsResult] = await pool.query(
-      "SELECT COALESCE(SUM(discount), 0) as total_discounts, COUNT(*) as sales_count FROM orders WHERE status != 'cancelled' AND payment_status IN ('paid', 'free') AND DATE(created_at) BETWEEN ? AND ?",
+      "SELECT COALESCE(SUM(discount), 0) as total_discounts, COUNT(*) as sales_count FROM orders WHERE status != 'cancelled' AND DATE(created_at) BETWEEN ? AND ?",
       [start_date, end_date]
     );
 
@@ -1430,8 +1431,8 @@ const getReportPDF = asyncHandler(async (req, res) => {
     const creditSales = parseFloat(creditSalesResult[0].total || 0);
     const totalDiscounts = parseFloat(discountsResult[0].total_discounts || 0);
     const salesCount = discountsResult[0].sales_count || 0;
-    const netSales = cashSales + cardSales + tapSales + bankSales + creditSales + freeWashTotal;
-    const totalSales = netSales + totalDiscounts - freeWashTotal;
+    const netSales = cashSales + cardSales + tapSales + bankSales + creditSales;
+    const totalSales = netSales + totalDiscounts;
 
     const [itemsCostResult] = await pool.query(
       `SELECT COALESCE(SUM(oi.quantity * COALESCE(p.purchase_price, 0)), 0) as total FROM order_items oi JOIN products p ON oi.product_id = p.id JOIN orders o ON oi.order_id = o.id WHERE o.status != 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?`,
@@ -1779,18 +1780,22 @@ const getReportPDF = asyncHandler(async (req, res) => {
     }
 
     const [saloonServices] = await pool.query(`
-      SELECT p.name as service_name, COUNT(s.id) as quantity, COUNT(s.id) * 0.25 as commission
+      SELECT p.name as service_name, COUNT(s.id) as quantity, COUNT(s.id) * 1 as commission
       FROM products p
-      LEFT JOIN services s ON p.name = s.service_name AND s.vehicle_type = 'Saloon' AND s.status = 'completed' ${dateFilter}
-      WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both')
+      LEFT JOIN services s ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (%')) AND s.vehicle_type = 'Saloon' AND s.status = 'completed' ${dateFilter}
+      WHERE p.category = 'Services' 
+        AND p.name IN ('Full Body Service', 'Double Soap', 'Ceramic Wash')
+        AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
       GROUP BY p.name ORDER BY p.name ASC
     `, paramsList);
 
     const [fourx4Services] = await pool.query(`
-      SELECT p.name as service_name, COUNT(s.id) as quantity, COUNT(s.id) * 0.25 as commission
+      SELECT p.name as service_name, COUNT(s.id) as quantity, COUNT(s.id) * 1 as commission
       FROM products p
-      LEFT JOIN services s ON p.name = s.service_name AND s.vehicle_type = '4x4' AND s.status = 'completed' ${dateFilter}
-      WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both')
+      LEFT JOIN services s ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (%')) AND s.vehicle_type = '4x4' AND s.status = 'completed' ${dateFilter}
+      WHERE p.category = 'Services' 
+        AND p.name IN ('Full Body Wash', 'Full Body Service', 'Double Soap', 'Ceramic Wash')
+        AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
       GROUP BY p.name ORDER BY p.name ASC
     `, paramsList);
 
@@ -1801,7 +1806,7 @@ const getReportPDF = asyncHandler(async (req, res) => {
       vipParams.push(start_date, end_date);
     }
     const [vipServices] = await pool.query(`
-      SELECT types.v_type as vehicle_type, COUNT(DISTINCT o.id) as quantity, COALESCE(SUM(o.total), 0) * 0.25 as commission
+      SELECT types.v_type as vehicle_type, COUNT(DISTINCT o.id) as quantity, COUNT(DISTINCT o.id) * 3 as commission
       FROM (SELECT 'Saloon' as v_type UNION SELECT '4x4' as v_type) types
       LEFT JOIN vip_customers vc ON vc.vehicle_type = types.v_type
       LEFT JOIN vip_bookings vb ON vb.vip_customer_id = vc.id
@@ -1823,8 +1828,9 @@ const getReportPDF = asyncHandler(async (req, res) => {
              COALESCE(AVG(s.price), p.price) as net_price, COALESCE(p.purchase_price, 0) as cost_price,
              COALESCE(AVG(s.price), p.price) - COALESCE(p.purchase_price, 0) as profit
       FROM products p
-      LEFT JOIN services s ON p.name = s.service_name AND s.vehicle_type = 'Saloon' AND s.status = 'completed' ${dateFilter}
+      LEFT JOIN services s ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (%')) AND s.vehicle_type = 'Saloon' AND s.status = 'completed' ${dateFilter}
       WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both')
+        AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
       GROUP BY p.name, p.price, p.purchase_price ORDER BY p.name ASC
     `, paramsList);
 
@@ -1833,8 +1839,9 @@ const getReportPDF = asyncHandler(async (req, res) => {
              COALESCE(AVG(s.price), p.price) as net_price, COALESCE(p.purchase_price, 0) as cost_price,
              COALESCE(AVG(s.price), p.price) - COALESCE(p.purchase_price, 0) as profit
       FROM products p
-      LEFT JOIN services s ON p.name = s.service_name AND s.vehicle_type = '4x4' AND s.status = 'completed' ${dateFilter}
+      LEFT JOIN services s ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (%')) AND s.vehicle_type = '4x4' AND s.status = 'completed' ${dateFilter}
       WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both')
+        AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
       GROUP BY p.name, p.price, p.purchase_price ORDER BY p.name ASC
     `, paramsList);
 
@@ -1944,34 +1951,38 @@ const getCommissionReport = asyncHandler(async (req, res) => {
     params.push(start_date, end_date);
   }
 
-  // Saloon services
+  // Saloon services (strict core 3: Full Body Service, Double Soap, Ceramic Wash)
   const [saloonServices] = await pool.query(`
     SELECT
       p.name as service_name,
       COUNT(s.id) as quantity,
-      COUNT(s.id) * 0.25 as commission
+      COUNT(s.id) * 1 as commission
     FROM products p
     LEFT JOIN services s ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (%'))
       AND s.vehicle_type = 'Saloon'
       AND s.status = 'completed'
       ${dateFilter}
-    WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both') AND p.name NOT IN ('Body Wash', 'Just Water', 'Saloon VIP Service')
+    WHERE p.category = 'Services'
+      AND p.name IN ('Full Body Service', 'Double Soap', 'Ceramic Wash')
+      AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
     GROUP BY p.name
     ORDER BY p.name ASC
   `, params);
 
-  // 4x4 services
+  // 4x4 services (strict core 3: Full Body Wash / Full Body Service, Double Soap, Ceramic Wash)
   const [fourx4Services] = await pool.query(`
     SELECT
       p.name as service_name,
       COUNT(s.id) as quantity,
-      COUNT(s.id) * 0.25 as commission
+      COUNT(s.id) * 1 as commission
     FROM products p
     LEFT JOIN services s ON (s.service_name = p.name OR s.service_name LIKE CONCAT(p.name, ' (%'))
       AND s.vehicle_type = '4x4'
       AND s.status = 'completed'
       ${dateFilter}
-    WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both') AND p.name NOT IN ('Body Wash', 'Just Water', '4x4 VIP Service')
+    WHERE p.category = 'Services'
+      AND p.name IN ('Full Body Wash', 'Full Body Service', 'Double Soap', 'Ceramic Wash')
+      AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
     GROUP BY p.name
     ORDER BY p.name ASC
   `, params);
@@ -2020,7 +2031,7 @@ const getServiceSalesReport = asyncHandler(async (req, res) => {
     params.push(start_date, end_date);
   }
 
-  // Saloon services with price details (paid/free orders only)
+  // Saloon services with price details (non-cancelled orders)
   const [saloonServices] = await pool.query(`
     SELECT
       p.name as service_name,
@@ -2034,13 +2045,14 @@ const getServiceSalesReport = asyncHandler(async (req, res) => {
       AND s.vehicle_type = 'Saloon'
       AND s.status = 'completed'
       ${dateFilter}
-    LEFT JOIN orders o ON s.order_id = o.id AND o.status != 'cancelled' AND o.payment_status IN ('paid', 'free')
+    LEFT JOIN orders o ON s.order_id = o.id AND o.status != 'cancelled'
     WHERE p.category = 'Services' AND p.vehicle_type IN ('Saloon', 'Both') AND p.name != 'Saloon VIP Service'
+      AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
     GROUP BY p.name
     ORDER BY p.name ASC
   `, params);
 
-  // 4x4 services with price details (paid/free orders only)
+  // 4x4 services with price details (non-cancelled orders)
   const [fourx4Services] = await pool.query(`
     SELECT
       p.name as service_name,
@@ -2054,13 +2066,14 @@ const getServiceSalesReport = asyncHandler(async (req, res) => {
       AND s.vehicle_type = '4x4'
       AND s.status = 'completed'
       ${dateFilter}
-    LEFT JOIN orders o ON s.order_id = o.id AND o.status != 'cancelled' AND o.payment_status IN ('paid', 'free')
+    LEFT JOIN orders o ON s.order_id = o.id AND o.status != 'cancelled'
     WHERE p.category = 'Services' AND p.vehicle_type IN ('4x4', 'Both') AND p.name != '4x4 VIP Service'
+      AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
     GROUP BY p.name
     ORDER BY p.name ASC
   `, params);
 
-  // VIP orders by vehicle type (paid/free orders only)
+  // VIP orders by vehicle type (non-cancelled orders)
   let vipDateFilter = '';
   const vipParams = [];
   if (start_date && end_date) {
@@ -2079,7 +2092,7 @@ const getServiceSalesReport = asyncHandler(async (req, res) => {
     FROM (SELECT 'Saloon' as v_type UNION SELECT '4x4' as v_type) types
     LEFT JOIN vip_customers vc ON vc.vehicle_type = types.v_type
     LEFT JOIN vip_bookings vb ON vb.vip_customer_id = vc.id
-    LEFT JOIN orders o ON o.vip_booking_id = vb.id AND o.status != 'cancelled' AND o.payment_status IN ('paid', 'free') ${vipDateFilter}
+    LEFT JOIN orders o ON o.vip_booking_id = vb.id AND o.status != 'cancelled' ${vipDateFilter}
     GROUP BY types.v_type
     ORDER BY types.v_type ASC
   `, vipParams);
