@@ -239,22 +239,22 @@ const Credits = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
           <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Outstanding Credit</span>
-          <h3 className="text-3xl font-black text-red-600 mt-2">
-            AED {totalOutstanding.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+          <h3 className="text-3xl font-black text-red-600 mt-2 notranslate" translate="no">
+            {`AED ${totalOutstanding.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
           </h3>
           <span className="text-xs text-red-500 font-semibold mt-4">Total loans/credits currently active</span>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
           <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Recovered Cash/Card</span>
-          <h3 className="text-3xl font-black text-green-600 mt-2">
-            AED {totalRecovered.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+          <h3 className="text-3xl font-black text-green-600 mt-2 notranslate" translate="no">
+            {`AED ${totalRecovered.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
           </h3>
           <span className="text-xs text-green-500 font-semibold mt-4">Credit successfully recovered</span>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
           <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Active Credit Customers</span>
-          <h3 className="text-3xl font-black text-gray-800 mt-2">
-            {activeCreditCustomers} Customers
+          <h3 className="text-3xl font-black text-gray-800 mt-2 notranslate" translate="no">
+            {`${activeCreditCustomers} Customers`}
           </h3>
           <span className="text-xs text-gray-400 mt-4">Customers with unpaid balances</span>
         </div>
@@ -295,18 +295,18 @@ const Credits = () => {
 
       {/* Credits Ledger Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto notranslate" translate="no">
           {selectedStatus === 'recoveries' ? (
-            <table className="w-full text-left border-collapse">
+            <table key="table-recoveries" className="w-full text-left border-collapse notranslate" translate="no">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Payment Date</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer Name</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Plate / Model</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Order ID</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Amount Recovered</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Payment Method</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Notes / Collector</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[130px] whitespace-nowrap">Payment Date</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[160px] whitespace-nowrap">Customer Name</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[170px] whitespace-nowrap">Plate / Model</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[100px] whitespace-nowrap">Order ID</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[140px] whitespace-nowrap">Amount Recovered</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center min-w-[130px] whitespace-nowrap">Payment Method</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[200px] whitespace-nowrap">Notes / Collector</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -316,33 +316,33 @@ const Credits = () => {
                   </tr>
                 ) : filteredRecoveries.length > 0 ? (
                   filteredRecoveries.map((r) => (
-                    <tr key={r.id} className="hover:bg-gray-50/50 transition">
+                    <tr key={`rec-${r.id}`} className="hover:bg-gray-50/50 transition">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        <div className="font-medium text-gray-800">{new Date(r.payment_date).toLocaleDateString('en-GB')}</div>
-                        <div className="text-xs text-gray-400 font-mono">{new Date(r.payment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div className="font-medium text-gray-800 notranslate" translate="no">{new Date(r.payment_date).toLocaleDateString('en-GB')}</div>
+                        <div className="text-xs text-gray-400 font-mono notranslate" translate="no">{new Date(r.payment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
-                        <div>{r.customer_name}</div>
-                        {r.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5">{r.customer_phone}</div>}
+                        <div className="notranslate" translate="no">{r.customer_name || 'Customer'}</div>
+                        {r.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5 notranslate font-mono" translate="no">{r.customer_phone}</div>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-600">
-                        {r.vehicle_plate} ({r.vehicle_type})
+                        <span className="notranslate" translate="no">{`${r.vehicle_plate || 'N/A'} (${r.vehicle_type || 'Saloon'})`}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">
-                        #{r.order_id}
+                        <span className="notranslate font-bold text-gray-700" translate="no">{`#${r.order_id}`}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-black text-green-600 text-right">
-                        AED {parseFloat(r.amount_paid).toFixed(2)}
+                        <span className="notranslate" translate="no">{`AED ${parseFloat(r.amount_paid || 0).toFixed(2)}`}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider notranslate ${
                           r.payment_method === 'cash' ? 'bg-green-100 text-green-800' :
                           r.payment_method === 'card' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                        }`}>
+                        }`} translate="no">
                           {r.payment_method}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
+                      <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate notranslate" translate="no">
                         {r.notes || 'Credit payment recorded'}
                       </td>
                     </tr>
@@ -357,17 +357,17 @@ const Credits = () => {
               </tbody>
             </table>
           ) : selectedStatus === 'grouped_customers' ? (
-            <table className="w-full text-left border-collapse">
+            <table key="table-grouped" className="w-full text-left border-collapse notranslate" translate="no">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-10"></th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer Name</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Vehicles</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Statements Count</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Granted</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Outstanding</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-10 whitespace-nowrap"></th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[160px] whitespace-nowrap">Customer Name</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[170px] whitespace-nowrap">Vehicles</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center min-w-[120px] whitespace-nowrap">Statements Count</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[130px] whitespace-nowrap">Total Granted</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[140px] whitespace-nowrap">Total Outstanding</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[110px] whitespace-nowrap">Status</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[150px] whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -391,29 +391,29 @@ const Credits = () => {
                             </button>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
-                            <div>{gc.customer_name}</div>
-                            {gc.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5">{gc.customer_phone}</div>}
+                            <div className="notranslate" translate="no">{gc.customer_name || 'Customer'}</div>
+                            {gc.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5 notranslate font-mono" translate="no">{gc.customer_phone}</div>}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {Array.from(gc.vehicles).join(', ') || 'N/A'}
+                            <span className="notranslate font-mono" translate="no">{Array.from(gc.vehicles).join(', ') || 'N/A'}</span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center font-bold">
-                            {gc.statements.length}
+                            <span className="notranslate" translate="no">{gc.statements.length}</span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
-                            AED {gc.total_amount.toFixed(2)}
+                            <span className="notranslate font-semibold" translate="no">{`AED ${gc.total_amount.toFixed(2)}`}</span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-gray-900 text-right">
-                            AED {gc.total_remaining.toFixed(2)}
+                            <span className="notranslate font-extrabold" translate="no">{`AED ${gc.total_remaining.toFixed(2)}`}</span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
+                            <span className={`px-2 py-0.5 text-xs rounded-full font-semibold notranslate ${
                               gc.total_remaining === 0 
                                 ? 'bg-green-50 text-green-700' 
                                 : gc.total_remaining < gc.total_amount 
                                 ? 'bg-yellow-50 text-yellow-700' 
                                 : 'bg-red-50 text-red-700'
-                            }`}>
+                            }`} translate="no">
                               {gc.total_remaining === 0 ? 'Cleared' : gc.total_remaining < gc.total_amount ? 'Partially Paid' : 'Unpaid'}
                             </span>
                           </td>
@@ -431,45 +431,45 @@ const Credits = () => {
                           <tr className="bg-gray-50" key={`exp-${gc.customer_id}`}>
                             <td colSpan="8" className="px-12 py-4">
                               <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                                <table className="w-full text-left border-collapse text-xs">
+                                <table className="w-full text-left border-collapse text-xs notranslate" translate="no">
                                   <thead className="bg-gray-100 border-b">
                                     <tr>
-                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase">Date Granted</th>
-                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase">Order ID</th>
-                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase">Vehicle Plate</th>
-                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase text-right">Original Credit</th>
-                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase text-right">Remaining Outstanding</th>
-                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase">Status</th>
-                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase text-right">Actions</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase whitespace-nowrap">Date Granted</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase whitespace-nowrap">Order ID</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase whitespace-nowrap">Vehicle Plate</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase text-right whitespace-nowrap">Original Credit</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase text-right whitespace-nowrap">Remaining Outstanding</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase whitespace-nowrap">Status</th>
+                                      <th className="px-4 py-2 font-bold text-gray-600 uppercase text-right whitespace-nowrap">Actions</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y">
                                     {gc.statements.map((s) => (
-                                      <tr key={s.id} className="hover:bg-gray-50/50">
-                                        <td className="px-4 py-2.5 text-gray-600">
+                                      <tr key={`stmt-${s.id}`} className="hover:bg-gray-50/50">
+                                        <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap notranslate" translate="no">
                                           {new Date(s.created_at).toLocaleDateString('en-GB')}
                                         </td>
-                                        <td className="px-4 py-2.5 font-mono text-gray-600">
-                                          #{s.order_id}
+                                        <td className="px-4 py-2.5 font-mono text-gray-600 whitespace-nowrap">
+                                          <span className="notranslate font-bold text-gray-700" translate="no">{`#${s.order_id}`}</span>
                                         </td>
-                                        <td className="px-4 py-2.5 font-mono text-gray-600">
-                                          {s.vehicle_plate} ({s.vehicle_type})
+                                        <td className="px-4 py-2.5 font-mono text-gray-600 whitespace-nowrap">
+                                          <span className="notranslate" translate="no">{`${s.vehicle_plate || 'N/A'} (${s.vehicle_type || 'Saloon'})`}</span>
                                         </td>
-                                        <td className="px-4 py-2.5 text-gray-600 text-right">
-                                          AED {parseFloat(s.amount).toFixed(2)}
+                                        <td className="px-4 py-2.5 text-gray-600 text-right whitespace-nowrap">
+                                          <span className="notranslate" translate="no">{`AED ${parseFloat(s.amount || 0).toFixed(2)}`}</span>
                                         </td>
-                                        <td className="px-4 py-2.5 font-bold text-gray-955 text-right">
-                                          AED {parseFloat(s.remaining_amount).toFixed(2)}
+                                        <td className="px-4 py-2.5 font-bold text-gray-950 text-right whitespace-nowrap">
+                                          <span className="notranslate" translate="no">{`AED ${parseFloat(s.remaining_amount || 0).toFixed(2)}`}</span>
                                         </td>
-                                        <td className="px-4 py-2.5">
-                                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                        <td className="px-4 py-2.5 whitespace-nowrap">
+                                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold notranslate ${
                                             s.status === 'fully_paid' ? 'bg-green-50 text-green-700' :
                                             s.status === 'partially_paid' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'
-                                          }`}>
-                                            {s.status.replace('_', ' ')}
+                                          }`} translate="no">
+                                            {s.status ? s.status.replace('_', ' ') : 'unpaid'}
                                           </span>
                                         </td>
-                                        <td className="px-4 py-2.5 text-right space-x-2">
+                                        <td className="px-4 py-2.5 text-right space-x-2 whitespace-nowrap">
                                           {s.status !== 'fully_paid' && (
                                             <button
                                               type="button"
@@ -507,114 +507,151 @@ const Credits = () => {
                 )}
               </tbody>
             </table>
-          ) : (
-            <table className="w-full text-left border-collapse">
+          ) : selectedStatus === 'fully_paid' ? (
+            <table key="table-cleared-credits" className="w-full text-left border-collapse notranslate" translate="no">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date Granted</th>
-                  {selectedStatus === 'fully_paid' && (
-                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date Cleared</th>
-                  )}
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer Name</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Plate / Model</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Order ID</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Credit</th>
-                  {selectedStatus === 'fully_paid' ? (
-                    <>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Recovered</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Cleared Via</th>
-                    </>
-                  ) : (
-                    <>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Remaining Credit</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                    </>
-                  )}
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[120px] whitespace-nowrap">Date Granted</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[120px] whitespace-nowrap">Date Cleared</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[160px] whitespace-nowrap">Customer Name</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[170px] whitespace-nowrap">Plate / Model</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[100px] whitespace-nowrap">Order ID</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[120px] whitespace-nowrap">Total Credit</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[130px] whitespace-nowrap">Total Recovered</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center min-w-[110px] whitespace-nowrap">Cleared Via</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[120px] whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={selectedStatus === 'fully_paid' ? 9 : 8} className="px-6 py-12 text-center text-gray-500">Loading credit ledger...</td>
+                    <td colSpan="9" className="px-6 py-12 text-center text-gray-500">Loading cleared credits...</td>
                   </tr>
                 ) : filteredCredits.length > 0 ? (
                   filteredCredits.map((c) => (
-                    <tr key={c.id} className="hover:bg-gray-50/50 transition">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {new Date(c.created_at).toLocaleDateString('en-GB')}
-                    </td>
-                    {selectedStatus === 'fully_paid' && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-medium">
+                    <tr key={`cleared-${c.id}`} className="hover:bg-gray-50/50 transition">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 notranslate" translate="no">
+                        {new Date(c.created_at).toLocaleDateString('en-GB')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-medium notranslate" translate="no">
                         {c.last_payment_date ? new Date(c.last_payment_date).toLocaleDateString('en-GB') : (c.updated_at ? new Date(c.updated_at).toLocaleDateString('en-GB') : '-')}
                       </td>
-                    )}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
-                      <div>{c.customer_name}</div>
-                      {c.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5">{c.customer_phone}</div>}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-600">
-                      {c.vehicle_plate} ({c.vehicle_type})
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">
-                      #{c.order_id}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
-                      AED {parseFloat(c.amount).toFixed(2)}
-                    </td>
-                    {selectedStatus === 'fully_paid' ? (
-                      <>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 text-right">
-                          AED {parseFloat(c.total_recovered_amount || c.amount).toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                          <span className="px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-800 tracking-wider">
-                            {c.last_payment_method || 'cash'}
-                          </span>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-gray-900 text-right">
-                          AED {parseFloat(c.remaining_amount).toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
-                            c.status === 'fully_paid' ? 'bg-green-50 text-green-700' :
-                            c.status === 'partially_paid' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'
-                          }`}>
-                            {c.status.replace('_', ' ')}
-                          </span>
-                        </td>
-                      </>
-                    )}
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      {c.status !== 'fully_paid' && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
+                        <div className="notranslate" translate="no">{c.customer_name || 'Customer'}</div>
+                        {c.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5 notranslate font-mono" translate="no">{c.customer_phone}</div>}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-600">
+                        <span className="notranslate" translate="no">{`${c.vehicle_plate || 'N/A'} (${c.vehicle_type || 'Saloon'})`}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">
+                        <span className="notranslate font-bold text-gray-700" translate="no">{`#${c.order_id}`}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
+                        <span className="notranslate font-semibold" translate="no">{`AED ${parseFloat(c.amount || 0).toFixed(2)}`}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 text-right">
+                        <span className="notranslate font-bold" translate="no">{`AED ${parseFloat(c.total_recovered_amount || c.amount || 0).toFixed(2)}`}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-800 tracking-wider notranslate" translate="no">
+                          {c.last_payment_method || 'cash'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
-                          onClick={() => handleOpenRecoverModal(c)}
-                          className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold mr-2 shadow-sm transition"
+                          onClick={() => handleViewHistory(c)}
+                          className="text-primary-600 hover:text-primary-950 font-bold"
                         >
-                          💵 Recover Cash
+                          History Logs
                         </button>
-                      )}
-                      <button
-                        onClick={() => handleViewHistory(c)}
-                        className="text-primary-600 hover:text-primary-950 font-bold"
-                      >
-                        History Logs
-                      </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="9" className="px-6 py-12 text-center text-gray-400">
+                      No cleared credit records match the query filters.
                     </td>
                   </tr>
-                ))
-              ) : (
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table key={`table-credits-${selectedStatus}`} className="w-full text-left border-collapse notranslate" translate="no">
+              <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <td colSpan={selectedStatus === 'fully_paid' ? 9 : 8} className="px-6 py-12 text-center text-gray-400">
-                    No credit statements match the query filters.
-                  </td>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[120px] whitespace-nowrap">Date Granted</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[160px] whitespace-nowrap">Customer Name</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[170px] whitespace-nowrap">Plate / Model</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[100px] whitespace-nowrap">Order ID</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[120px] whitespace-nowrap">Total Credit</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[140px] whitespace-nowrap">Remaining Credit</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[110px] whitespace-nowrap">Status</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right min-w-[150px] whitespace-nowrap">Actions</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-12 text-center text-gray-500">Loading credit ledger...</td>
+                  </tr>
+                ) : filteredCredits.length > 0 ? (
+                  filteredCredits.map((c) => (
+                    <tr key={`credit-${c.id}`} className="hover:bg-gray-50/50 transition">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 notranslate" translate="no">
+                        {new Date(c.created_at).toLocaleDateString('en-GB')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
+                        <div className="notranslate" translate="no">{c.customer_name || 'Customer'}</div>
+                        {c.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5 notranslate font-mono" translate="no">{c.customer_phone}</div>}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-600">
+                        <span className="notranslate" translate="no">{`${c.vehicle_plate || 'N/A'} (${c.vehicle_type || 'Saloon'})`}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">
+                        <span className="notranslate font-bold text-gray-700" translate="no">{`#${c.order_id}`}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
+                        <span className="notranslate font-semibold" translate="no">{`AED ${parseFloat(c.amount || 0).toFixed(2)}`}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-gray-900 text-right">
+                        <span className="notranslate font-extrabold" translate="no">{`AED ${parseFloat(c.remaining_amount || 0).toFixed(2)}`}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`px-2 py-0.5 text-xs rounded-full font-semibold notranslate ${
+                          c.status === 'fully_paid' ? 'bg-green-50 text-green-700' :
+                          c.status === 'partially_paid' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'
+                        }`} translate="no">
+                          {c.status ? c.status.replace('_', ' ') : 'unpaid'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        {c.status !== 'fully_paid' && (
+                          <button
+                            onClick={() => handleOpenRecoverModal(c)}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold mr-2 shadow-sm transition"
+                          >
+                            💵 Recover Cash
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleViewHistory(c)}
+                          className="text-primary-600 hover:text-primary-950 font-bold"
+                        >
+                          History Logs
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-12 text-center text-gray-400">
+                      No credit statements match the query filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
@@ -629,10 +666,10 @@ const Credits = () => {
             </div>
             
             <form onSubmit={handleRecoverSubmit} className="p-6 space-y-4">
-              <div className="bg-gray-50 p-3 rounded-lg border text-sm text-gray-600 space-y-1">
-                <p><b>Customer:</b> {selectedCredit.customer_name}</p>
-                <p><b>Plate:</b> {selectedCredit.vehicle_plate}</p>
-                <p><b>Outstanding Balance:</b> AED {parseFloat(selectedCredit.remaining_amount).toFixed(2)}</p>
+              <div className="bg-gray-50 p-3 rounded-lg border text-sm text-gray-600 space-y-1 notranslate" translate="no">
+                <p><b>Customer:</b> <span className="notranslate font-bold" translate="no">{selectedCredit.customer_name}</span></p>
+                <p><b>Plate:</b> <span className="notranslate font-mono" translate="no">{selectedCredit.vehicle_plate}</span></p>
+                <p><b>Outstanding Balance:</b> <span className="notranslate font-black text-red-600" translate="no">{`AED ${parseFloat(selectedCredit.remaining_amount).toFixed(2)}`}</span></p>
               </div>
 
               <div>
@@ -646,7 +683,8 @@ const Credits = () => {
                   placeholder="Enter recovery amount"
                   value={recoveryForm.amount_paid}
                   onChange={(e) => setRecoveryForm({ ...recoveryForm, amount_paid: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-extrabold text-gray-900"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-extrabold text-gray-900 notranslate"
+                  translate="no"
                 />
               </div>
 
@@ -655,7 +693,8 @@ const Credits = () => {
                 <select
                   value={recoveryForm.payment_method}
                   onChange={(e) => setRecoveryForm({ ...recoveryForm, payment_method: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-semibold"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-semibold notranslate"
+                  translate="no"
                 >
                   <option value="cash">💵 Cash</option>
                   <option value="card">💳 Card</option>
@@ -669,7 +708,8 @@ const Credits = () => {
                   placeholder="e.g. Paid in full, Receipt #1024"
                   value={recoveryForm.notes}
                   onChange={(e) => setRecoveryForm({ ...recoveryForm, notes: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm notranslate"
+                  translate="no"
                 />
               </div>
 
@@ -703,10 +743,10 @@ const Credits = () => {
             </div>
             
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="border-b pb-2 text-sm text-gray-600">
-                <p><b>Statement Logs:</b> Order #{selectedCredit.order_id}</p>
-                <p><b>Total Debt:</b> AED {parseFloat(selectedCredit.amount).toFixed(2)}</p>
-                <p><b>Remaining Outstanding:</b> AED {parseFloat(selectedCredit.remaining_amount).toFixed(2)}</p>
+              <div className="border-b pb-2 text-sm text-gray-600 notranslate" translate="no">
+                <p><b>Statement Logs:</b> <span className="notranslate font-mono font-bold" translate="no">{`Order #${selectedCredit.order_id}`}</span></p>
+                <p><b>Total Debt:</b> <span className="notranslate font-bold text-gray-800" translate="no">{`AED ${parseFloat(selectedCredit.amount).toFixed(2)}`}</span></p>
+                <p><b>Remaining Outstanding:</b> <span className="notranslate font-bold text-red-600" translate="no">{`AED ${parseFloat(selectedCredit.remaining_amount).toFixed(2)}`}</span></p>
               </div>
 
               {loadingHistory ? (
@@ -714,11 +754,11 @@ const Credits = () => {
               ) : paymentHistory.length > 0 ? (
                 <div className="space-y-3">
                   {paymentHistory.map((h) => (
-                    <div key={h.id} className="p-3 bg-gray-50 border rounded-xl flex justify-between items-center">
+                    <div key={h.id} className="p-3 bg-gray-50 border rounded-xl flex justify-between items-center notranslate" translate="no">
                       <div>
-                        <p className="text-sm font-extrabold text-gray-800">AED {parseFloat(h.amount_paid).toFixed(2)}</p>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase">{h.payment_method} • {new Date(h.payment_date).toLocaleString()}</p>
-                        {h.notes && <p className="text-xs text-gray-500 mt-1 italic">"{h.notes}"</p>}
+                        <p className="text-sm font-extrabold text-gray-800 notranslate" translate="no">{`AED ${parseFloat(h.amount_paid).toFixed(2)}`}</p>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase notranslate" translate="no">{`${h.payment_method} • ${new Date(h.payment_date).toLocaleString()}`}</p>
+                        {h.notes && <p className="text-xs text-gray-500 mt-1 italic notranslate" translate="no">"{h.notes}"</p>}
                       </div>
                       <span className="text-xl">💰</span>
                     </div>

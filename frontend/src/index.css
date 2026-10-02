@@ -71,3 +71,17 @@ iframe.goog-te-banner-frame,
   display: none !important;
 }
 
+/* Strict Translation protection */
+.notranslate,
+[translate="no"] {
+  -webkit-transform: none !important;
+}
+.notranslate font,
+[translate="no"] font {
+  display: inline !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  color: inherit !important;
+}
+
+
