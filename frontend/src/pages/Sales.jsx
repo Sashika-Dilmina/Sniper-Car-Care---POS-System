@@ -171,7 +171,7 @@ const Sales = () => {
   const fetchProducts = async () => {
     try {
       const response = await axios.get('/api/products');
-      const activeProducts = (response.data.products || []).filter(p => p.is_deleted !== 1);
+      const activeProducts = (response.data.products || []).filter(p => p.is_deleted !== 1 && p.is_active !== 0);
       setProducts(activeProducts);
     } catch (error) {
       toast.error('Failed to load catalog items');
@@ -722,8 +722,11 @@ const Sales = () => {
     }
 
     if (filter === 'credit') {
-      if (order.credit_status === 'unpaid' || order.credit_status === 'partially_paid' || order.payment_status === 'credit') {
-        return parseFloat(order.remaining_amount ?? order.total ?? 0);
+      if (order.credit_amount !== undefined && order.credit_amount !== null && parseFloat(order.credit_amount) > 0) {
+        return parseFloat(order.credit_amount);
+      }
+      if (order.credit_status || order.payment_status === 'credit') {
+        return parseFloat(order.total || 0);
       }
       return 0;
     }

@@ -18,6 +18,7 @@ const getOrders = asyncHandler(async (req, res) => {
            COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
            cc.status as credit_status,
            cc.remaining_amount as credit_remaining,
+           cc.amount as credit_amount,
            (
              SELECT GROUP_CONCAT(DISTINCT 
                CASE 
@@ -91,19 +92,8 @@ const getOrders = asyncHandler(async (req, res) => {
   }
 
   if (date) {
-    const [sessions] = await pool.query(
-      "SELECT DATE_FORMAT(opened_at, '%Y-%m-%d %H:%i:%s') as opened_at, DATE_FORMAT(closed_at, '%Y-%m-%d %H:%i:%s') as closed_at FROM cash_registers WHERE DATE(opened_at) = ? ORDER BY opened_at ASC",
-      [date]
-    );
-    if (sessions.length > 0) {
-      const startTime = sessions[0].opened_at;
-      const endTime = sessions[sessions.length - 1].closed_at || `${date} 23:59:59`;
-      query += ' AND o.created_at >= ? AND o.created_at <= ?';
-      params.push(startTime, endTime);
-    } else {
-      query += ' AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY';
-      params.push(date, date);
-    }
+    query += ' AND DATE(o.created_at) = ?';
+    params.push(date);
   } else if (req.user && req.user.role === 'staff') {
     const [active] = await pool.query("SELECT DATE_FORMAT(opened_at, '%Y-%m-%d %H:%i:%s') as opened_at FROM cash_registers WHERE status = 'open' LIMIT 1");
     if (active.length > 0) {
@@ -113,6 +103,8 @@ const getOrders = asyncHandler(async (req, res) => {
       query += ' AND o.created_at >= CURDATE() AND o.created_at < CURDATE() + INTERVAL 1 DAY';
     }
   }
+
+
 
   // Filter by service time at SQL level
   if (service_time === 'fast') {

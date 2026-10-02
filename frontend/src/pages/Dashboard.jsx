@@ -1010,9 +1010,15 @@ const Dashboard = () => {
                   <span className="font-semibold">AED {registerReport.opening_balance.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Expected Cash Sales:</span>
-                  <span className="font-semibold">AED {registerReport.cash_payments.total.toFixed(2)}</span>
+                  <span className="text-gray-600">Expected Direct Cash Sales:</span>
+                  <span className="font-semibold">AED {registerReport.cash_payments.sale.toFixed(2)}</span>
                 </div>
+                {registerReport.cash_payments.recovery > 0 && (
+                  <div className="flex justify-between text-indigo-700">
+                    <span className="text-gray-600">Cash Recovery:</span>
+                    <span className="font-semibold">+ AED {registerReport.cash_payments.recovery.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-600">Cash Expenses:</span>
                   <span className="font-semibold text-red-600">- AED {registerReport.cash_expense.toFixed(2)}</span>

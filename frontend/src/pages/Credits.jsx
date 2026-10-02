@@ -62,6 +62,10 @@ const Credits = () => {
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Credit Recoveries State
+  const [recoveries, setRecoveries] = useState([]);
+  const [loadingRecoveries, setLoadingRecoveries] = useState(false);
+
   const fetchCredits = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
@@ -76,11 +80,27 @@ const Credits = () => {
     }
   };
 
+  const fetchRecoveries = async (silent = false) => {
+    try {
+      if (!silent) setLoadingRecoveries(true);
+      const response = await axios.get('/api/credits/recoveries');
+      if (response.data.success) {
+        setRecoveries(response.data.recoveries || []);
+      }
+    } catch (error) {
+      if (!silent) toast.error('Failed to load credit recovery history');
+    } finally {
+      if (!silent) setLoadingRecoveries(false);
+    }
+  };
+
   useEffect(() => {
     fetchCredits(false); // Initial load
+    fetchRecoveries(false);
     
     const interval = setInterval(() => {
       fetchCredits(true); // Silent background polling
+      fetchRecoveries(true);
     }, 7000);
 
     return () => clearInterval(interval);
@@ -123,6 +143,7 @@ const Credits = () => {
       if (response.data.success) {
         toast.success(`Recovered AED ${parseFloat(recoveryForm.amount_paid).toFixed(2)} successfully!`);
         fetchCredits();
+        fetchRecoveries(true);
         setIsRecoverModalOpen(false);
       }
     } catch (error) {
@@ -176,6 +197,18 @@ const Credits = () => {
   const groupedCustomers = selectedStatus === 'grouped_customers' 
     ? groupCreditsByCustomer(filteredCredits).sort((a, b) => b.total_remaining - a.total_remaining)
     : [];
+
+  const filteredRecoveries = recoveries.filter(r => {
+    if (!r) return false;
+    const cName = String(r.customer_name || '').toLowerCase();
+    const cPlate = String(r.vehicle_plate || '').toLowerCase();
+    const cPhone = String(r.customer_phone || '').toLowerCase();
+    const oId = String(r.order_id || '').toLowerCase();
+    const pMethod = String(r.payment_method || '').toLowerCase();
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return cName.includes(q) || cPlate.includes(q) || cPhone.includes(q) || oId.includes(q) || pMethod.includes(q);
+  });
 
   // Calculate totals robustly across all credits
   const totalOutstanding = credits
@@ -233,6 +266,7 @@ const Credits = () => {
           {[
             { id: 'active', label: 'Active Balances' },
             { id: 'fully_paid', label: 'Cleared Credits' },
+            { id: 'recoveries', label: 'Credit Recoveries' },
             { id: 'All', label: 'All Statements' },
             { id: 'grouped_customers', label: 'Credit Customers' }
           ].map(s => (
@@ -262,7 +296,67 @@ const Credits = () => {
       {/* Credits Ledger Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
-          {selectedStatus === 'grouped_customers' ? (
+          {selectedStatus === 'recoveries' ? (
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Payment Date</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer Name</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Plate / Model</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Order ID</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Amount Recovered</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Payment Method</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Notes / Collector</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loadingRecoveries ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">Loading credit recovery transactions...</td>
+                  </tr>
+                ) : filteredRecoveries.length > 0 ? (
+                  filteredRecoveries.map((r) => (
+                    <tr key={r.id} className="hover:bg-gray-50/50 transition">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        <div className="font-medium text-gray-800">{new Date(r.payment_date).toLocaleDateString('en-GB')}</div>
+                        <div className="text-xs text-gray-400 font-mono">{new Date(r.payment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
+                        <div>{r.customer_name}</div>
+                        {r.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5">{r.customer_phone}</div>}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-600">
+                        {r.vehicle_plate} ({r.vehicle_type})
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">
+                        #{r.order_id}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-black text-green-600 text-right">
+                        AED {parseFloat(r.amount_paid).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                          r.payment_method === 'cash' ? 'bg-green-100 text-green-800' :
+                          r.payment_method === 'card' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {r.payment_method}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
+                        {r.notes || 'Credit payment recorded'}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
+                      No credit recovery transactions found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          ) : selectedStatus === 'grouped_customers' ? (
             <table className="w-full text-left border-collapse">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
@@ -418,19 +512,31 @@ const Credits = () => {
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date Granted</th>
+                  {selectedStatus === 'fully_paid' && (
+                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date Cleared</th>
+                  )}
                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer Name</th>
                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Plate / Model</th>
                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Order ID</th>
                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Credit</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Remaining Credit</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                  {selectedStatus === 'fully_paid' ? (
+                    <>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Recovered</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Cleared Via</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Remaining Credit</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                    </>
+                  )}
                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="px-6 py-12 text-center text-gray-500">Loading credit ledger...</td>
+                    <td colSpan={selectedStatus === 'fully_paid' ? 9 : 8} className="px-6 py-12 text-center text-gray-500">Loading credit ledger...</td>
                   </tr>
                 ) : filteredCredits.length > 0 ? (
                   filteredCredits.map((c) => (
@@ -438,6 +544,11 @@ const Credits = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {new Date(c.created_at).toLocaleDateString('en-GB')}
                     </td>
+                    {selectedStatus === 'fully_paid' && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-medium">
+                        {c.last_payment_date ? new Date(c.last_payment_date).toLocaleDateString('en-GB') : (c.updated_at ? new Date(c.updated_at).toLocaleDateString('en-GB') : '-')}
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
                       <div>{c.customer_name}</div>
                       {c.customer_phone && <div className="text-xs text-gray-400 font-normal mt-0.5">{c.customer_phone}</div>}
@@ -451,17 +562,32 @@ const Credits = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
                       AED {parseFloat(c.amount).toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-gray-900 text-right">
-                      AED {parseFloat(c.remaining_amount).toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
-                        c.status === 'fully_paid' ? 'bg-green-50 text-green-700' :
-                        c.status === 'partially_paid' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'
-                      }`}>
-                        {c.status.replace('_', ' ')}
-                      </span>
-                    </td>
+                    {selectedStatus === 'fully_paid' ? (
+                      <>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 text-right">
+                          AED {parseFloat(c.total_recovered_amount || c.amount).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className="px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-800 tracking-wider">
+                            {c.last_payment_method || 'cash'}
+                          </span>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-gray-900 text-right">
+                          AED {parseFloat(c.remaining_amount).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
+                            c.status === 'fully_paid' ? 'bg-green-50 text-green-700' :
+                            c.status === 'partially_paid' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'
+                          }`}>
+                            {c.status.replace('_', ' ')}
+                          </span>
+                        </td>
+                      </>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {c.status !== 'fully_paid' && (
                         <button
@@ -482,7 +608,7 @@ const Credits = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="px-6 py-12 text-center text-gray-400">
+                  <td colSpan={selectedStatus === 'fully_paid' ? 9 : 8} className="px-6 py-12 text-center text-gray-400">
                     No credit statements match the query filters.
                   </td>
                 </tr>

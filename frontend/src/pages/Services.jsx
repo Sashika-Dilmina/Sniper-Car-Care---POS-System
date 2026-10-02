@@ -402,9 +402,9 @@ const Services = () => {
                           ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
                           : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
                       }`}
-                      title={service.is_active !== 0 ? 'Visible on website (Click to hide)' : 'Hidden from website (Click to show)'}
+                      title={service.is_active !== 0 ? 'Active (Click to deactivate)' : 'Deactivated (Click to activate)'}
                     >
-                      {service.is_active !== 0 ? '👁️ Active' : '👁️‍🗨️ Inactive'}
+                      {service.is_active !== 0 ? '👁️ Active' : '👁️‍🗨️ Deactivate'}
                     </button>
                     <button
                       onClick={() => handleEdit(service)}
