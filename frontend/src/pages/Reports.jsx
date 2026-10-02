@@ -1405,6 +1405,15 @@ const Reports = () => {
             >
               {plLoading ? 'Generating...' : 'Generate P&L'}
             </button>
+            {plReport && plReport.summary && (
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-black transition font-bold flex items-center gap-2"
+              >
+                🖨️ Print Report
+              </button>
+            )}
           </div>
 
           {plReport && plReport.summary && (
@@ -1467,6 +1476,18 @@ const Reports = () => {
                         <span className="text-gray-900">Total Profit</span>
                         <span className={`font-mono text-base ${plReport.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {parseFloat(plReport.summary.net_profit || 0).toFixed(3)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t border-dashed pt-2 mt-2 notranslate" translate="no">
+                        <span className="text-gray-800">Total Cash Sales + Cash Recover =</span>
+                        <span className="font-mono text-gray-900 font-extrabold">
+                          {(parseFloat(plReport.summary.cash_sales || 0) + parseFloat(plReport.summary.cash_recovery || 0)).toFixed(3)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold py-1 notranslate" translate="no">
+                        <span className="text-gray-800">Total Card Sales + Card Recover =</span>
+                        <span className="font-mono text-gray-900 font-extrabold">
+                          {(parseFloat(plReport.summary.card_sales || 0) + parseFloat(plReport.summary.card_recovery || 0)).toFixed(3)}
                         </span>
                       </div>
                     </div>
