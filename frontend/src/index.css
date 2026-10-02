@@ -17,21 +17,40 @@ code {
 }
 
 @media print {
-  html, body, #root, .h-screen, .min-h-screen, .flex-1, main, .overflow-y-auto, .overflow-hidden {
+  @page {
+    size: auto;
+    margin: 8mm 6mm !important;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box !important;
+  }
+
+  html, body, #root, .h-screen, .min-h-screen, .flex-1, main, .overflow-y-auto, .overflow-x-auto, .overflow-hidden, [class*="overflow-"] {
     height: auto !important;
     min-height: 0 !important;
     max-height: none !important;
     overflow: visible !important;
     display: block !important;
     position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   
-  aside, .no-print, button, input, select, header {
+  aside, nav, .no-print, button, input, select, header {
     display: none !important;
   }
   
-  .ml-20, .ml-64 {
+  .ml-20, .ml-64, div[class*="ml-"] {
     margin-left: 0 !important;
+  }
+
+  /* Prevent card paddings and shadow margins from eating up printable paper width */
+  .p-6, .p-8, .shadow, .shadow-sm, .shadow-md, .shadow-lg {
+    padding: 0 !important;
+    box-shadow: none !important;
   }
 }
 

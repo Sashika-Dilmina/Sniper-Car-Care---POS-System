@@ -624,53 +624,74 @@ const Reports = () => {
     @media print {
       @page {
         size: auto;
-        margin: 10mm !important;
+        margin: 6mm 6mm !important;
       }
       aside, nav, .no-print, button, input, select, header {
         display: none !important;
+      }
+      *, *::before, *::after {
+        box-sizing: border-box !important;
       }
       body, html {
         background: white !important;
         color: black !important;
         width: 100% !important;
+        max-width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
+        overflow: visible !important;
       }
-      main {
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-      .print-card {
+      main, #root, .min-h-screen, div[class*="ml-"] {
         margin: 0 !important;
         padding: 0 !important;
-        page-break-after: avoid !important;
-        break-after: avoid !important;
-      }
-      .print-full-width {
         width: 100% !important;
         max-width: 100% !important;
+        overflow: visible !important;
+      }
+      .overflow-x-auto, [class*="overflow-"] {
+        overflow: visible !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      .print-card, .print-full-width, .bg-white, .shadow, .rounded-lg, .rounded-xl, .rounded-2xl {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
         box-shadow: none !important;
         border: none !important;
-        padding: 0 !important;
       }
-      h1, h2, h3, h4, p, td, th {
+      h1, h2, h3, h4, p, td, th, span, div {
         color: black !important;
       }
+      /* Ensure table takes exactly 100% of printable paper width and columns never crop */
       table {
         width: 100% !important;
+        max-width: 100% !important;
+        table-layout: fixed !important;
         border-collapse: collapse !important;
-        margin-top: 15px !important;
+        margin-top: 8px !important;
+        page-break-inside: auto !important;
+      }
+      tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
       th, td {
-        border: 1px solid #ccc !important;
-        padding: 6px 10px !important;
+        border: 1px solid #d1d5db !important;
+        padding: 3px 4px !important;
         text-align: left !important;
-        font-size: 10pt !important;
+        font-size: 7.5pt !important;
+        line-height: 1.15 !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        white-space: normal !important;
       }
       th {
         background-color: #f3f4f6 !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        font-weight: 700 !important;
+        font-size: 7.5pt !important;
       }
     }
   `;
@@ -2148,10 +2169,29 @@ const Reports = () => {
             >
               {creditLoading ? 'Generating...' : 'Generate Report'}
             </button>
+            <button
+              onClick={handlePrint}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 font-bold"
+              title="Print Credit Report"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Report
+            </button>
           </div>
 
           {creditReport && (
             <div className="space-y-6">
+              {/* Header for Print */}
+              <div className="text-center space-y-1 border-b pb-4 mb-4 hidden print:block">
+                <h2 className="text-xl font-bold uppercase tracking-wide">Customer Credit Report</h2>
+                <p className="text-xs font-semibold text-gray-600">Business Location: Main Branch</p>
+                <p className="text-xs text-gray-500 font-mono">
+                  Date Range: {creditStartDate ? creditStartDate.split('-').reverse().join('-') : 'All'} TO {creditEndDate ? creditEndDate.split('-').reverse().join('-') : (creditStartDate ? creditStartDate.split('-').reverse().join('-') : 'All')}
+                </p>
+              </div>
+
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
@@ -2175,50 +2215,50 @@ const Reports = () => {
               </div>
 
               {/* Credits List Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full text-left print:table-fixed">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Date Granted</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Cleared Date</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Customer</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Plate</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Credit</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Recovered</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Remaining</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Status</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[11%]">Date Granted</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[11%]">Cleared Date</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[18%]">Customer</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[15%]">Plate</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right w-[11%]">Total Credit</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right w-[11%]">Recovered</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right w-[11%]">Remaining</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center w-[12%]">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {creditReport.length > 0 ? (
                       creditReport.map((c) => (
                         <tr key={c.id} className="hover:bg-gray-50/50">
-                          <td className="px-4 py-2 text-sm text-gray-600">{new Date(c.created_at).toLocaleDateString('en-GB')}</td>
-                          <td className="px-4 py-2 text-sm text-gray-600">
+                          <td className="px-2 py-1.5 text-sm text-gray-600 print:text-[7.5pt]">{new Date(c.created_at).toLocaleDateString('en-GB')}</td>
+                          <td className="px-2 py-1.5 text-sm text-gray-600 print:text-[7.5pt]">
                             {c.last_payment_date ? (
                               <div className="flex flex-col">
                                 <span>{new Date(c.last_payment_date).toLocaleDateString('en-GB')}</span>
                                 {c.last_payment_method && (
-                                  <span className="text-[10px] text-gray-400 uppercase font-mono">{c.last_payment_method}</span>
+                                  <span className="text-[10px] text-gray-400 uppercase font-mono print:text-[6.5pt]">{c.last_payment_method}</span>
                                 )}
                               </div>
                             ) : (
                               c.status === 'fully_paid' ? new Date(c.updated_at).toLocaleDateString('en-GB') : '-'
                             )}
                           </td>
-                          <td className="px-4 py-2 text-sm font-semibold text-gray-800">{c.customer_name}</td>
-                          <td className="px-4 py-2 text-sm font-mono text-gray-700">{c.vehicle_plate}</td>
-                          <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
+                          <td className="px-2 py-1.5 text-sm font-semibold text-gray-800 print:text-[7.5pt] break-words">{c.customer_name}</td>
+                          <td className="px-2 py-1.5 text-sm font-mono text-gray-700 print:text-[7.5pt] break-words">{c.vehicle_plate}</td>
+                          <td className="px-2 py-1.5 text-sm font-bold text-right text-gray-900 print:text-[7.5pt]">
                             AED {parseFloat(c.amount || 0).toFixed(2)}
                           </td>
-                          <td className="px-4 py-2 text-sm text-right text-green-600 font-semibold">
+                          <td className="px-2 py-1.5 text-sm text-right text-green-600 font-semibold print:text-[7.5pt]">
                             AED {parseFloat(c.total_recovered_amount || (c.amount - c.remaining_amount) || 0).toFixed(2)}
                           </td>
-                          <td className="px-4 py-2 text-sm font-bold text-right text-red-600">
+                          <td className="px-2 py-1.5 text-sm font-bold text-right text-red-600 print:text-[7.5pt]">
                             AED {parseFloat(c.remaining_amount || 0).toFixed(2)}
                           </td>
-                          <td className="px-4 py-2 text-sm text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                          <td className="px-2 py-1.5 text-sm text-center print:text-[7.5pt]">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize print:px-1 print:py-0 print:text-[6.5pt] ${
                               c.status === 'fully_paid' ? 'bg-green-100 text-green-800' :
                               c.status === 'partially_paid' ? 'bg-yellow-100 text-yellow-800' :
                               'bg-red-100 text-red-800'
