@@ -1,0 +1,21 @@
+{
+  "short_name": "Sniper POS",
+  "name": "Sniper Car Care - POS System",
+  "icons": [
+    {
+      "src": "pwa-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "pwa-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#1e293b",
+  "theme_color": "#1e40af",
+  "display": "standalone",
+  "orientation": "any"
+}

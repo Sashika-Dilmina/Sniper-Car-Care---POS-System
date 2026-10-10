@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 right-6' }) => {
-  const [currentLang, setCurrentLang] = useState(localStorage.getItem('user_lang') || 'en');
+  const [currentLang, setCurrentLang] = useState(localStorage.getItem('user_lang') || 'ar');
 
   // Apply document direction and language layout
   useEffect(() => {
@@ -13,6 +13,28 @@ const LanguageSelector = ({ variant = 'floating', positionClass = 'bottom-6 righ
       document.documentElement.lang = 'en';
     }
   }, [currentLang]);
+
+  // Set default language to Arabic on first load
+  useEffect(() => {
+    if (!localStorage.getItem('user_lang')) {
+      localStorage.setItem('user_lang', 'ar');
+      const setCookie = (name, value, days) => {
+        let expires = "";
+        if (days) {
+          const date = new Date();
+          date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+          expires = "; expires=" + date.toUTCString();
+        }
+        document.cookie = name + "=" + (value || "") + expires + "; path=/;";
+        const hostParts = window.location.hostname.split('.');
+        if (hostParts.length > 1) {
+          const domain = hostParts.slice(-2).join('.');
+          document.cookie = name + "=" + (value || "") + expires + "; path=/; domain=." + domain + ";";
+        }
+      };
+      setCookie('googtrans', '/en/ar', 365);
+    }
+  }, []);
 
   // Keep checking if translation needs to be triggered on mount/load
   useEffect(() => {

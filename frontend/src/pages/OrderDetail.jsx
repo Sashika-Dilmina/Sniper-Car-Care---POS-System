@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import BathaqueScanModal from '../components/BathaqueScanModal';
 
 const OrderDetail = () => {
   const { id } = useParams();
@@ -12,6 +13,10 @@ const OrderDetail = () => {
   const [registerStatus, setRegisterStatus] = useState('closed');
   const [sharing, setSharing] = useState(false);
 
+  // Bathaque Loyalty States
+  const [orderBathaqueLoyalty, setOrderBathaqueLoyalty] = useState(null);
+  const [showBathaqueScanModal, setShowBathaqueScanModal] = useState(false);
+
   const [vipBooking, setVipBooking] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [showVipModal, setShowVipModal] = useState(false);
@@ -19,9 +24,9 @@ const OrderDetail = () => {
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [scheduleData, setScheduleData] = useState({ appointment_date: '', appointment_time: '' });
   const [bookingUpdate, setBookingUpdate] = useState({ status: '', notes: '', staff_notes: '', assigned_staff_id: '' });
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
-  const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
   const [paymentDiscount, setPaymentDiscount] = useState(0);
+  const [selectedOrderMethod, setSelectedOrderMethod] = useState('cash');
+  const [orderSplitPayments, setOrderSplitPayments] = useState({ card: 0, cash: 0, bank_transfer: 0 });
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -41,15 +46,25 @@ const OrderDetail = () => {
     return apptDate === todayDate;
   };
 
-  const calculateElapsedTime = (startedAt, completedAt) => {
-    if (!startedAt) return 'Not started';
-    const start = new Date(startedAt);
+  const calculateElapsedTime = (startedAt, completedAt, createdAt) => {
+    const effectiveStart = startedAt || createdAt;
+    if (!effectiveStart) return 'Not started';
+    const start = new Date(effectiveStart);
     const end = completedAt ? new Date(completedAt) : new Date();
     const diffMs = end - start;
+    if (diffMs <= 0) return '0 min';
     const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 60) return `${diffMins} min`;
     const hrs = Math.floor(diffMins / 60);
     const mins = diffMins % 60;
-    return `${hrs}h ${mins}m`;
+    return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+  };
+
+  const getCleanNote = (rawNotes) => {
+    if (!rawNotes) return '';
+    let cleaned = rawNotes.replace(/One-Tap Booking via Website - [^\n]*/g, '').trim();
+    cleaned = cleaned.replace(/^Customer Note:\s*/i, '').trim();
+    return cleaned;
   };
 
   const fetchVipBooking = async (bookingId) => {
@@ -146,25 +161,7 @@ const OrderDetail = () => {
     }
   };
 
-  const handleVipRecordManualPayment = async () => {
-    if (!order.id) return;
-    setManualPaymentLoading(true);
-    try {
-      await axios.post('/api/payments/manual', {
-        order_id: order.id,
-        amount: order.total,
-        method: selectedPaymentMethod
-      });
-      toast.success('Payment recorded successfully');
-      fetchVipBooking(order.vip_booking_id);
-      fetchOrder();
-    } catch (error) {
-      console.error('Error recording payment:', error);
-      toast.error('Failed to record payment');
-    } finally {
-      setManualPaymentLoading(false);
-    }
-  };
+
 
   useEffect(() => {
     if (order && order.vip_booking_id) {
@@ -206,10 +203,44 @@ const OrderDetail = () => {
     }
   };
 
+  const fetchBathaqueLoyalty = async (bId) => {
+    if (!bId) return;
+    try {
+      const res = await axios.get(`/api/bathaque/check/${bId}`);
+      if (res.data.success) {
+        setOrderBathaqueLoyalty(res.data.loyalty);
+        if ((res.data.loyalty?.wash_stamps || 0) >= 5) {
+          setSelectedOrderMethod('free');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check Bathaque loyalty', e);
+    }
+  };
+
+  const handleApplyBathaqueToOrder = (result) => {
+    setOrderBathaqueLoyalty(result.loyalty);
+    if ((result.loyalty?.wash_stamps || 0) >= 5) {
+      setSelectedOrderMethod('free');
+      toast.success(`Bathaque Pass Applied: ${result.bathaque_id} - 100% FREE WASH ELIGIBLE! 🎁`);
+    } else {
+      toast.success(`Bathaque Pass Applied: ${result.bathaque_id} (${result.loyalty?.wash_stamps || 0}/5 stamps)`);
+    }
+  };
+
   const fetchOrder = async () => {
     try {
       const response = await axios.get(`/api/orders/${id}`);
-      setOrder(response.data.order);
+      const ord = response.data.order;
+      setOrder(ord);
+      if (ord?.bathaque_loyalty) {
+        setOrderBathaqueLoyalty(ord.bathaque_loyalty);
+        if ((ord.bathaque_loyalty.wash_stamps || 0) >= 5 && ord.payment_status !== 'paid' && ord.payment_status !== 'free') {
+          setSelectedOrderMethod('free');
+        }
+      } else if (ord?.bathaque_id) {
+        fetchBathaqueLoyalty(ord.bathaque_id);
+      }
     } catch (error) {
       toast.error('Failed to load order details');
     } finally {
@@ -301,9 +332,15 @@ const OrderDetail = () => {
   }
 
   const remainingAmount = parseFloat(order.total) - (order.payments?.reduce((sum, p) => sum + (p.status === 'completed' ? parseFloat(p.amount) : 0), 0) || 0);
+  const isEligibleForFree = (orderBathaqueLoyalty?.wash_stamps ?? order?.bathaque_loyalty?.wash_stamps ?? 0) >= 5;
   const isCashOrder = !order.payments || order.payments.length === 0 || order.payments.every(p => p.method === 'cash');
   const isVipOrder = order.vip_booking_id !== null && order.vip_booking_id !== undefined;
-  const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => item.category !== 'Services');
+  const isServiceCategory = (cat, name) => {
+    const c = (cat || '').toLowerCase();
+    const n = (name || '').toLowerCase();
+    return c.includes('service') || c === 'vip' || n.includes('service') || n.includes('wash');
+  };
+  const isProductOnly = order.items && order.items.length > 0 && order.items.every(item => !isServiceCategory(item.category, item.product_name));
 
   return (
     <div className="space-y-6">
@@ -330,6 +367,23 @@ const OrderDetail = () => {
           </div>
         </div>
 
+        {order.is_deleted === 1 && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-900 p-4 rounded-lg shadow-sm mb-6 flex items-start gap-3">
+            <svg className="w-6 h-6 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <h3 className="font-bold text-base text-red-800">This Order Has Been Deleted</h3>
+              <p className="text-sm mt-1 text-red-700">
+                Reason: <strong>{order.delete_reason || 'No reason specified'}</strong>
+              </p>
+              <p className="text-xs text-red-600 mt-1">
+                The amount and transactions for this order have been cancelled and excluded from all financial calculations and reports.
+              </p>
+            </div>
+          </div>
+        )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold mb-4">Order Information</h2>
@@ -342,6 +396,36 @@ const OrderDetail = () => {
               <div>
                 <p className="text-sm text-gray-600">Vehicle Plate</p>
                 <p className="text-lg font-mono">{order.vehicle_plate}</p>
+              </div>
+            )}
+            {(order.bathaque_id || orderBathaqueLoyalty?.bathaque_id) && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-red-800 uppercase tracking-wider">
+                    Bathaque Loyalty Pass:
+                  </span>
+                  <span className="font-mono font-black text-red-700 text-sm">
+                    {order.bathaque_id || orderBathaqueLoyalty?.bathaque_id}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-red-900 font-bold">
+                  <span>Wash Stamps: {orderBathaqueLoyalty?.wash_stamps ?? order.bathaque_loyalty?.wash_stamps ?? 0} / 5</span>
+                  {isEligibleForFree ? (
+                    <span className="px-2 py-0.5 bg-amber-200 text-amber-900 rounded-full text-[11px] font-black border border-amber-400 animate-pulse">
+                      🎁 6th Wash is FREE!
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 font-normal">
+                      {5 - (orderBathaqueLoyalty?.wash_stamps ?? order.bathaque_loyalty?.wash_stamps ?? 0)} more wash(es) to free
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {getCleanNote(order.notes) && (
+              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-xs font-bold text-red-800 uppercase tracking-wider mb-0.5">📝 CUSTOMER NOTE</p>
+                <p className="text-sm text-red-900 font-semibold">{getCleanNote(order.notes)}</p>
               </div>
             )}
             <div>
@@ -368,9 +452,7 @@ const OrderDetail = () => {
                   (order.status === 'processing' || order.status === 'pending') && (
                     <button
                       onClick={() => handleStatusUpdate('completed')}
-                      disabled={registerStatus !== 'open'}
-                      className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={registerStatus !== 'open' ? "Please open the cash register first to complete orders" : ""}
+                      className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-black rounded-lg transition shadow-md hover:shadow-primary-500/20 active:scale-[0.98]"
                     >
                       ✓ Done / Completed
                     </button>
@@ -405,10 +487,30 @@ const OrderDetail = () => {
             )}
             <div>
               <p className="text-sm text-gray-600">Payment Status</p>
-              {order.credit_status ? (
+              {order.status === 'cancelled' || order.payment_status === 'cancelled' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold border border-red-200">
+                  cancelled
+                </span>
+              ) : order.payment_status === 'credit' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                  Credit
+                </span>
+              ) : order.payment_status === 'paid' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800 font-semibold">
+                  Paid
+                </span>
+              ) : order.payment_status === 'free' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-800 font-semibold uppercase">
+                  Free
+                </span>
+              ) : order.payment_status === 'partial' ? (
+                <span className="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800 font-semibold">
+                  Partial
+                </span>
+              ) : order.credit_status ? (
                 order.credit_status === 'unpaid' ? (
-                  <span className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 font-semibold">
-                    Credit / Unpaid
+                  <span className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                    Credit
                   </span>
                 ) : order.credit_status === 'partially_paid' ? (
                   <span className="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800 font-semibold">
@@ -428,6 +530,18 @@ const OrderDetail = () => {
                 </span>
               )}
             </div>
+            <div>
+              <p className="text-sm text-gray-600">Payment Method</p>
+              <span className={`px-3 py-1 text-sm rounded-full font-semibold capitalize ${
+                (order.payment_methods || order.payments?.[0]?.method) === 'cash' ? 'bg-green-100 text-green-800' :
+                (order.payment_methods || order.payments?.[0]?.method) === 'card' ? 'bg-purple-100 text-purple-800' :
+                (order.payment_methods || order.payments?.[0]?.method) === 'credit' ? 'bg-orange-100 text-orange-800' :
+                (order.payment_methods || order.payments?.[0]?.method) ? 'bg-blue-100 text-blue-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {order.payment_methods || order.payments?.[0]?.method || 'N/A'}
+              </span>
+            </div>
             {order.source && (
               <div>
                 <p className="text-sm text-gray-600">Order Source</p>
@@ -435,14 +549,6 @@ const OrderDetail = () => {
                   }`}>
                   {order.source === 'customer_website' ? '🌐 Customer Website' : '🖥️ POS System'}
                 </span>
-              </div>
-            )}
-            {order.notes && (
-              <div>
-                <p className="text-sm text-gray-600">Customer Notes</p>
-                <div className="mt-1 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-gray-700">{order.notes}</p>
-                </div>
               </div>
             )}
           </div>
@@ -482,7 +588,7 @@ const OrderDetail = () => {
         </div>
       </div>
 
-      {order.payment_status !== 'paid' && order.status !== 'cancelled' && remainingAmount > 0 && (
+      {order.payment_status !== 'paid' && order.payment_status !== 'credit' && order.status !== 'cancelled' && order.is_deleted !== 1 && remainingAmount > 0 && (
         <div className="bg-white p-6 rounded-lg shadow border-2 border-primary-500">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span className="text-2xl">💳</span> Customer Payment Required
@@ -504,66 +610,199 @@ const OrderDetail = () => {
             {showPayment ? (
               <div className="w-full bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <h3 className="font-semibold mb-3">Record Manual Payment</h3>
-                <div className="flex gap-4 items-end">
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Method</label>
-                    <select id="manual_method" className="w-full p-2 border rounded-lg bg-white">
-                      <option value="cash">Cash</option>
-                      <option value="card">Card</option>
-                      <option value="bank_transfer">Bank Transfer</option>
-                    </select>
+                <div className="w-full space-y-4">
+                  {/* Bathaque 5-Stamps Free Wash Alert */}
+                  {isEligibleForFree && (
+                    <div className="p-3 bg-gradient-to-r from-amber-500/15 to-yellow-500/25 border-2 border-amber-400 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🎁</span>
+                        <div>
+                          <p className="text-xs font-black text-amber-900 uppercase">
+                            Eligible for 100% Free Wash!
+                          </p>
+                          <p className="text-[11px] text-amber-800">
+                            Bathaque ID ({orderBathaqueLoyalty?.bathaque_id || order.bathaque_id}) has completed 5 wash stamps.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOrderMethod('free')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black shadow transition ${
+                          selectedOrderMethod === 'free'
+                            ? 'bg-amber-600 text-white shadow-amber-300'
+                            : 'bg-white text-amber-800 border border-amber-400 hover:bg-amber-100'
+                        }`}
+                      >
+                        {selectedOrderMethod === 'free' ? '✓ Free Wash Selected' : 'Apply Free Wash'}
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs text-gray-500 uppercase font-bold">Method</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowBathaqueScanModal(true)}
+                          className="text-[11px] text-red-600 font-bold hover:underline flex items-center gap-1"
+                        >
+                          <span>📷</span> Scan Bathaque Pass
+                        </button>
+                      </div>
+                      <select 
+                        value={selectedOrderMethod}
+                        onChange={(e) => setSelectedOrderMethod(e.target.value)}
+                        className={`w-full p-2 border rounded-lg font-bold ${
+                          selectedOrderMethod === 'free'
+                            ? 'bg-amber-50 text-amber-900 border-amber-500 ring-2 ring-amber-400/40'
+                            : 'bg-white'
+                        }`}
+                      >
+                        <option value="cash">💵 Cash</option>
+                        <option value="card">💳 Card</option>
+                        <option value="credit">🏦 Credit</option>
+                        <option value="bank_transfer">🏛️ Bank Transfer</option>
+                        <option value="multiple">🔀 Multiple Payments (Split)</option>
+                        {isEligibleForFree && (
+                          <option value="free" className="text-amber-800 font-black bg-amber-100">
+                            🎁 Free Wash (Bathaque Loyalty - 5 Stamps Completed)
+                          </option>
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs text-gray-500 uppercase font-bold">Add Discount (AED)</label>
+                        {remainingAmount > 0 && selectedOrderMethod !== 'free' && (
+                          <span className="text-[10px] text-gray-500 font-semibold">Max: AED {Math.max(0, remainingAmount - 1)}</span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={selectedOrderMethod === 'free'}
+                        max={Math.max(0, remainingAmount - 1)}
+                        value={selectedOrderMethod === 'free' ? 0 : paymentDiscount}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const maxAllowed = Math.max(0, remainingAmount - 1);
+                          if (remainingAmount > 0 && val >= remainingAmount) {
+                            toast.error(`Full discount is not allowed. Maximum discount is AED ${maxAllowed}`);
+                            setPaymentDiscount(maxAllowed);
+                          } else {
+                            setPaymentDiscount(val);
+                          }
+                        }}
+                        className={`w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm font-bold ${
+                          selectedOrderMethod === 'free' ? 'bg-gray-100 text-gray-400' : 'bg-white'
+                        }`}
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Add Discount (AED)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max={remainingAmount}
-                      value={paymentDiscount}
-                      onChange={(e) => setPaymentDiscount(parseFloat(e.target.value) || 0)}
-                      className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                    />
+
+                  {selectedOrderMethod === 'multiple' && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-left">
+                      <p className="text-[11px] font-bold uppercase text-gray-500">Split Payment Amounts</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-700">Card (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderSplitPayments.card || ''}
+                            onChange={(e) => setOrderSplitPayments({ ...orderSplitPayments, card: parseFloat(e.target.value) || 0 })}
+                            className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-700">Cash (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderSplitPayments.cash || ''}
+                            onChange={(e) => setOrderSplitPayments({ ...orderSplitPayments, cash: parseFloat(e.target.value) || 0 })}
+                            className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-700">Bank Transfer (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderSplitPayments.bank_transfer || ''}
+                            onChange={(e) => setOrderSplitPayments({ ...orderSplitPayments, bank_transfer: parseFloat(e.target.value) || 0 })}
+                            className="w-full p-2 border rounded-lg bg-gray-50 font-bold text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-4 items-center pt-2 border-t">
+                    <button
+                      onClick={async () => {
+                        if (selectedOrderMethod === 'credit' && !order.customer_id) {
+                          toast.error('Credit payment requires a registered customer on this order.');
+                          return;
+                        }
+                        const isFree = selectedOrderMethod === 'free';
+                        if (!isFree && paymentDiscount > 0 && paymentDiscount >= remainingAmount) {
+                          toast.error(`Full discount is not allowed. Maximum discount is AED ${Math.max(0, remainingAmount - 1)}`);
+                          return;
+                        }
+                        const finalAmount = isFree ? 0 : Math.max(0, remainingAmount - paymentDiscount);
+                        try {
+                          const payload = {
+                            order_id: order.id,
+                            amount: finalAmount,
+                            method: selectedOrderMethod,
+                            discount: isFree ? 0 : paymentDiscount,
+                            bathaque_id: orderBathaqueLoyalty?.bathaque_id || order.bathaque_id
+                          };
+
+                          if (selectedOrderMethod === 'multiple') {
+                            payload.splits = [
+                              { method: 'card', amount: parseFloat(orderSplitPayments.card || 0) },
+                              { method: 'cash', amount: parseFloat(orderSplitPayments.cash || 0) },
+                              { method: 'bank_transfer', amount: parseFloat(orderSplitPayments.bank_transfer || 0) }
+                            ].filter(s => s.amount > 0);
+                          }
+
+                          await axios.post('/api/payments/manual', payload);
+                          toast.success(isFree ? 'Free Wash redeemed and order completed! 🎉' : 'Payment recorded successfully');
+                          setShowPayment(false);
+                          setPaymentDiscount(0);
+                          fetchOrder();
+                        } catch (err) {
+                          toast.error(err.response?.data?.message || 'Failed to record payment');
+                        }
+                      }}
+                      className={`px-6 py-2.5 rounded-lg font-bold transition text-sm shadow-md ${
+                        selectedOrderMethod === 'free'
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse shadow-amber-300'
+                          : 'bg-primary-600 text-white hover:bg-primary-700'
+                      }`}
+                    >
+                      {selectedOrderMethod === 'free'
+                        ? '🎁 Confirm 100% Free Wash (AED 0.00)'
+                        : `Confirm Amount: AED ${Math.max(0, remainingAmount - paymentDiscount).toLocaleString()}`}
+                    </button>
+                    <button onClick={() => setShowPayment(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
                   </div>
-                  <button
-                    onClick={async () => {
-                      const method = document.getElementById('manual_method').value;
-                      const finalAmount = Math.max(0, remainingAmount - paymentDiscount);
-                      try {
-                        await axios.post('/api/payments/manual', {
-                          order_id: order.id,
-                          amount: finalAmount,
-                          method: method,
-                          discount: paymentDiscount
-                        });
-                        toast.success('Payment recorded successfully');
-                        setShowPayment(false);
-                        setPaymentDiscount(0);
-                        fetchOrder();
-                      } catch (err) {
-                        toast.error('Failed to record payment');
-                      }
-                    }}
-                    className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700 transition"
-                  >
-                    Confirm Amount: AED {Math.max(0, remainingAmount - paymentDiscount).toLocaleString()}
-                  </button>
-                  <button onClick={() => setShowPayment(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700">Cancel</button>
                 </div>
               </div>
             ) : (
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <button
                   onClick={() => setShowPayment(true)}
                   className="px-6 py-3 border-2 border-primary-600 text-primary-600 font-bold rounded-full hover:bg-primary-50 transition flex items-center gap-2"
                 >
-                  Record Cash/Manual Payment
-                </button>
-                <button
-                  onClick={handleTapCheckout}
-                  disabled={loadingTap}
-                  className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-full hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50"
-                >
-                  💳 {loadingTap ? 'Redirecting...' : 'Pay Online via Tap'}
+                  <span>💵</span> Record Manual Payment
                 </button>
               </div>
             )}
@@ -660,7 +899,7 @@ const OrderDetail = () => {
           <div className="text-right">
             <h3 className="font-bold text-xs uppercase mb-1">Invoice Info:</h3>
             <p><span className="font-bold">Invoice #:</span> CC-{order.id}</p>
-            <p><span className="font-bold">Date:</span> {new Date(order.created_at).toLocaleDateString()}</p>
+            <p><span className="font-bold">Date & Time:</span> {new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             <p><span className="font-bold">Status:</span> {order.status === 'completed' ? 'Completed' : 'In Progress'}</p>
             {order.credit_status ? (
               <>
@@ -801,37 +1040,19 @@ const OrderDetail = () => {
                   <div>
                     <p className="text-xs text-gray-400 font-bold uppercase text-right">Payment Status</p>
                     <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded-full ${
-                      order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      order.status === 'cancelled' || vipBooking?.status === 'cancelled' || order.payment_status === 'cancelled'
+                        ? 'bg-red-100 text-red-800 border border-red-200'
+                        : order.payment_status === 'paid' ? 'bg-green-100 text-green-800'
+                        : order.payment_status === 'credit' ? 'bg-purple-100 text-purple-800'
+                        : 'bg-red-100 text-red-800'
                     }`}>
-                      {order.payment_status || 'pending'}
+                      {(order.status === 'cancelled' || vipBooking?.status === 'cancelled') ? 'cancelled' : (order.payment_status || 'pending')}
                     </span>
                   </div>
                 </div>
                 {order.payment_status === 'paid' && (
                   <div className="text-[10px] font-bold text-gray-500 uppercase text-right mt-1">
                     Paid via: {order.payments?.[0]?.method || 'manual'}
-                  </div>
-                )}
-                {order.payment_status !== 'paid' && (
-                  <div className="border-t pt-2 mt-1 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs font-bold text-gray-600 uppercase">Select Payment Method</label>
-                      <select
-                        value={selectedPaymentMethod}
-                        onChange={(e) => setSelectedPaymentMethod(e.target.value)}
-                        className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-red-500 focus:border-red-500 outline-none"
-                      >
-                        <option value="cash">💵 Cash</option>
-                        <option value="card">💳 Card</option>
-                      </select>
-                    </div>
-                    <button
-                      onClick={handleVipRecordManualPayment}
-                      disabled={manualPaymentLoading}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50"
-                    >
-                      ⚡ Record Payment (AED {parseFloat(order.total || 0).toLocaleString()})
-                    </button>
                   </div>
                 )}
               </div>
@@ -935,7 +1156,7 @@ const OrderDetail = () => {
                       )}
                       {vipBooking.status === 'in_progress' && (
                         <button
-                          onClick={() => handleVipStatusChange('completed', selectedPaymentMethod)}
+                          onClick={() => handleVipStatusChange('completed')}
                           disabled={updatingVip}
                           className="flex-1 min-w-[150px] bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-1"
                         >
@@ -1013,6 +1234,14 @@ const OrderDetail = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bathaque Loyalty Scan Modal */}
+      {showBathaqueScanModal && (
+        <BathaqueScanModal
+          onClose={() => setShowBathaqueScanModal(false)}
+          onApply={handleApplyBathaqueToOrder}
+        />
       )}
     </div>
   );

@@ -1,0 +1,3 @@
+# Allow search engines to index customer website
+User-agent: *
+Allow: /
