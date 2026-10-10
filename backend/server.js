@@ -26,8 +26,10 @@ const purchaseRoutes = require('./routes/purchaseRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const creditRoutes = require('./routes/creditRoutes');
 const registerRoutes = require('./routes/registerRoutes');
+const bathaqueRoutes = require('./routes/bathaqueRoutes');
 const { startFtpServer } = require('./services/ftpServer');
 const { startFileWatcher } = require('./services/anprWatcher');
+const runSoftDeleteMigrations = require('./utils/automaticMigration');
 
 
 // Initialize app
@@ -89,6 +91,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/credits', creditRoutes);
 app.use('/api/registers', registerRoutes);
 app.use('/api/vehicle-registration', vehicleRegistrationRoutes);
+app.use('/api/bathaque', bathaqueRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -107,10 +110,17 @@ app.use((req, res) => {
 // Start server
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 API: http://localhost:${PORT}/api`);
+  
+  // Run automatic migrations for soft delete columns
+  try {
+    await runSoftDeleteMigrations();
+  } catch (migErr) {
+    console.error('❌ Failed to run soft-delete column migrations:', migErr);
+  }
   
   // Start ANPR FTP-based services
   try {

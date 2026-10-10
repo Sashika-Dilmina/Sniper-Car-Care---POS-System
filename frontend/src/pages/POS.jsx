@@ -20,7 +20,8 @@ const POS = () => {
   const fetchProducts = async () => {
     try {
       const response = await axios.get('/api/products');
-      setProducts(response.data.products);
+      const activeProducts = (response.data.products || []).filter(p => p.is_deleted !== 1);
+      setProducts(activeProducts);
     } catch (error) {
       toast.error('Failed to load products');
     }
@@ -29,7 +30,8 @@ const POS = () => {
   const fetchCustomers = async () => {
     try {
       const response = await axios.get('/api/customers');
-      setCustomers(response.data.customers);
+      const activeCustomers = (response.data.customers || []).filter(c => c.is_deleted !== 1);
+      setCustomers(activeCustomers);
     } catch (error) {
       toast.error('Failed to load customers');
     }
@@ -84,6 +86,11 @@ const POS = () => {
     }
 
     try {
+      const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      if (subtotal > 0 && discount >= subtotal) {
+        toast.error(`Full discount is not allowed. Maximum discount is AED ${Math.max(0, subtotal - 1)}`);
+        return;
+      }
       const total = calculateTotal();
 
       const orderData = {
@@ -142,7 +149,9 @@ const POS = () => {
                 <p className="text-lg font-bold text-primary-600 mt-2">
                   AED {parseFloat(product.price).toLocaleString()}
                 </p>
-                <p className="text-xs text-gray-500">Stock: {product.stock}</p>
+                {product.category === 'Products' && (
+                  <p className="text-xs text-gray-500">Stock: {product.stock}</p>
+                )}
               </div>
             ))}
           </div>
@@ -219,8 +228,19 @@ const POS = () => {
                   <input
                     type="number"
                     value={discount}
-                    onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-24 px-2 py-1 border rounded text-right"
+                    max={Math.max(0, cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) - 1)}
+                    onChange={(e) => {
+                      const val = Math.max(0, parseFloat(e.target.value) || 0);
+                      const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                      const maxAllowed = Math.max(0, subtotal - 1);
+                      if (subtotal > 0 && val >= subtotal) {
+                        toast.error(`Full discount is not allowed. Maximum discount is AED ${maxAllowed}`);
+                        setDiscount(maxAllowed);
+                      } else {
+                        setDiscount(val);
+                      }
+                    }}
+                    className="w-24 px-2 py-1 border rounded text-right font-bold"
                     min="0"
                   />
                 </div>

@@ -73,7 +73,14 @@ const getRegisterReport = asyncHandler(async (req, res) => {
 
   // Query Cash Payments from regular sales
   const [cashSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cash" AND status = "completed"',
+    `SELECT COALESCE(SUM(p.amount), 0) as total 
+     FROM payments p 
+     JOIN orders o ON p.order_id = o.id 
+     WHERE p.created_at >= ? AND p.created_at <= ? 
+       AND p.method = 'cash' 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
+       AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
   const cashSales = parseFloat(cashSalesRows[0].total);
@@ -88,7 +95,14 @@ const getRegisterReport = asyncHandler(async (req, res) => {
 
   // Query Card Payments from regular sales
   const [cardSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND (method = "card" OR method = "visa") AND status = "completed"',
+    `SELECT COALESCE(SUM(p.amount), 0) as total 
+     FROM payments p 
+     JOIN orders o ON p.order_id = o.id 
+     WHERE p.created_at >= ? AND p.created_at <= ? 
+       AND (p.method = 'card' OR p.method = 'visa') 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
+       AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
   const cardSales = parseFloat(cardSalesRows[0].total);
@@ -103,35 +117,66 @@ const getRegisterReport = asyncHandler(async (req, res) => {
 
   // Query Cheque Payments
   const [chequeSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cheque" AND status = "completed"',
+    `SELECT COALESCE(SUM(p.amount), 0) as total 
+     FROM payments p 
+     JOIN orders o ON p.order_id = o.id 
+     WHERE p.created_at >= ? AND p.created_at <= ? 
+       AND p.method = 'cheque' 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
+       AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
   const chequeSales = parseFloat(chequeSalesRows[0].total);
 
   // Query Bank Transfer
   const [bankSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "bank_transfer" AND status = "completed"',
+    `SELECT COALESCE(SUM(p.amount), 0) as total 
+     FROM payments p 
+     JOIN orders o ON p.order_id = o.id 
+     WHERE p.created_at >= ? AND p.created_at <= ? 
+       AND p.method = 'bank_transfer' 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
+       AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
   const bankSales = parseFloat(bankSalesRows[0].total);
 
   // Query Other Payments (apple_pay, samsung_pay, tap)
   const [otherSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method IN ("apple_pay", "samsung_pay", "tap") AND status = "completed"',
+    `SELECT COALESCE(SUM(p.amount), 0) as total 
+     FROM payments p 
+     JOIN orders o ON p.order_id = o.id 
+     WHERE p.created_at >= ? AND p.created_at <= ? 
+       AND p.method IN ('apple_pay', 'samsung_pay', 'tap') 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
+       AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
   const otherSales = parseFloat(otherSalesRows[0].total);
 
   // Query Free Washes original amount
   const [freeWashRows] = await pool.query(
-    'SELECT COALESCE(SUM(o.discount), 0) as total FROM payments p INNER JOIN orders o ON p.order_id = o.id WHERE p.created_at >= ? AND p.created_at <= ? AND p.method = "free" AND p.status = "completed"',
+    `SELECT COALESCE(SUM(o.discount), 0) as total 
+     FROM payments p 
+     INNER JOIN orders o ON p.order_id = o.id 
+     WHERE p.created_at >= ? AND p.created_at <= ? 
+       AND p.method = 'free' 
+       AND o.payment_status = 'free' 
+       AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
   const freeWashAmount = parseFloat(freeWashRows[0].total);
 
   // Query Credit Sales
   const [creditSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM customer_credits WHERE created_at >= ? AND created_at <= ?',
+    `SELECT COALESCE(SUM(cc.amount), 0) as total 
+     FROM customer_credits cc 
+     JOIN orders o ON cc.order_id = o.id 
+     WHERE cc.created_at >= ? AND cc.created_at <= ? 
+       AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
   const creditSales = parseFloat(creditSalesRows[0].total);
@@ -219,11 +264,19 @@ const closeRegister = asyncHandler(async (req, res) => {
 
   const register = rows[0];
 
-  // Check for any pending or processing saloon or 4x4 vehicles (excluding VIP) on the date when the register session was opened
-  const [pendingVehicles] = await pool.query(
-    `SELECT COUNT(*) as count 
+  // Check for any unsettled saloon or 4x4 vehicles / orders (excluding VIP bookings)
+  // Both service (status = 'completed') AND payment (payment_status IN ('paid', 'credit', 'free')) must be completed before closing register.
+  const [unsettledOrders] = await pool.query(
+    `SELECT o.id, o.status, o.payment_status, c.vehicle_plate
      FROM orders o
-     WHERE o.status IN ('pending', 'processing') 
+     LEFT JOIN customers c ON o.customer_id = c.id
+     WHERE o.status != 'cancelled' 
+       AND o.payment_status != 'cancelled'
+       AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
+       AND (
+         (o.payment_status != 'credit' AND o.status != 'completed') 
+         OR o.payment_status NOT IN ('paid', 'credit', 'free')
+       )
        AND o.vip_booking_id IS NULL
        AND NOT EXISTS (
          SELECT 1 
@@ -231,17 +284,19 @@ const closeRegister = asyncHandler(async (req, res) => {
          JOIN products p ON oi.product_id = p.id 
          WHERE oi.order_id = o.id AND (p.category = 'VIP' OR LOWER(p.name) LIKE '%vip%')
        )
-       AND DATE(o.created_at) = DATE(?)
-       AND (
-         EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
-         OR
-         EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
-       )`,
-    [register.opened_at]
+       AND (o.created_at >= ? OR DATE(o.created_at) = DATE(?))
+     ORDER BY o.id ASC`,
+    [register.opened_at, register.opened_at]
   );
-  if (pendingVehicles[0].count > 0) {
+
+  if (unsettledOrders.length > 0) {
+    const orderDetails = unsettledOrders
+      .slice(0, 5)
+      .map(o => `#${o.id}${o.vehicle_plate ? ` (${o.vehicle_plate})` : ''} [Service: ${o.status}, Payment: ${o.payment_status}]`)
+      .join(', ');
+    const moreCount = unsettledOrders.length > 5 ? ` and ${unsettledOrders.length - 5} more` : '';
     return res.status(400).json({ 
-      message: `Cannot close register. There are still ${pendingVehicles[0].count} pending/processing vehicles that must be completed first.` 
+      message: `Cannot close register. There are ${unsettledOrders.length} order(s) pending completion or payment: ${orderDetails}${moreCount}. Both service and payment must be completed before closing register.` 
     });
   }
 
@@ -250,7 +305,14 @@ const closeRegister = asyncHandler(async (req, res) => {
 
   // Compute stats to save closing balance
   const [cashSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cash" AND status = "completed"',
+    `SELECT COALESCE(SUM(p.amount), 0) as total 
+     FROM payments p 
+     JOIN orders o ON p.order_id = o.id 
+     WHERE p.created_at >= ? AND p.created_at <= ? 
+       AND p.method = 'cash' 
+       AND p.status = 'completed' 
+       AND o.payment_status IN ('paid', 'free')
+       AND o.status != 'cancelled'`,
     [openedAt, closedAt]
   );
   const cashSales = parseFloat(cashSalesRows[0].total);

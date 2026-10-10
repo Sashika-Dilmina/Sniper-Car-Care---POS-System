@@ -32,12 +32,12 @@ async function sendVIPCompletionNotification(booking, customer, orderId) {
 
       if (currentStamps === 0) {
         if (orderPayStatus === 'free') {
-          stampsMsg = " Congrats! You earned a FREE wash for your next visit!";
+          stampsMsg = " تهانينا! لقد حصلت على غسيل مجاني لزيارتك القادمة!";
         } else {
-          stampsMsg = " You have completed 5/5 washes. Congrats! You earned a FREE wash for your next visit!";
+          stampsMsg = " لقد أكملت 5/5 من الغسلات. تهانينا! لقد حصلت على غسيل مجاني لزيارتك القادمة!";
         }
       } else {
-        stampsMsg = ` You have completed ${currentStamps}/5 washes. Only ${5 - currentStamps} more washes left to get your FREE wash!`;
+        stampsMsg = ` لقد أكملت ${currentStamps}/5 من الغسلات. متبقي ${5 - currentStamps} غسلات فقط للحصول على غسيلك المجاني!`;
       }
     }
   } catch (err) {
@@ -51,14 +51,14 @@ async function sendVIPCompletionNotification(booking, customer, orderId) {
     orderId: orderId,
   });
 
-  const firstName = customer.name ? customer.name.split(' ')[0] : 'Customer';
-  let message = `Hi ${firstName}, your VIP ${booking.service_type} service is complete. Thank you for choosing Sniper Car Care.`;
+  let message = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nتقييمك يساعدنا نقدم خدمة أفضل\n`;
 
   if (feedbackUrl) {
-    message += ` Share feedback: ${feedbackUrl}`;
+    message += ` ${feedbackUrl}`;
   }
   
-  message += stampsMsg;
+  // stampsMsg disabled temporarily
+  // message += stampsMsg;
 
   await sendReson8Message({
     to: formattedPhone,
@@ -251,7 +251,7 @@ exports.createVIPBooking = asyncHandler(async (req, res) => {
 
     // Create corresponding order in the orders table
     const [orderResult] = await db.query(
-      'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, vip_booking_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO orders (customer_id, total, discount, status, payment_status, source, vip_booking_id, notes, service_started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
       [mainCustomerId, price, 0, 'pending', 'pending', 'vip_booking', bookingResult.insertId, notes || `VIP Booking - ${service_type}`]
     );
     
@@ -358,17 +358,6 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
         );
         if (orderRows.length > 0) {
           const order = orderRows[0];
-          if (order.payment_status !== 'paid' && order.payment_status !== 'free') {
-            const payMethod = req.body.payment_method || 'cash';
-            
-            // Record payment in payments table
-            await db.query(
-              'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, "completed")',
-              [order.id, order.total, payMethod]
-            );
-            
-            additionalSets += `, payment_status = 'paid'`;
-          }
 
           // Trigger Loyalty Points / Stamps increment for VIP completion
           let targetCustomerId = order.customer_id;
@@ -435,6 +424,7 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
       }
     } else if (status === 'cancelled') {
       orderStatus = 'cancelled';
+      additionalSets += ", payment_status = 'cancelled'";
     }
 
     await db.query(
@@ -568,6 +558,7 @@ exports.getAvailableSlots = asyncHandler(async (req, res) => {
 // @route DELETE /api/vip-bookings/:id
 // @access Private
 exports.deleteVIPBooking = asyncHandler(async (req, res) => {
+  const { reason } = req.body;
   const [booking] = await db.query(
     'SELECT * FROM vip_bookings WHERE id = ?',
     [req.params.id]
@@ -581,8 +572,8 @@ exports.deleteVIPBooking = asyncHandler(async (req, res) => {
   }
   
   await db.query(
-    'DELETE FROM vip_bookings WHERE id = ?',
-    [req.params.id]
+    'UPDATE vip_bookings SET is_deleted = 1, delete_reason = ? WHERE id = ?',
+    [reason || 'No reason specified', req.params.id]
   );
   
   res.status(200).json({
