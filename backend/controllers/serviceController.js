@@ -7,7 +7,7 @@ const { buildFeedbackUrl, formatPhoneNumber } = require('../utils/customerLinkUt
 // @route   GET /api/services
 // @access  Private
 const getServices = asyncHandler(async (req, res) => {
-  const { vehicle_type, status } = req.query;
+  const { vehicle_type, status, limit } = req.query;
   let query = `
     SELECT s.*, 
            c.name as customer_name,
@@ -31,6 +31,10 @@ const getServices = asyncHandler(async (req, res) => {
   }
 
   query += ' ORDER BY s.created_at DESC';
+
+  if (limit && !isNaN(limit)) {
+    query += ` LIMIT ${parseInt(limit, 10)}`;
+  }
 
   const [services] = await pool.query(query, params);
 
@@ -123,6 +127,12 @@ const updateServiceStatus = asyncHandler(async (req, res) => {
       'UPDATE services SET status = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE id = ?',
       [status, id]
     );
+    if (service.order_id) {
+      await pool.query(
+        'UPDATE orders SET status = "processing", service_started_at = COALESCE(service_started_at, CURRENT_TIMESTAMP) WHERE id = ?',
+        [service.order_id]
+      );
+    }
   } else if (status === 'completed') {
     await pool.query(
       'UPDATE services SET status = ?, completed_at = CURRENT_TIMESTAMP, started_at = COALESCE(started_at, created_at, CURRENT_TIMESTAMP) WHERE id = ?',
@@ -135,6 +145,26 @@ const updateServiceStatus = asyncHandler(async (req, res) => {
     );
   } else {
     await pool.query('UPDATE services SET status = ? WHERE id = ?', [status, id]);
+  }
+
+  // Sync parent order status if all services are completed
+  if (status === 'completed' && service.order_id) {
+    const [uncompletedServices] = await pool.query(
+      'SELECT id FROM services WHERE order_id = ? AND status NOT IN ("completed", "cancelled")',
+      [service.order_id]
+    );
+    if (uncompletedServices.length === 0) {
+      await pool.query(
+        'UPDATE orders SET status = "completed", service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP), service_started_at = COALESCE(service_started_at, created_at, CURRENT_TIMESTAMP) WHERE id = ? AND status IN ("pending", "processing")',
+        [service.order_id]
+      );
+      try {
+        const { awardLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
+        await awardLoyaltyStampsForOrder(pool, service.order_id);
+      } catch (lErr) {
+        console.error('[ServiceController] Error awarding loyalty stamps:', lErr.message);
+      }
+    }
   }
 
   // If service completed, send notification and award loyalty points
@@ -269,16 +299,17 @@ async function sendServiceCompletionNotification(service, customer, isFreeServic
     plate: customer.vehicle_plate,
   });
 
-  const firstName = customer.name ? customer.name.split(' ')[0] : 'Customer';
-  let message = `Hi ${firstName}, your ${service.service_name} service is complete. Thank you for choosing Sniper Car Care.`;
+  let message = `شكراً لزيارتك \nسيارتك صارت جاهزة 🚗\nتقييمك يساعدنا نقدم خدمة أفضل\n`;
 
   if (feedbackUrl) {
-    message += ` Share feedback: ${feedbackUrl}`;
+    message += ` ${feedbackUrl}`;
   }
 
+  /*
   if (isFreeServiceEligible) {
-    message += ' 🎉 You now qualify for a FREE service — ask our team to redeem it!';
+    message += '\n🎉 أنت الآن مؤهل للحصول على خدمة مجانية — اطلب من فريقنا تفعيلها!';
   }
+  */
 
   await sendReson8Message({
     to: formattedPhone,

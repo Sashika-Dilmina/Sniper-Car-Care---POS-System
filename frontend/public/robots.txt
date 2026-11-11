@@ -1,0 +1,3 @@
+# Prevent search engines from crawling or indexing the POS Admin and Staff Dashboard
+User-agent: *
+Disallow: /

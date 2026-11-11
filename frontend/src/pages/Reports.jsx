@@ -67,6 +67,18 @@ const Reports = () => {
   const [stockReport, setStockReport] = useState(null);
   const [stockLoading, setStockLoading] = useState(false);
 
+  // Commission Report State
+  const [commissionStartDate, setCommissionStartDate] = useState('');
+  const [commissionEndDate, setCommissionEndDate] = useState('');
+  const [commissionReport, setCommissionReport] = useState(null);
+  const [commissionLoading, setCommissionLoading] = useState(false);
+
+  // Service Sales Report State
+  const [serviceSalesStartDate, setServiceSalesStartDate] = useState('');
+  const [serviceSalesEndDate, setServiceSalesEndDate] = useState('');
+  const [serviceSalesReport, setServiceSalesReport] = useState(null);
+  const [serviceSalesLoading, setServiceSalesLoading] = useState(false);
+
   // Cash Register Sessions State
   const [registers, setRegisters] = useState([]);
   const [loadingRegisters, setLoadingRegisters] = useState(false);
@@ -193,8 +205,9 @@ const Reports = () => {
         const start = new Date(creditStartDate + 'T00:00:00');
         const end = new Date(creditEndDate + 'T23:59:59');
         const filtered = (response.data.credits || []).filter(c => {
-          const date = new Date(c.created_at);
-          return date >= start && date <= end;
+          const created = new Date(c.created_at);
+          const cleared = c.last_payment_date ? new Date(c.last_payment_date) : null;
+          return (created >= start && created <= end) || (cleared && cleared >= start && cleared <= end);
         });
         setCreditReport(filtered);
       } else {
@@ -310,6 +323,48 @@ const Reports = () => {
       toast.error('Failed to generate stock report');
     } finally {
       setStockLoading(false);
+    }
+  };
+
+  // Commission Report
+  const fetchCommissionReport = async () => {
+    if (!commissionStartDate || !commissionEndDate) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+    setCommissionLoading(true);
+    try {
+      const response = await axios.get(`/api/analytics/reports/commission?start_date=${commissionStartDate}&end_date=${commissionEndDate}`);
+      if (response.data.success) {
+        setCommissionReport(response.data);
+      } else {
+        toast.error('Failed to generate commission report');
+      }
+    } catch (error) {
+      toast.error('Failed to generate commission report');
+    } finally {
+      setCommissionLoading(false);
+    }
+  };
+
+  // Service Sales Report
+  const fetchServiceSalesReport = async () => {
+    if (!serviceSalesStartDate || !serviceSalesEndDate) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+    setServiceSalesLoading(true);
+    try {
+      const response = await axios.get(`/api/analytics/reports/service-sales?start_date=${serviceSalesStartDate}&end_date=${serviceSalesEndDate}`);
+      if (response.data.success) {
+        setServiceSalesReport(response.data);
+      } else {
+        toast.error('Failed to generate service sales report');
+      }
+    } catch (error) {
+      toast.error('Failed to generate service sales report');
+    } finally {
+      setServiceSalesLoading(false);
     }
   };
 
@@ -431,8 +486,11 @@ const Reports = () => {
     { id: 'purchases', label: 'Purchase of Items' },
     { id: 'credit', label: 'Credit Report' },
     { id: 'registers', label: 'Cash Register Sessions' },
+    { id: 'commission', label: 'Commission Report' },
+    { id: 'service_sales', label: 'Service Sales Report' },
   ] : [
     { id: 'registers', label: 'Cash Register Sessions' },
+    { id: 'commission', label: 'Commission Report' },
   ];
 
   const handleWhatsAppShare = async () => {
@@ -500,6 +558,22 @@ const Reports = () => {
           return;
         }
         params.append('register_id', selectedRegisterReport.register_id);
+      } else if (activeTab === 'commission') {
+        if (!commissionStartDate || !commissionEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', commissionStartDate);
+        params.append('end_date', commissionEndDate);
+      } else if (activeTab === 'service_sales') {
+        if (!serviceSalesStartDate || !serviceSalesEndDate) {
+          toast.error('Please select both start and end dates');
+          setSharing(false);
+          return;
+        }
+        params.append('start_date', serviceSalesStartDate);
+        params.append('end_date', serviceSalesEndDate);
       }
 
       const response = await axios.get(`/api/analytics/reports/pdf?${params.toString()}`);
@@ -550,53 +624,74 @@ const Reports = () => {
     @media print {
       @page {
         size: auto;
-        margin: 10mm !important;
+        margin: 6mm 6mm !important;
       }
       aside, nav, .no-print, button, input, select, header {
         display: none !important;
+      }
+      *, *::before, *::after {
+        box-sizing: border-box !important;
       }
       body, html {
         background: white !important;
         color: black !important;
         width: 100% !important;
+        max-width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
+        overflow: visible !important;
       }
-      main {
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-      .print-card {
+      main, #root, .min-h-screen, div[class*="ml-"] {
         margin: 0 !important;
         padding: 0 !important;
-        page-break-after: avoid !important;
-        break-after: avoid !important;
-      }
-      .print-full-width {
         width: 100% !important;
         max-width: 100% !important;
+        overflow: visible !important;
+      }
+      .overflow-x-auto, [class*="overflow-"] {
+        overflow: visible !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      .print-card, .print-full-width, .bg-white, .shadow, .rounded-lg, .rounded-xl, .rounded-2xl {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
         box-shadow: none !important;
         border: none !important;
-        padding: 0 !important;
       }
-      h1, h2, h3, h4, p, td, th {
+      h1, h2, h3, h4, p, td, th, span, div {
         color: black !important;
       }
+      /* Ensure table takes exactly 100% of printable paper width and columns never crop */
       table {
         width: 100% !important;
+        max-width: 100% !important;
+        table-layout: fixed !important;
         border-collapse: collapse !important;
-        margin-top: 15px !important;
+        margin-top: 8px !important;
+        page-break-inside: auto !important;
+      }
+      tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
       th, td {
-        border: 1px solid #ccc !important;
-        padding: 6px 10px !important;
+        border: 1px solid #d1d5db !important;
+        padding: 3px 4px !important;
         text-align: left !important;
-        font-size: 10pt !important;
+        font-size: 7.5pt !important;
+        line-height: 1.15 !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        white-space: normal !important;
       }
       th {
         background-color: #f3f4f6 !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        font-weight: 700 !important;
+        font-size: 7.5pt !important;
       }
     }
   `;
@@ -699,33 +794,33 @@ const Reports = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Orders</p>
-                  <p className="text-2xl font-bold">{dailyReport.orders?.total_orders || 0}</p>
+                  <p className="text-2xl font-bold notranslate">{dailyReport.orders?.total_orders || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Sales</p>
-                  <p className="text-2xl font-bold text-primary-600">
+                  <p className="text-2xl font-bold text-primary-600 notranslate">
                     AED {parseFloat(dailyReport.orders?.total_sales !== undefined ? dailyReport.orders.total_sales : dailyReport.orders?.total_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Services</p>
-                  <p className="text-2xl font-bold">{dailyReport.services?.total_services || 0}</p>
+                  <p className="text-2xl font-bold notranslate">{dailyReport.services?.total_services || 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Services Sales</p>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-2xl font-bold text-green-600 notranslate">
                     AED {parseFloat(dailyReport.services?.services_revenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600 notranslate" translate="no">Saloon Free Washes</p>
-                  <p className="text-2xl font-bold text-indigo-600">
+                  <p className="text-sm text-gray-600">Saloon Free Washes</p>
+                  <p className="text-2xl font-bold text-indigo-600 notranslate">
                     AED {parseFloat(dailyReport.orders?.saloon_free_washes_value || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">4x4 Free Washes</p>
-                  <p className="text-2xl font-bold text-purple-600">
+                  <p className="text-2xl font-bold text-purple-600 notranslate">
                     AED {parseFloat(dailyReport.orders?.four_wheel_free_washes_value || 0).toLocaleString()}
                   </p>
                 </div>
@@ -759,35 +854,107 @@ const Reports = () => {
                 </div>
               )}
 
-              {dailyReport.top_products && dailyReport.top_products.length > 0 && (
+              {/* Top Services & Products Sections */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Saloon Services */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <h3 className="text-lg font-semibold mb-3">Top Saloon Services</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-2 text-left">Product</th>
-                          <th className="px-4 py-2 text-left">Category</th>
-                          <th className="px-4 py-2 text-right">Quantity</th>
-                          <th className="px-4 py-2 text-right">Revenue</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Service</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {dailyReport.top_products.map((product, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="px-4 py-2">{product.name}</td>
-                            <td className="px-4 py-2">{product.category}</td>
-                            <td className="px-4 py-2 text-right">{product.quantity_sold}</td>
-                            <td className="px-4 py-2 text-right">
-                              AED {parseFloat(product.revenue || 0).toLocaleString()}
-                            </td>
+                        {dailyReport.top_services_saloon && dailyReport.top_services_saloon.length > 0 ? (
+                          dailyReport.top_services_saloon.map((service, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{service.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{service.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(service.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No saloon services sold</td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>
                 </div>
-              )}
+
+                {/* 4x4 Services */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Top 4x4 Services</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Service</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyReport.top_services_4x4 && dailyReport.top_services_4x4.length > 0 ? (
+                          dailyReport.top_services_4x4.map((service, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{service.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{service.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(service.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No 4x4 services sold</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Physical Products */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
+                  <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Product</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Qty</th>
+                          <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyReport.top_products && dailyReport.top_products.length > 0 ? (
+                          dailyReport.top_products.map((product, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-700">{product.name}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-gray-600 notranslate">{product.quantity_sold}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-primary-600 notranslate">
+                                AED {parseFloat(product.revenue || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className="px-4 py-4 text-center text-gray-400 italic">No products sold</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -821,13 +988,13 @@ const Reports = () => {
               <button
                 onClick={fetchPaymentTypeReport}
                 disabled={paymentLoading}
-                className="flex-1 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-semibold"
               >
                 {paymentLoading ? 'Loading...' : 'Generate Report'}
               </button>
               <button
                 onClick={downloadPaymentTypeExcel}
-                className="flex-1 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 font-semibold"
                 title="Download as Excel"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -835,44 +1002,100 @@ const Reports = () => {
                 </svg>
                 Download Excel
               </button>
+              <button
+                onClick={handlePrint}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 font-semibold"
+                title="Print Report"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print Report
+              </button>
             </div>
           </div>
 
           {paymentReport && (
             <div className="space-y-6">
-              {paymentReport.payment_methods && paymentReport.payment_methods.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Payment Methods Breakdown</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left">Method</th>
-                          <th className="px-4 py-2 text-right">Transactions</th>
-                          <th className="px-4 py-2 text-right">Completed</th>
-                          <th className="px-4 py-2 text-right">Pending</th>
-                          <th className="px-4 py-2 text-right">Failed</th>
-                          <th className="px-4 py-2 text-right">Total Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paymentReport.payment_methods.map((pm, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="px-4 py-2 capitalize">{pm.method}</td>
-                            <td className="px-4 py-2 text-right">{pm.transaction_count}</td>
-                            <td className="px-4 py-2 text-right">{pm.completed_count}</td>
-                            <td className="px-4 py-2 text-right">{pm.pending_count}</td>
-                            <td className="px-4 py-2 text-right">{pm.failed_count}</td>
-                            <td className="px-4 py-2 text-right font-semibold">
-                              AED {parseFloat(pm.total_amount || 0).toLocaleString()}
+              <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 border rounded-2xl shadow-sm space-y-6 text-black print-full-width">
+                {/* Header for Screen & Print with Date Range */}
+                <div className="text-center space-y-1 border-b pb-6">
+                  <h2 className="text-2xl font-black uppercase tracking-wide">Payment Type Report</h2>
+                  <p className="text-sm font-bold text-gray-600">Business Location: Main Branch</p>
+                  <p className="text-xs text-gray-500 font-mono">
+                    Date Range: {paymentStartDate ? paymentStartDate.split('-').reverse().join('-') : 'All'} TO {paymentEndDate ? paymentEndDate.split('-').reverse().join('-') : (paymentStartDate ? paymentStartDate.split('-').reverse().join('-') : 'All')}
+                  </p>
+                </div>
+
+                {paymentReport.payment_methods && paymentReport.payment_methods.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Payment Methods Breakdown</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left">Method</th>
+                            <th className="px-4 py-2 text-right">Transactions</th>
+                            <th className="px-4 py-2 text-right">Completed</th>
+                            <th className="px-4 py-2 text-right">Pending</th>
+                            <th className="px-4 py-2 text-right">Failed</th>
+                            <th className="px-4 py-2 text-right">Total Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paymentReport.payment_methods.map((pm, idx) => {
+                            const displayMethod = (m) => {
+                              if (m === 'cash') return 'Cash';
+                              if (m === 'card') return 'Card';
+                              if (m === 'credit') return 'Credit';
+                              if (m === 'tap') return 'TAP';
+                              if (m === 'bank_transfer') return 'Bank Transfer';
+                              if (m === 'saloon_free') return 'Saloon Free Wash';
+                              if (m === '4x4_free') return '4x4 Free Wash';
+                              if (m === 'cash_recovery') return 'Cash Recovery';
+                              if (m === 'card_recovery') return 'Card Recovery';
+                              if (m === 'bank_recovery') return 'Bank Recovery';
+                              return m.charAt(0).toUpperCase() + m.slice(1);
+                            };
+                            return (
+                              <tr key={idx} className="border-b">
+                                <td className="px-4 py-2 font-semibold">{displayMethod(pm.method)}</td>
+                                <td className="px-4 py-2 text-right">{pm.transaction_count}</td>
+                                <td className="px-4 py-2 text-right">{pm.completed_count}</td>
+                                <td className="px-4 py-2 text-right">{pm.pending_count}</td>
+                                <td className="px-4 py-2 text-right">{pm.failed_count}</td>
+                                <td className="px-4 py-2 text-right font-semibold">
+                                  AED {parseFloat(pm.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                          <tr>
+                            <td className="px-4 py-2.5 text-left">Total</td>
+                            <td className="px-4 py-2.5 text-right">
+                              {paymentReport.payment_methods.reduce((s, pm) => s + (parseInt(pm.transaction_count) || 0), 0)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              {paymentReport.payment_methods.reduce((s, pm) => s + (parseInt(pm.completed_count) || 0), 0)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              {paymentReport.payment_methods.reduce((s, pm) => s + (parseInt(pm.pending_count) || 0), 0)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              {paymentReport.payment_methods.reduce((s, pm) => s + (parseInt(pm.failed_count) || 0), 0)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-black text-indigo-700">
+                              AED {paymentReport.payment_methods.reduce((s, pm) => s + (parseFloat(pm.total_amount) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </tfoot>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1182,6 +1405,15 @@ const Reports = () => {
             >
               {plLoading ? 'Generating...' : 'Generate P&L'}
             </button>
+            {plReport && plReport.summary && (
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-black transition font-bold flex items-center gap-2"
+              >
+                🖨️ Print Report
+              </button>
+            )}
           </div>
 
           {plReport && plReport.summary && (
@@ -1225,6 +1457,10 @@ const Reports = () => {
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.card_sales || 0).toFixed(3)}</span>
                       </div>
                       <div className="flex justify-between pl-4">
+                        <span className="text-gray-500">TAP Sale</span>
+                        <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.tap_sales || 0).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between pl-4">
                         <span className="text-gray-500">Credit Sale</span>
                         <span className="font-mono text-gray-800 font-semibold">{parseFloat(plReport.summary.credit_sales || 0).toFixed(3)}</span>
                       </div>
@@ -1240,6 +1476,18 @@ const Reports = () => {
                         <span className="text-gray-900">Total Profit</span>
                         <span className={`font-mono text-base ${plReport.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {parseFloat(plReport.summary.net_profit || 0).toFixed(3)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t border-dashed pt-2 mt-2 notranslate" translate="no">
+                        <span className="text-gray-800">Total Cash Sales + Cash Recover =</span>
+                        <span className="font-mono text-gray-900 font-extrabold">
+                          {(parseFloat(plReport.summary.cash_sales || 0) + parseFloat(plReport.summary.cash_recovery || 0)).toFixed(3)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold py-1 notranslate" translate="no">
+                        <span className="text-gray-800">Total Card Sales + Card Recover =</span>
+                        <span className="font-mono text-gray-900 font-extrabold">
+                          {(parseFloat(plReport.summary.card_sales || 0) + parseFloat(plReport.summary.card_recovery || 0)).toFixed(3)}
                         </span>
                       </div>
                     </div>
@@ -1295,8 +1543,12 @@ const Reports = () => {
                     <h3 className="font-extrabold text-base border-b pb-1 text-gray-900 uppercase">Other Activities:</h3>
                     <div className="space-y-1.5 pl-2">
                       <div className="flex justify-between">
-                        <span className="text-gray-700">Free Washes Value</span>
-                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.free_wash_total || 0).toFixed(3)} ({plReport.summary.free_wash_count || 0} washes)</span>
+                        <span className="text-gray-700">Saloon Free Wash</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.saloon_free_wash_total || 0).toFixed(3)} ({plReport.summary.saloon_free_wash_count || 0} washes)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">4*4 Free Wash</span>
+                        <span className="font-mono text-gray-900 font-bold">{parseFloat(plReport.summary.fourx4_free_wash_total || 0).toFixed(3)} ({plReport.summary.fourx4_free_wash_count || 0} washes)</span>
                       </div>
                     </div>
                   </div>
@@ -1376,6 +1628,369 @@ const Reports = () => {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Commission Report */}
+      {activeTab === 'commission' && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-bold mb-4">Commission Report</h2>
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <input
+                type="date"
+                value={commissionStartDate}
+                onChange={(e) => setCommissionStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <input
+                type="date"
+                value={commissionEndDate}
+                onChange={(e) => setCommissionEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={fetchCommissionReport}
+                disabled={commissionLoading}
+                className="w-full px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+              >
+                {commissionLoading ? 'Loading...' : 'Generate Report'}
+              </button>
+            </div>
+          </div>
+
+          {commissionReport && (
+            <div className="space-y-6 print-full-width">
+              {/* Report Header */}
+              <div className="text-center border-b pb-4 mb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <p className="text-sm font-semibold text-gray-500">Business Location: Kalba Sharjah</p>
+                <h2 className="text-xl font-bold mt-2">Commission Report</h2>
+                <p className="text-sm text-gray-600">
+                  Period: {commissionStartDate} to {commissionEndDate}
+                </p>
+              </div>
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-4 py-3 text-left font-bold">Service Name</th>
+                      <th className="px-4 py-3 text-right font-bold">Quantity</th>
+                      <th className="px-4 py-3 text-right font-bold">Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Saloon Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={3}>Saloon</td>
+                    </tr>
+                    {commissionReport.saloon && commissionReport.saloon.length > 0 ? (
+                      commissionReport.saloon.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.commission).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={3}>No Saloon services found</td>
+                      </tr>
+                    )}
+                    {/* Saloon Total Row */}
+                    {commissionReport.saloon && commissionReport.saloon.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.saloon.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.saloon.reduce((s, r) => s + parseFloat(r.commission), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={3} className="py-1"></td>
+                    </tr>
+
+                    {/* 4x4 Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={3}>4x4</td>
+                    </tr>
+                    {commissionReport.fourx4 && commissionReport.fourx4.length > 0 ? (
+                      commissionReport.fourx4.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.commission).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={3}>No 4x4 services found</td>
+                      </tr>
+                    )}
+                    {/* 4x4 Total Row */}
+                    {commissionReport.fourx4 && commissionReport.fourx4.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.fourx4.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.fourx4.reduce((s, r) => s + parseFloat(r.commission), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={3} className="py-1"></td>
+                    </tr>
+
+                    {/* VIP Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={3}>VIP</td>
+                    </tr>
+                    {commissionReport.vip && commissionReport.vip.length > 0 ? (
+                      commissionReport.vip.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.vehicle_type}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.commission).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={3}>No VIP services found</td>
+                      </tr>
+                    )}
+                    {/* VIP Total Row */}
+                    {commissionReport.vip && commissionReport.vip.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.vip.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {commissionReport.vip.reduce((s, r) => s + parseFloat(r.commission), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Service Sales Report */}
+      {activeTab === 'service_sales' && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-bold mb-4">Service Sales Report</h2>
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <input
+                type="date"
+                value={serviceSalesStartDate}
+                onChange={(e) => setServiceSalesStartDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <input
+                type="date"
+                value={serviceSalesEndDate}
+                onChange={(e) => setServiceSalesEndDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={fetchServiceSalesReport}
+                disabled={serviceSalesLoading}
+                className="w-full px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+              >
+                {serviceSalesLoading ? 'Loading...' : 'Generate Report'}
+              </button>
+            </div>
+          </div>
+
+          {serviceSalesReport && (
+            <div className="space-y-6 print-full-width">
+              {/* Report Header */}
+              <div className="text-center border-b pb-4 mb-4">
+                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                <p className="text-sm font-semibold text-gray-500">Business Location: Kalba Sharjah</p>
+                <h2 className="text-xl font-bold mt-2">Service Wise Report</h2>
+                <p className="text-sm text-gray-600">
+                  Period: {serviceSalesStartDate} to {serviceSalesEndDate}
+                </p>
+              </div>
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-4 py-3 text-left font-bold">Service Name</th>
+                      <th className="px-4 py-3 text-right font-bold">Quantity</th>
+                      <th className="px-4 py-3 text-right font-bold">Selling Price (AED)</th>
+                      <th className="px-4 py-3 text-right font-bold">Net Price (AED)</th>
+                      <th className="px-4 py-3 text-right font-bold">Cost Price (AED)</th>
+                      <th className="px-4 py-3 text-right font-bold">Profit (AED)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Saloon Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>Saloon</td>
+                    </tr>
+                    {serviceSalesReport.saloon && serviceSalesReport.saloon.length > 0 ? (
+                      serviceSalesReport.saloon.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.selling_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.net_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.cost_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.profit).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No Saloon services found</td>
+                      </tr>
+                    )}
+                    {/* Saloon Total Row */}
+                    {serviceSalesReport.saloon && serviceSalesReport.saloon.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.saloon.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={6} className="py-1"></td>
+                    </tr>
+
+                    {/* 4x4 Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>4x4</td>
+                    </tr>
+                    {serviceSalesReport.fourx4 && serviceSalesReport.fourx4.length > 0 ? (
+                      serviceSalesReport.fourx4.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.selling_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.net_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.cost_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.profit).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No 4x4 services found</td>
+                      </tr>
+                    )}
+                    {/* 4x4 Total Row */}
+                    {serviceSalesReport.fourx4 && serviceSalesReport.fourx4.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.fourx4.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Spacer */}
+                    <tr className="border-b">
+                      <td colSpan={6} className="py-1"></td>
+                    </tr>
+
+                    {/* VIP Section */}
+                    <tr className="border-b bg-gray-50">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>VIP</td>
+                    </tr>
+                    {serviceSalesReport.vip && serviceSalesReport.vip.length > 0 ? (
+                      serviceSalesReport.vip.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{row.service_name}</td>
+                          <td className="px-4 py-2 text-right">{row.quantity}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.selling_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.net_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.cost_price).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{parseFloat(row.profit).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b">
+                        <td className="px-4 py-2 text-gray-400 italic" colSpan={6}>No VIP services found</td>
+                      </tr>
+                    )}
+                    {/* VIP Total Row */}
+                    {serviceSalesReport.vip && serviceSalesReport.vip.length > 0 && (
+                      <tr className="border-b" style={{ backgroundColor: '#FFFF00' }}>
+                        <td className="px-4 py-2 font-bold">Total</td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseInt(r.quantity), 0)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.selling_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.net_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.cost_price), 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">
+                          {serviceSalesReport.vip.reduce((s, r) => s + parseFloat(r.profit), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -1575,10 +2190,29 @@ const Reports = () => {
             >
               {creditLoading ? 'Generating...' : 'Generate Report'}
             </button>
+            <button
+              onClick={handlePrint}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 font-bold"
+              title="Print Credit Report"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Report
+            </button>
           </div>
 
           {creditReport && (
             <div className="space-y-6">
+              {/* Header for Print */}
+              <div className="text-center space-y-1 border-b pb-4 mb-4 hidden print:block">
+                <h2 className="text-xl font-bold uppercase tracking-wide">Customer Credit Report</h2>
+                <p className="text-xs font-semibold text-gray-600">Business Location: Main Branch</p>
+                <p className="text-xs text-gray-500 font-mono">
+                  Date Range: {creditStartDate ? creditStartDate.split('-').reverse().join('-') : 'All'} TO {creditEndDate ? creditEndDate.split('-').reverse().join('-') : (creditStartDate ? creditStartDate.split('-').reverse().join('-') : 'All')}
+                </p>
+              </div>
+
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
@@ -1602,37 +2236,50 @@ const Reports = () => {
               </div>
 
               {/* Credits List Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full text-left print:table-fixed">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Date</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Customer</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Plate</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Credit</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Recovered</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Remaining</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Status</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[11%]">Date Granted</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[11%]">Cleared Date</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[18%]">Customer</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[15%]">Plate</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right w-[11%]">Total Credit</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right w-[11%]">Recovered</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right w-[11%]">Remaining</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center w-[12%]">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {creditReport.length > 0 ? (
                       creditReport.map((c) => (
                         <tr key={c.id} className="hover:bg-gray-50/50">
-                          <td className="px-4 py-2 text-sm text-gray-600">{new Date(c.created_at).toLocaleDateString()}</td>
-                          <td className="px-4 py-2 text-sm font-semibold text-gray-800">{c.customer_name}</td>
-                          <td className="px-4 py-2 text-sm font-mono text-gray-700">{c.vehicle_plate}</td>
-                          <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
+                          <td className="px-2 py-1.5 text-sm text-gray-600 print:text-[7.5pt]">{new Date(c.created_at).toLocaleDateString('en-GB')}</td>
+                          <td className="px-2 py-1.5 text-sm text-gray-600 print:text-[7.5pt]">
+                            {c.last_payment_date ? (
+                              <div className="flex flex-col">
+                                <span>{new Date(c.last_payment_date).toLocaleDateString('en-GB')}</span>
+                                {c.last_payment_method && (
+                                  <span className="text-[10px] text-gray-400 uppercase font-mono print:text-[6.5pt]">{c.last_payment_method}</span>
+                                )}
+                              </div>
+                            ) : (
+                              c.status === 'fully_paid' ? new Date(c.updated_at).toLocaleDateString('en-GB') : '-'
+                            )}
+                          </td>
+                          <td className="px-2 py-1.5 text-sm font-semibold text-gray-800 print:text-[7.5pt] break-words">{c.customer_name}</td>
+                          <td className="px-2 py-1.5 text-sm font-mono text-gray-700 print:text-[7.5pt] break-words">{c.vehicle_plate}</td>
+                          <td className="px-2 py-1.5 text-sm font-bold text-right text-gray-900 print:text-[7.5pt]">
                             AED {parseFloat(c.amount || 0).toFixed(2)}
                           </td>
-                          <td className="px-4 py-2 text-sm text-right text-green-600">
-                            AED {parseFloat(c.amount - c.remaining_amount || 0).toFixed(2)}
+                          <td className="px-2 py-1.5 text-sm text-right text-green-600 font-semibold print:text-[7.5pt]">
+                            AED {parseFloat(c.total_recovered_amount || (c.amount - c.remaining_amount) || 0).toFixed(2)}
                           </td>
-                          <td className="px-4 py-2 text-sm font-bold text-right text-red-600">
+                          <td className="px-2 py-1.5 text-sm font-bold text-right text-red-600 print:text-[7.5pt]">
                             AED {parseFloat(c.remaining_amount || 0).toFixed(2)}
                           </td>
-                          <td className="px-4 py-2 text-sm text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                          <td className="px-2 py-1.5 text-sm text-center print:text-[7.5pt]">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize print:px-1 print:py-0 print:text-[6.5pt] ${
                               c.status === 'fully_paid' ? 'bg-green-100 text-green-800' :
                               c.status === 'partially_paid' ? 'bg-yellow-100 text-yellow-800' :
                               'bg-red-100 text-red-800'
@@ -1644,7 +2291,7 @@ const Reports = () => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="7" className="text-center py-6 text-gray-500 text-sm">
+                        <td colSpan="8" className="text-center py-6 text-gray-500 text-sm">
                           No credit records found in this range.
                         </td>
                       </tr>
@@ -1780,6 +2427,10 @@ const Reports = () => {
                     <span>{selectedRegisterReport.cash_payments.sale.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
+                    <span>Cash Recovery</span>
+                    <span>{(selectedRegisterReport.cash_payments?.recovery || 0).toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span>Card Sale</span>
                     <span>{selectedRegisterReport.card_payments.sale.toFixed(3)}</span>
                   </div>
@@ -1788,7 +2439,7 @@ const Reports = () => {
                     <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Other Sale</span>
+                    <span>TAP Sale</span>
                     <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -1814,6 +2465,15 @@ const Reports = () => {
                   <div className="flex justify-between font-bold">
                     <span>Cash In Drawer</span>
                     <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Staff Return</span>
+                    <span>
+                      {(selectedRegisterReport.closed_amount !== null
+                        ? selectedRegisterReport.closed_amount
+                        : 0.00
+                      ).toFixed(3)}
+                    </span>
                   </div>
                   <div className="flex justify-between font-bold">
                     <span>Difference Amount</span>
@@ -1858,6 +2518,10 @@ const Reports = () => {
               <span>{selectedRegisterReport.cash_payments.sale.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
+              <span>Cash Recovery</span>
+              <span>{(selectedRegisterReport.cash_payments?.recovery || 0).toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
               <span>Card Sale</span>
               <span>{selectedRegisterReport.card_payments.sale.toFixed(3)}</span>
             </div>
@@ -1866,7 +2530,7 @@ const Reports = () => {
               <span>{selectedRegisterReport.bank_transfer.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Other Sale</span>
+              <span>TAP Sale</span>
               <span>{selectedRegisterReport.other_payments.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
@@ -1892,6 +2556,15 @@ const Reports = () => {
             <div className="flex justify-between font-bold">
               <span>Cash In Drawer</span>
               <span>{selectedRegisterReport.amount_in_cash_drawer.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Staff Return</span>
+              <span>
+                {(selectedRegisterReport.closed_amount !== null
+                  ? selectedRegisterReport.closed_amount
+                  : 0.00
+                ).toFixed(3)}
+              </span>
             </div>
             <div className="flex justify-between font-bold">
               <span>Difference Amount</span>

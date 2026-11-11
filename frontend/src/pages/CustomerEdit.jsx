@@ -13,6 +13,7 @@ const CustomerEdit = () => {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
+    bathaque_id: '',
     emirate: '',
     plate_code: '',
     plate_number: '',
@@ -75,6 +76,7 @@ const CustomerEdit = () => {
       setFormData({
         name: customer.name || '',
         phone: customer.phone || '+9715',
+        bathaque_id: customer.bathaque_id || '',
         emirate: emirate,
         plate_code: plateCode,
         plate_number: plateNumber,
@@ -184,6 +186,26 @@ const CustomerEdit = () => {
                 required
               />
               <p className="text-xs text-gray-400 mt-1">Numbers only, minimum 9 digits</p>
+            </div>
+
+            {/* Bathaque ID */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label htmlFor="bathaque_id" className="block text-sm font-bold text-gray-700">
+                  Bathaque ID (Optional)
+                </label>
+                <span className="text-[11px] text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded-full">Multi-Vehicle Loyalty</span>
+              </div>
+              <input
+                type="text"
+                id="bathaque_id"
+                name="bathaque_id"
+                value={formData.bathaque_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, bathaque_id: e.target.value.toUpperCase() }))}
+                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-mono font-bold tracking-wider uppercase text-red-600"
+                placeholder="e.g. BQ10293847"
+              />
+              <p className="text-xs text-gray-400 mt-1">Shared customer ID to pool wash stamps across multiple vehicles.</p>
             </div>
 
             {/* Vehicle Model */}
