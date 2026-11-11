@@ -314,6 +314,9 @@ const processManualPayment = asyncHandler(async (req, res) => {
     }
 
     if (method === 'multiple' && Array.isArray(splits) && splits.length > 0) {
+      // Remove any prior pending payment rows for this order before inserting split payments
+      await connection.query('DELETE FROM payments WHERE order_id = ? AND status = "pending"', [order_id]);
+
       // Process multiple split payments
       for (const split of splits) {
         const splitAmt = parseFloat(split.amount || 0);
