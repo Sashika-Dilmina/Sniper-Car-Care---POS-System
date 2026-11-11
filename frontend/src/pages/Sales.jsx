@@ -231,8 +231,10 @@ const Sales = () => {
     } else if (result.customers && result.customers.length > 0) {
       handleSelectCustomer(result.customers[0]);
     }
-    setBathaqueLoyalty(result.loyalty);
-    toast.success(`Bathaque Pass Applied: ${result.bathaque_id} (${result.loyalty?.wash_stamps || 0}/5 stamps)`);
+    const loyaltyObj = result.loyalty || result;
+    setBathaqueLoyalty(loyaltyObj);
+    const stamps = loyaltyObj?.wash_stamps ?? result.wash_stamps ?? 0;
+    toast.success(`Bathaque Pass Applied: ${result.bathaque_id} (${stamps}/5 stamps)`);
   };
 
   // Poll real-time mobile scanner queue every 5 seconds while in POS terminal tab

@@ -185,7 +185,7 @@ const Dashboard = () => {
   const fetchCompletedServices = async (silent = false) => {
     if (!silent) setServicesLoading(true);
     try {
-      const response = await axios.get('/api/services?status=completed');
+      const response = await axios.get('/api/services?status=completed&limit=10');
       setCompletedServices(response.data.services || []);
     } catch (error) {
       console.error('Error fetching completed services:', error);

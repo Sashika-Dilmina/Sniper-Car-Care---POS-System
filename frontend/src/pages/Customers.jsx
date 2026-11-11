@@ -220,7 +220,15 @@ const CustomersContent = () => {
     }
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filters]);
+
+  const totalPages = Math.ceil(filteredCustomers.length / pageSize) || 1;
+  const paginatedCustomers = filteredCustomers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
@@ -809,7 +817,8 @@ const CustomersContent = () => {
         </div>
 
         {filteredCustomers.length > 0 ? (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
@@ -825,7 +834,7 @@ const CustomersContent = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredCustomers.map((customer, index) => (
+                {paginatedCustomers.map((customer, index) => (
                   <tr key={customer.id ? `cust-${customer.id}` : `cust-idx-${index}`} className={`hover:bg-gray-50 ${customer.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
                       <span>{String(customer.name || '')}</span>
@@ -973,7 +982,36 @@ const CustomersContent = () => {
               </tbody>
             </table>
           </div>
-        ) : (
+
+          {/* Pagination Controls */}
+          {filteredCustomers.length > pageSize && (
+            <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-gray-500">
+                Showing <span className="font-bold text-gray-800">{(currentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-gray-800">{Math.min(currentPage * pageSize, filteredCustomers.length)}</span> of <span className="font-bold text-gray-800">{filteredCustomers.length}</span> customers
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-gray-600 px-2 font-medium">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
           <div className="px-6 py-12 text-center">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />

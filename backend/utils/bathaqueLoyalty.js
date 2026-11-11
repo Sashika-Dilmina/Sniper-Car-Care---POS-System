@@ -155,7 +155,7 @@ async function awardLoyaltyStampsForOrder(connOrPool, orderId) {
 
   try {
     const [orders] = await connection.query(
-      `SELECT o.*, c.bathaque_id as cust_bathaque_id, c.emirate as cust_emirate
+      `SELECT o.*, c.bathaque_id as cust_bathaque_id, c.province as cust_emirate
        FROM orders o 
        LEFT JOIN customers c ON o.customer_id = c.id 
        WHERE o.id = ?`,
@@ -173,10 +173,26 @@ async function awardLoyaltyStampsForOrder(connOrPool, orderId) {
     const targetCustomerId = order.customer_id || order.customer_id_ref;
     const emirate = order.emirate || order.cust_emirate;
 
+    // Auto-link customer to Bathaque ID if customer has no bathaque_id yet
+    if (targetBathaqueId && targetCustomerId) {
+      try {
+        await connection.query(
+          'UPDATE customers SET bathaque_id = ? WHERE id = ? AND (bathaque_id IS NULL OR bathaque_id = "")',
+          [targetBathaqueId, targetCustomerId]
+        );
+      } catch (linkErr) {
+        console.warn('[Bathaque] Could not auto-link customer bathaque_id:', linkErr.message);
+      }
+    }
+
     // 1. If order was marked as free wash, redeem/reset Bathaque loyalty
     if ((order.payment_status === 'free' || parseFloat(order.total) === 0) && targetBathaqueId) {
       await redeemBathaqueFreeWash(connection, targetBathaqueId);
-      await connection.query('UPDATE orders SET loyalty_stamped = 1 WHERE id = ?', [orderId]);
+      try {
+        await connection.query('UPDATE orders SET loyalty_stamped = 1 WHERE id = ?', [orderId]);
+      } catch (stampErr) {
+        // column may not exist yet in older schema
+      }
       return;
     }
 
@@ -196,28 +212,60 @@ async function awardLoyaltyStampsForOrder(connOrPool, orderId) {
         'full body wash',
         'ceramic wash',
         'double soap',
-        'body wash'
+        'body wash',
+        'just water',
+        'saloon vip service',
+        '4x4 vip service',
+        'steam wash',
+        'quick wash'
       ];
 
       let hasEligibleService = false;
 
+      // Check services table records
       for (let s of servicesList) {
         const sName = (s.service_name || '').toLowerCase().trim();
-        if (eligibleFreeServices.some(e => sName.includes(e)) || sName.includes('vip') || sName.includes('wash')) {
+        if (
+          eligibleFreeServices.some(e => sName.includes(e)) ||
+          sName.includes('wash') ||
+          sName.includes('service') ||
+          sName.includes('soap') ||
+          sName.includes('clean') ||
+          sName.includes('steam') ||
+          sName.includes('water') ||
+          sName.includes('polish') ||
+          sName.includes('vip')
+        ) {
           hasEligibleService = true;
           break;
         }
       }
 
+      // Check order items table records
       if (!hasEligibleService) {
         for (let item of itemsList) {
           const pName = (item.name || '').toLowerCase().trim();
           const cat = (item.category || '').toLowerCase().trim();
-          if (eligibleFreeServices.some(e => pName.includes(e)) || cat === 'vip' || pName.includes('vip') || cat.includes('service') || pName.includes('wash')) {
+          if (
+            eligibleFreeServices.some(e => pName.includes(e)) ||
+            cat.includes('service') ||
+            cat === 'vip' ||
+            pName.includes('wash') ||
+            pName.includes('service') ||
+            pName.includes('vip') ||
+            pName.includes('soap') ||
+            pName.includes('water') ||
+            pName.includes('clean')
+          ) {
             hasEligibleService = true;
             break;
           }
         }
+      }
+
+      // If any service exists on this order, it qualifies as a wash service
+      if (!hasEligibleService && servicesList.length > 0) {
+        hasEligibleService = true;
       }
 
       if (hasEligibleService) {
@@ -236,7 +284,11 @@ async function awardLoyaltyStampsForOrder(connOrPool, orderId) {
             }
           }
         }
-        await connection.query('UPDATE orders SET loyalty_stamped = 1 WHERE id = ?', [orderId]);
+        try {
+          await connection.query('UPDATE orders SET loyalty_stamped = 1 WHERE id = ?', [orderId]);
+        } catch (stampErr) {
+          // column may not exist yet in older schema
+        }
       }
     }
   } catch (err) {

@@ -427,13 +427,6 @@ const createOrder = asyncHandler(async (req, res) => {
       if (orderBathaqueId) {
         await redeemBathaqueFreeWash(connection, orderBathaqueId);
       }
-    } else if (orderStatus === 'completed') {
-      try {
-        const { awardLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
-        await awardLoyaltyStampsForOrder(connection, orderId);
-      } catch (lErr) {
-        console.error('[Order] Error awarding stamps on createOrder:', lErr.message);
-      }
     }
 
     // Fetch customer vehicle type if customer_id exists
@@ -475,6 +468,16 @@ const createOrder = asyncHandler(async (req, res) => {
           'INSERT INTO services (customer_id, service_name, vehicle_type, price, description, status, started_at, order_id) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)',
           [customer_id || null, prodRows[0].name, vehicleType, item.price, 'Added via POS Order', 'in_progress', orderId]
         );
+      }
+    }
+
+    // If order was completed immediately upon creation, award stamps now that services/items exist in DB
+    if (orderStatus === 'completed') {
+      try {
+        const { awardLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
+        await awardLoyaltyStampsForOrder(connection, orderId);
+      } catch (lErr) {
+        console.error('[Order] Error awarding stamps on createOrder:', lErr.message);
       }
     }
 

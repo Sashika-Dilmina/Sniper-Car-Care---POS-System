@@ -291,22 +291,89 @@ const CustomerDetail = () => {
           </div>
         );
       })() : (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">💡</span>
+        <div className="bg-gradient-to-br from-gray-900 via-slate-900 to-neutral-900 border border-gray-700 p-6 rounded-2xl shadow-xl text-white">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-gray-700/80">
             <div>
-              <h4 className="font-bold text-amber-900 text-sm">No Bathaque ID Assigned</h4>
-              <p className="text-xs text-amber-700">
-                Assign a Bathaque ID to this customer to enable 5-wash loyalty punch cards and link multiple vehicles together.
-              </p>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-blue-600/90 text-white">
+                  Customer Loyalty
+                </span>
+                <span className="text-xs text-gray-400">Buy 5 Washes, 6th Wash FREE</span>
+              </div>
+              <div className="flex items-center gap-3 mt-2">
+                <span className="text-xs text-gray-400 uppercase font-semibold">Loyalty Status:</span>
+                <span className="text-sm font-bold text-gray-200">
+                  Standard Account ({customer.loyalty_points || 0} pts)
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="text-2xl font-black text-white">
+                  {customer.wash_stamps || 0} <span className="text-sm font-normal text-gray-400">/ 5 Stamps</span>
+                </div>
+              </div>
+              <Link
+                to={`/customers/${customer.id}/edit`}
+                className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700 transition shrink-0"
+              >
+                + Assign Bathaque Pass ID
+              </Link>
             </div>
           </div>
-          <Link
-            to={`/customers/${customer.id}/edit`}
-            className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700 transition shrink-0"
-          >
-            Assign Bathaque ID
-          </Link>
+
+          {/* Punch Card Circles */}
+          <div className="pt-6">
+            <div className="grid grid-cols-6 gap-3 max-w-2xl mx-auto">
+              {[1, 2, 3, 4, 5].map((stampNum) => {
+                const isStamped = (customer.wash_stamps || 0) >= stampNum;
+                return (
+                  <div
+                    key={stampNum}
+                    className={`aspect-square rounded-2xl flex flex-col items-center justify-center border-2 transition-all ${
+                      isStamped
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-lg shadow-emerald-950/50'
+                        : 'bg-gray-800/40 border-dashed border-gray-700 text-gray-500'
+                    }`}
+                  >
+                    <span className="text-xl font-black">
+                      {isStamped ? '✓' : stampNum}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider mt-0.5">
+                      {isStamped ? 'Wash' : `Wash ${stampNum}`}
+                    </span>
+                  </div>
+                );
+              })}
+
+              {/* 6th Wash is FREE */}
+              <div
+                className={`aspect-square rounded-2xl flex flex-col items-center justify-center border-2 text-center p-1 relative overflow-hidden transition-all ${
+                  (customer.wash_stamps || 0) >= 5
+                    ? 'bg-gradient-to-br from-amber-500 to-yellow-600 border-amber-300 text-white shadow-xl shadow-amber-900/60 animate-pulse'
+                    : 'bg-gray-800/40 border-dashed border-amber-600/40 text-gray-500'
+                }`}
+              >
+                <span className="text-2xl">🎁</span>
+                <span className="text-[10px] uppercase font-black tracking-wider leading-tight">
+                  {(customer.wash_stamps || 0) >= 5 ? 'FREE NOW!' : 'FREE (6th)'}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 text-center">
+              {(customer.wash_stamps || 0) >= 5 ? (
+                <span className="inline-block px-4 py-1.5 bg-amber-500/20 border border-amber-500 text-amber-300 rounded-full text-xs font-bold">
+                  🎉 Eligible for 100% FREE WASH on this visit!
+                </span>
+              ) : (
+                <span className="text-xs text-gray-400">
+                  {5 - (customer.wash_stamps || 0)} more wash(es) needed to unlock FREE 6th wash.
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
