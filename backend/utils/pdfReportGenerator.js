@@ -650,8 +650,8 @@ function generateInvoicePDF(order, outputPath) {
       const orderDate = order.created_at ? new Date(order.created_at).toLocaleString() : new Date().toLocaleString();
       doc.text(`Date: ${orderDate}`, 320, currentY + 30);
       doc.text(`Order Status: ${(order.status || 'completed').toUpperCase()}`, 320, currentY + 45);
-      doc.text(`Payment Status: ${(order.payment_status || 'paid').toUpperCase()}`, 320, currentY + 60);
-      doc.text(`Payment Method: ${(order.payment_method || order.method || 'Cash').toUpperCase()}`, 320, currentY + 75);
+      const paymentMethodStr = order.payment_methods || order.payment_method || (order.payment_status === 'credit' ? 'Credit' : (order.payment_status === 'free' ? 'Free Wash' : 'N/A'));
+      doc.text(`Payment Method: ${paymentMethodStr.toUpperCase()}`, 320, currentY + 75);
 
       currentY += 115;
 

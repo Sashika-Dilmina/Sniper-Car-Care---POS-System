@@ -532,15 +532,52 @@ const OrderDetail = () => {
             </div>
             <div>
               <p className="text-sm text-gray-600">Payment Method</p>
-              <span className={`px-3 py-1 text-sm rounded-full font-semibold capitalize ${
-                (order.payment_methods || order.payments?.[0]?.method) === 'cash' ? 'bg-green-100 text-green-800' :
-                (order.payment_methods || order.payments?.[0]?.method) === 'card' ? 'bg-purple-100 text-purple-800' :
-                (order.payment_methods || order.payments?.[0]?.method) === 'credit' ? 'bg-orange-100 text-orange-800' :
-                (order.payment_methods || order.payments?.[0]?.method) ? 'bg-blue-100 text-blue-800' :
-                'bg-gray-100 text-gray-800'
-              }`}>
-                {order.payment_methods || order.payments?.[0]?.method || 'N/A'}
-              </span>
+              {(() => {
+                const getMethodDetails = () => {
+                  if (order.payment_status === 'free') {
+                    return { text: '🎁 Free Wash (Bathaque)', cls: 'bg-blue-100 text-blue-800' };
+                  }
+                  if (order.payment_status === 'credit' || order.credit_status) {
+                    return { text: 'Credit', cls: 'bg-orange-100 text-orange-800' };
+                  }
+
+                  const rawMethods = order.payment_methods || 
+                    (order.payments && order.payments.filter(p => p.status === 'completed').map(p => p.method).join(',')) ||
+                    order.payments?.[0]?.method;
+
+                  if (!rawMethods) {
+                    return { text: 'N/A (Pending)', cls: 'bg-gray-100 text-gray-800' };
+                  }
+
+                  const methodsList = String(rawMethods).split(',').map(m => m.trim().toLowerCase()).filter(Boolean);
+                  const formattedList = [...new Set(methodsList.map(m => {
+                    if (['apple_pay', 'samsung_pay', 'tap_payments', 'tap'].includes(m)) return 'TAP';
+                    if (['card', 'mastercard', 'master_card', 'visa'].includes(m)) return 'Card';
+                    if (m === 'cash') return 'Cash';
+                    if (m === 'bank_transfer') return 'Bank Transfer';
+                    if (m === 'credit') return 'Credit';
+                    if (m === 'free') return 'Free Wash';
+                    return m.charAt(0).toUpperCase() + m.slice(1);
+                  }))];
+
+                  const displayText = formattedList.join(' + ') || 'N/A';
+                  let badgeCls = 'bg-blue-100 text-blue-800';
+                  if (displayText === 'Cash') badgeCls = 'bg-green-100 text-green-800';
+                  else if (displayText === 'Card') badgeCls = 'bg-purple-100 text-purple-800';
+                  else if (displayText === 'TAP') badgeCls = 'bg-blue-100 text-blue-800';
+                  else if (displayText === 'Credit') badgeCls = 'bg-orange-100 text-orange-800';
+                  else if (displayText.includes('+')) badgeCls = 'bg-indigo-100 text-indigo-800';
+
+                  return { text: displayText, cls: badgeCls };
+                };
+
+                const { text, cls } = getMethodDetails();
+                return (
+                  <span className={`px-3 py-1 text-sm rounded-full font-semibold ${cls}`}>
+                    {text}
+                  </span>
+                );
+              })()}
             </div>
             {order.source && (
               <div>
@@ -907,7 +944,12 @@ const OrderDetail = () => {
                 <p><span className="font-bold">Credit Status:</span> {order.credit_status.replace('_', ' ').toUpperCase()}</p>
               </>
             ) : (
-              <p><span className="font-bold">Payment:</span> {order.payment_status.toUpperCase()}</p>
+              <>
+                <p><span className="font-bold">Payment Status:</span> {order.payment_status ? order.payment_status.toUpperCase() : 'PENDING'}</p>
+                {(order.payment_methods || order.payments?.[0]?.method) && (
+                  <p><span className="font-bold">Payment Method:</span> {(order.payment_methods || order.payments?.[0]?.method).toUpperCase()}</p>
+                )}
+              </>
             )}
           </div>
         </div>

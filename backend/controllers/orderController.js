@@ -18,6 +18,7 @@ const getOrders = asyncHandler(async (req, res) => {
            COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
            cc.status as credit_status,
            cc.remaining_amount as credit_remaining,
+           cc.amount as credit_amount,
            (
              SELECT GROUP_CONCAT(DISTINCT 
                CASE 
@@ -29,6 +30,17 @@ const getOrders = asyncHandler(async (req, res) => {
              FROM payments p 
              WHERE p.order_id = o.id AND p.status = 'completed'
            ) as payment_methods,
+           (
+             SELECT GROUP_CONCAT(DISTINCT 
+               CASE 
+                 WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'TAP'
+                 WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+                 ELSE p.method
+               END
+             )
+             FROM payments p 
+             WHERE p.order_id = o.id AND p.status = 'completed'
+           ) as payment_method,
            -- Service time: Duration from service start to service completion
            -- Start: o.service_started_at (fallback: o.created_at)
            -- End: o.service_completed_at (if completed) or CURRENT_TIMESTAMP (if in progress)
@@ -80,19 +92,8 @@ const getOrders = asyncHandler(async (req, res) => {
   }
 
   if (date) {
-    const [sessions] = await pool.query(
-      "SELECT DATE_FORMAT(opened_at, '%Y-%m-%d %H:%i:%s') as opened_at, DATE_FORMAT(closed_at, '%Y-%m-%d %H:%i:%s') as closed_at FROM cash_registers WHERE DATE(opened_at) = ? ORDER BY opened_at ASC",
-      [date]
-    );
-    if (sessions.length > 0) {
-      const startTime = sessions[0].opened_at;
-      const endTime = sessions[sessions.length - 1].closed_at || `${date} 23:59:59`;
-      query += ' AND o.created_at >= ? AND o.created_at <= ?';
-      params.push(startTime, endTime);
-    } else {
-      query += ' AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY';
-      params.push(date, date);
-    }
+    query += ' AND DATE(o.created_at) = ?';
+    params.push(date);
   } else if (req.user && req.user.role === 'staff') {
     const [active] = await pool.query("SELECT DATE_FORMAT(opened_at, '%Y-%m-%d %H:%i:%s') as opened_at FROM cash_registers WHERE status = 'open' LIMIT 1");
     if (active.length > 0) {
@@ -102,6 +103,8 @@ const getOrders = asyncHandler(async (req, res) => {
       query += ' AND o.created_at >= CURDATE() AND o.created_at < CURDATE() + INTERVAL 1 DAY';
     }
   }
+
+
 
   // Filter by service time at SQL level
   if (service_time === 'fast') {
@@ -120,15 +123,26 @@ const getOrders = asyncHandler(async (req, res) => {
 
   const [orders] = await pool.query(query, params);
 
-  // Batch fetch order items in 1 query for ultra-fast response
+  // Batch fetch order items and payments in parallel for ultra-fast response
   if (orders.length > 0) {
     const orderIds = orders.map(o => o.id);
-    const [allItems] = await pool.query(`
-      SELECT oi.*, p.name as product_name, p.category, p.price as unit_price
-      FROM order_items oi
-      LEFT JOIN products p ON oi.product_id = p.id
-      WHERE oi.order_id IN (?)
-    `, [orderIds]);
+    const [itemsResult, paymentsResult] = await Promise.all([
+      pool.query(`
+        SELECT oi.*, p.name as product_name, p.category, p.price as unit_price
+        FROM order_items oi
+        LEFT JOIN products p ON oi.product_id = p.id
+        WHERE oi.order_id IN (?)
+      `, [orderIds]),
+      pool.query(`
+        SELECT order_id, amount, method, status
+        FROM payments
+        WHERE order_id IN (?) AND status = 'completed'
+        ORDER BY id ASC
+      `, [orderIds])
+    ]);
+
+    const allItems = itemsResult[0];
+    const allPayments = paymentsResult[0];
 
     const itemsByOrderId = {};
     for (const item of allItems) {
@@ -138,8 +152,20 @@ const getOrders = asyncHandler(async (req, res) => {
       itemsByOrderId[item.order_id].push(item);
     }
 
+    const paymentsByOrderId = {};
+    for (const p of allPayments) {
+      if (!paymentsByOrderId[p.order_id]) {
+        paymentsByOrderId[p.order_id] = [];
+      }
+      paymentsByOrderId[p.order_id].push({
+        method: p.method,
+        amount: parseFloat(p.amount || 0)
+      });
+    }
+
     for (let order of orders) {
       order.items = itemsByOrderId[order.id] || [];
+      order.payments = paymentsByOrderId[order.id] || [];
     }
   }
 
@@ -171,7 +197,18 @@ const getOrder = asyncHandler(async (req, res) => {
              )
              FROM payments p 
              WHERE p.order_id = o.id AND p.status = 'completed'
-           ) as payment_methods
+           ) as payment_methods,
+           (
+             SELECT GROUP_CONCAT(DISTINCT 
+               CASE 
+                 WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'TAP'
+                 WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+                 ELSE p.method
+               END
+             )
+             FROM payments p 
+             WHERE p.order_id = o.id AND p.status = 'completed'
+           ) as payment_method
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
@@ -225,7 +262,7 @@ const getOrder = asyncHandler(async (req, res) => {
   }
 
   // Get payments
-  const [payments] = await pool.query('SELECT * FROM payments WHERE order_id = ?', [id]);
+  const [payments] = await pool.query('SELECT * FROM payments WHERE order_id = ? ORDER BY created_at ASC', [id]);
   order.payments = payments;
 
   res.json({ order });
@@ -434,6 +471,16 @@ const createOrder = asyncHandler(async (req, res) => {
       }
     }
 
+    // If order was completed immediately upon creation, award stamps now that services/items exist in DB
+    if (orderStatus === 'completed') {
+      try {
+        const { awardLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
+        await awardLoyaltyStampsForOrder(connection, orderId);
+      } catch (lErr) {
+        console.error('[Order] Error awarding stamps on createOrder:', lErr.message);
+      }
+    }
+
     await connection.commit();
     connection.release();
 
@@ -586,74 +633,12 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     }
 
     // Handle Loyalty Stamps for Completed Orders
-    const targetBathaqueId = order.bathaque_id;
-    const targetCustomerId = order.customer_id || order.customer_id_ref;
-
-    // 1. If order was marked as free wash, redeem/reset Bathaque loyalty
-    if (status === 'completed' && (order.payment_status === 'free' || parseFloat(order.total) === 0) && targetBathaqueId) {
+    if (status === 'completed') {
       try {
-        await redeemBathaqueFreeWash(connection, targetBathaqueId);
-      } catch (rErr) {
-        console.error('[Bathaque] Error redeeming free wash:', rErr.message);
-      }
-    }
-
-    // 2. If order has eligible service and total > 0 (paid wash), increment stamp!
-    if (status === 'completed' && parseFloat(order.total) > 0) {
-      const [servicesList] = await connection.query(
-        'SELECT service_name FROM services WHERE order_id = ?',
-        [id]
-      );
-      const [itemsList] = await connection.query(
-        'SELECT p.name, p.category FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?',
-        [id]
-      );
-
-      const eligibleFreeServices = [
-        'full body service',
-        'full body wash',
-        'ceramic wash',
-        'double soap'
-      ];
-
-      let hasEligibleService = false;
-
-      // Check services names
-      for (let s of servicesList) {
-        const sName = s.service_name.toLowerCase().trim();
-        if (eligibleFreeServices.some(e => sName.includes(e)) || sName.includes('vip')) {
-          hasEligibleService = true;
-          break;
-        }
-      }
-
-      // Check items names
-      if (!hasEligibleService) {
-        for (let item of itemsList) {
-          const pName = item.name.toLowerCase().trim();
-          if (eligibleFreeServices.some(e => pName.includes(e)) || item.category === 'VIP' || pName.includes('vip')) {
-            hasEligibleService = true;
-            break;
-          }
-        }
-      }
-
-      if (hasEligibleService) {
-        const isExemptEmirate = order.emirate === 'Garage' || order.emirate === 'Sniper car care';
-        if (!isExemptEmirate) {
-          if (targetBathaqueId) {
-            try {
-              await incrementBathaqueStamp(connection, targetBathaqueId);
-            } catch (bErr) {
-              console.error('[Bathaque] Error incrementing stamp:', bErr.message);
-            }
-          }
-          if (targetCustomerId) {
-            const { ensureLoyaltyRow, incrementWashStamp } = require('../utils/loyaltyStamps');
-            await ensureLoyaltyRow(connection, targetCustomerId);
-            await incrementWashStamp(connection, targetCustomerId);
-          }
-        }
+        const { awardLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
+        await awardLoyaltyStampsForOrder(connection, id);
+      } catch (lErr) {
+        console.error('[Order] Error awarding loyalty stamps:', lErr.message);
       }
     }
 
@@ -791,7 +776,19 @@ const getOrderInvoicePDF = asyncHandler(async (req, res) => {
            COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
            COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
            cc.status as credit_status,
-           cc.remaining_amount as credit_remaining
+           cc.remaining_amount as credit_remaining,
+           (
+             SELECT GROUP_CONCAT(DISTINCT 
+               CASE 
+                 WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'TAP'
+                 WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
+                 WHEN p.method = 'bank_transfer' THEN 'Bank Transfer'
+                 ELSE p.method
+               END
+             )
+             FROM payments p 
+             WHERE p.order_id = o.id AND p.status = 'completed'
+           ) as payment_methods
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
