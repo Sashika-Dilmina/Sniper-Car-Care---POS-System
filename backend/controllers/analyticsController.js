@@ -27,254 +27,252 @@ const sendExcelFile = (res, workbook, filename) => {
 // @access  Private
 const getDashboardAnalytics = asyncHandler(async (req, res) => {
   const { period = 'today', start_date, end_date } = req.query; // today, week, month, year
-
-  let dateFilter = '';
-
-  if (start_date && end_date) {
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (dateRegex.test(start_date) && dateRegex.test(end_date)) {
-      dateFilter = `created_at >= '${start_date} 00:00:00' AND created_at <= '${end_date} 23:59:59'`;
-    } else {
-      dateFilter = "created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY";
-    }
-  } else {
-    switch (period) {
-      case 'today':
-        dateFilter = 'created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY';
-        break;
-      case 'week':
-        dateFilter = 'created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)';
-        break;
-      case 'month':
-        dateFilter = "created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
-        break;
-      case 'year':
-        dateFilter = "created_at >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-01-01'), INTERVAL 1 YEAR)";
-        break;
-      default:
-        dateFilter = 'created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY';
-    }
-  }
-
-  const pDateFilter = dateFilter.replace(/created_at/g, 'p.created_at');
-  const oDateFilter = dateFilter.replace(/created_at/g, 'o.created_at');
-  const sDateFilter = dateFilter.replace(/created_at/g, 's.created_at');
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
   try {
+    // Resolve the reporting window to inclusive YYYY-MM-DD dates
+    let startDate;
+    let endDate;
+    if (start_date && end_date && dateRegex.test(start_date) && dateRegex.test(end_date)) {
+      startDate = start_date;
+      endDate = end_date;
+    } else {
+      const ranges = {
+        today: ['CURDATE()', 'CURDATE()'],
+        week: ['DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)', 'DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 6 DAY)'],
+        month: ["DATE_FORMAT(CURDATE(), '%Y-%m-01')", 'LAST_DAY(CURDATE())'],
+        year: ["DATE_FORMAT(CURDATE(), '%Y-01-01')", "DATE_FORMAT(CURDATE(), '%Y-12-31')"]
+      };
+      const [startExpr, endExpr] = ranges[period] || ranges.today;
+      const [[range]] = await pool.query(
+        `SELECT DATE_FORMAT(${startExpr}, '%Y-%m-%d') as s, DATE_FORMAT(${endExpr}, '%Y-%m-%d') as e`
+      );
+      startDate = range.s;
+      endDate = range.e;
+    }
+
+    // The sales trend chart always shows at least the last 7 days up to the end date
+    const sevenDaysBack = new Date(`${endDate}T00:00:00Z`);
+    sevenDaysBack.setUTCDate(sevenDaysBack.getUTCDate() - 6);
+    const sevenDaysBackStr = sevenDaysBack.toISOString().slice(0, 10);
+    const chartStartDate = startDate < sevenDaysBackStr ? startDate : sevenDaysBackStr;
+
+    // Index-friendly "column within [start, end] (inclusive days)" filter; always takes [start, end] params
+    const inRange = (col) => `${col} >= ? AND ${col} < DATE_ADD(?, INTERVAL 1 DAY)`;
+    const range = [startDate, endDate];
+    // A valid order is not cancelled and not soft-deleted (same rule as the Reports page)
+    const validOrder = (a) => `${a}.status != 'cancelled' AND (${a}.is_deleted = 0 OR ${a}.is_deleted IS NULL)`;
+
     const [
-      [paymentResult],
+      profitLoss,
       [vehicleTypeResult],
       [servicesResult],
       [customersResult],
       [pendingResult],
       [pendingVehiclesResult],
       [pendingVipResult],
-      [itemsCostResult],
-      [servicesCostResult],
-      [freeWashBreakdown],
       [topCustomersResult],
       [topServicesResult],
       [salesByDayResult],
       [categoryRevenueResult],
-      [feedbackResult]
+      [feedbackResult],
+      [recentOrdersResult],
+      [newCustomersResult]
     ] = await Promise.all([
-      // 1. Payment breakdown
-      pool.query(`
-        SELECT 
-          CASE 
-            WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
-            WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
-            ELSE p.method 
-          END as method,
-          COALESCE(SUM(p.amount), 0) as total_amount
-         FROM payments p
-         JOIN orders o ON p.order_id = o.id
-         WHERE o.status != 'cancelled' AND ${pDateFilter} AND p.status = 'completed'
-         GROUP BY 
-          CASE 
-            WHEN p.method IN ('apple_pay', 'samsung_pay', 'tap_payments', 'tap') THEN 'tap'
-            WHEN p.method IN ('mastercard', 'master_card', 'master') THEN 'card'
-            ELSE p.method 
-          END
-      `),
+      // 1. Money figures come from the Business Summary (P&L) builder so the
+      //    dashboard always matches the Business Summary report for the same dates.
+      buildProfitLossData({ start_date: startDate, end_date: endDate }),
       // 2. Orders by vehicle type
       pool.query(`
-        SELECT 
+        SELECT
           COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
           COUNT(*) as order_count
          FROM orders o
          LEFT JOIN customers c ON o.customer_id = c.id
          LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
          LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
-         WHERE ${oDateFilter}
+         WHERE ${validOrder('o')} AND ${inRange('o.created_at')}
          GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type)
          HAVING vehicle_type IS NOT NULL
-      `),
-      // 3. Services completed
+      `, range),
+      // 3. Services completed (settled orders: paid, free or on credit)
       pool.query(`
-        SELECT COUNT(*) as completed_services 
-         FROM services s 
-         JOIN orders o ON s.order_id = o.id 
-         WHERE ${sDateFilter} AND s.status = 'completed' AND o.payment_status IN ('paid', 'free')
-      `),
-      // 4. Total customers
-      pool.query(`SELECT COUNT(*) as total_customers FROM customers WHERE ${dateFilter}`),
-      // 5. Pending payments
+        SELECT COUNT(*) as completed_services
+         FROM services s
+         JOIN orders o ON s.order_id = o.id
+         WHERE ${inRange('s.created_at')}
+           AND s.status = 'completed'
+           AND (s.is_deleted = 0 OR s.is_deleted IS NULL)
+           AND ${validOrder('o')}
+           AND o.payment_status IN ('paid', 'free', 'credit')
+      `, range),
+      // 4. Customers added in the period
       pool.query(`
-        SELECT COALESCE(SUM(total), 0) as pending_amount, COUNT(*) as pending_count 
-         FROM orders WHERE ${dateFilter} AND payment_status = 'pending' AND status != 'cancelled'
-      `),
+        SELECT COUNT(*) as total_customers
+         FROM customers
+         WHERE (is_deleted = 0 OR is_deleted IS NULL) AND ${inRange('created_at')}
+      `, range),
+      // 5. Pending payments (unpaid + partially paid orders, outstanding balance only)
+      pool.query(`
+        SELECT
+          COALESCE(SUM(GREATEST(o.total - COALESCE(paid.amount, 0), 0)), 0) as pending_amount,
+          COUNT(*) as pending_count
+         FROM orders o
+         LEFT JOIN (
+           SELECT order_id, SUM(amount) as amount FROM payments WHERE status = 'completed' GROUP BY order_id
+         ) paid ON paid.order_id = o.id
+         WHERE ${validOrder('o')} AND ${inRange('o.created_at')}
+           AND o.payment_status IN ('pending', 'partial')
+      `, range),
       // 6. Pending saloon & 4x4 vehicles count
       pool.query(`
-        SELECT 
+        SELECT
           COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') as vehicleType,
           COUNT(*) as count
          FROM orders o
          LEFT JOIN customers c ON o.customer_id = c.id
          LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
          LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
-          WHERE o.status IN ('pending', 'processing') 
+          WHERE o.status IN ('pending', 'processing')
+            AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
             AND o.vip_booking_id IS NULL
-            AND ${oDateFilter}
+            AND ${inRange('o.created_at')}
             AND (
-              EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status IN ('pending', 'in_progress'))
+              EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status IN ('pending', 'in_progress') AND (s.is_deleted = 0 OR s.is_deleted IS NULL))
               OR (
                 EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
                 AND NOT EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status = 'completed')
               )
             )
          GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')
-      `),
+      `, range),
       // 7. Pending VIP count
       pool.query(`
         SELECT COUNT(*) as count
          FROM orders o
-           WHERE o.status IN ('pending', 'processing') 
+           WHERE o.status IN ('pending', 'processing')
+             AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
              AND o.vip_booking_id IS NOT NULL
-             AND ${oDateFilter}
+             AND ${inRange('o.created_at')}
             AND (
-              EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status IN ('pending', 'in_progress'))
+              EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status IN ('pending', 'in_progress') AND (s.is_deleted = 0 OR s.is_deleted IS NULL))
               OR (
                 EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
                 AND NOT EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id AND s.status = 'completed')
               )
             )
-      `),
-      // 8. Cost of order items
-      pool.query(`
-        SELECT COALESCE(SUM(oi.quantity * COALESCE(p.purchase_price, 0)), 0) as total
-         FROM order_items oi
-         JOIN products p ON oi.product_id = p.id
-         JOIN orders o ON oi.order_id = o.id
-         WHERE o.status != 'cancelled' AND ${oDateFilter}
-      `),
-      // 9. Cost of services
-      pool.query(`
-        SELECT COALESCE(SUM(COALESCE(p.purchase_price, 0)), 0) as total
-         FROM services s
-         JOIN orders o ON s.order_id = o.id
-         JOIN products p ON s.service_name = p.name
-         WHERE o.status != 'cancelled' 
-           AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id)
-           AND ${oDateFilter}
-      `),
-      // 10. Free washes breakdown
-      pool.query(`
-        SELECT 
-          COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon') as vehicle_type,
-          COALESCE(SUM(o.discount), 0) as total_amount,
-          COUNT(o.id) as washes_count
-        FROM orders o
-        LEFT JOIN customers c ON o.customer_id = c.id
-        LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
-        LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
-        WHERE o.status != 'cancelled' AND o.payment_status = 'free' AND ${oDateFilter}
-        GROUP BY COALESCE(c.vehicle_type, vc.vehicle_type, 'Saloon')
-      `),
-      // 11. Top customers
+      `, range),
+      // 8. Top customers
       pool.query(`
         SELECT c.id, c.name, c.phone, c.vehicle_plate, COUNT(o.id) as order_count, COALESCE(SUM(o.total), 0) as total_spent
         FROM customers c
         JOIN orders o ON c.id = o.customer_id
-        WHERE ${oDateFilter} AND o.payment_status IN ('paid', 'free') AND o.status != 'cancelled'
+        WHERE ${inRange('o.created_at')} AND ${validOrder('o')} AND o.payment_status IN ('paid', 'free', 'credit')
         GROUP BY c.id, c.name, c.phone, c.vehicle_plate
         ORDER BY total_spent DESC
         LIMIT 5
-      `),
-      // 12. Top services
+      `, range),
+      // 9. Top services
       pool.query(`
-        SELECT 
+        SELECT
           p.name as service_name,
           COUNT(oi.id) as service_count,
           COALESCE(SUM(oi.price * oi.quantity), 0) as total_revenue
         FROM order_items oi
         JOIN products p ON oi.product_id = p.id
         JOIN orders o ON oi.order_id = o.id
-        WHERE ${oDateFilter} AND o.payment_status IN ('paid', 'free') AND o.status != 'cancelled'
+        WHERE ${inRange('o.created_at')} AND ${validOrder('o')} AND o.payment_status IN ('paid', 'free', 'credit')
         GROUP BY p.id, p.name
         ORDER BY service_count DESC
         LIMIT 5
-      `),
-      // 13. Sales by day
+      `, range),
+      // 10. Sales by day (same "Total Sales" rule as the Daily Business Summary)
       pool.query(`
-        SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as date, COALESCE(SUM(total), 0) as sales
-        FROM orders
-        WHERE ${dateFilter} AND payment_status IN ('paid', 'free') AND status != 'cancelled'
-        GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
+        SELECT DATE_FORMAT(o.created_at, '%Y-%m-%d') as date, COALESCE(SUM(o.total), 0) as sales
+        FROM orders o
+        WHERE ${inRange('o.created_at')} AND ${validOrder('o')}
+        GROUP BY DATE_FORMAT(o.created_at, '%Y-%m-%d')
         ORDER BY date ASC
-      `),
-      // 14. Category revenue
+      `, [chartStartDate, endDate]),
+      // 11. Category revenue
       pool.query(`
         SELECT p.category, COALESCE(SUM(oi.price * oi.quantity), 0) as revenue
         FROM order_items oi
         JOIN products p ON oi.product_id = p.id
         JOIN orders o ON oi.order_id = o.id
-        WHERE ${oDateFilter} AND o.payment_status IN ('paid', 'free') AND o.status != 'cancelled'
+        WHERE ${inRange('o.created_at')} AND ${validOrder('o')} AND o.payment_status IN ('paid', 'free', 'credit')
         GROUP BY p.category
         ORDER BY revenue DESC
-      `),
-      // 15. Feedback
+      `, range),
+      // 12. Feedback
       pool.query(`
         SELECT f.*, c.name as customer_name, c.phone as customer_phone, c.vehicle_plate, c.vehicle_type
         FROM feedback f
         LEFT JOIN customers c ON f.customer_id = c.id
         ORDER BY f.created_at DESC
         LIMIT 10
-      `)
+      `),
+      // 13. Recent orders (staff "Top Orders (Real-time)" table)
+      pool.query(`
+        SELECT o.*,
+               COALESCE(c.name, vc.name) as customer_name,
+               COALESCE(c.phone, vc.phone) as customer_phone,
+               COALESCE(c.vehicle_plate, vc.vehicle_model) as vehicle_plate,
+               COALESCE(c.vehicle_type, vc.vehicle_type) as vehicle_type,
+               cc.status as credit_status,
+               cc.remaining_amount as credit_remaining
+        FROM orders o
+        LEFT JOIN customers c ON o.customer_id = c.id
+        LEFT JOIN vip_bookings vb ON o.vip_booking_id = vb.id
+        LEFT JOIN vip_customers vc ON vb.vip_customer_id = vc.id
+        LEFT JOIN customer_credits cc ON o.id = cc.order_id
+        WHERE (o.is_deleted = 0 OR o.is_deleted IS NULL)
+        ORDER BY o.created_at DESC
+        LIMIT 5
+      `),
+      // 14. New customers added in the period
+      pool.query(`
+        SELECT c.id, c.name, c.phone, c.vehicle_plate, c.vehicle_type,
+               DATE_FORMAT(c.created_at, '%Y-%m-%d') as joined_date
+        FROM customers c
+        WHERE (c.is_deleted = 0 OR c.is_deleted IS NULL) AND ${inRange('c.created_at')}
+        ORDER BY c.created_at DESC
+        LIMIT 10
+      `, range)
     ]);
 
-    const cardPayments = parseFloat(paymentResult.find(item => item.method === 'card')?.total_amount || 0);
-    const cashPayments = parseFloat(paymentResult.find(item => item.method === 'cash')?.total_amount || 0);
-    const creditPayments = parseFloat(paymentResult.find(item => item.method === 'credit')?.total_amount || 0);
-    const tapPayments = parseFloat(paymentResult.find(item => item.method === 'tap')?.total_amount || 0);
-    const bankPayments = parseFloat(paymentResult.find(item => item.method === 'bank_transfer')?.total_amount || 0);
+    // Attach order items to the recent orders in a single query
+    if (recentOrdersResult.length > 0) {
+      const [items] = await pool.query(
+        `SELECT oi.*, p.name as product_name, p.category
+         FROM order_items oi
+         LEFT JOIN products p ON oi.product_id = p.id
+         WHERE oi.order_id IN (?)`,
+        [recentOrdersResult.map(o => o.id)]
+      );
+      for (const ord of recentOrdersResult) {
+        ord.items = items.filter(i => i.order_id === ord.id);
+      }
+    }
 
-    const saloonFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === 'Saloon')?.total_amount || 0;
-    const fourWheelFreeAmount = freeWashBreakdown.find(f => f.vehicle_type === '4x4')?.total_amount || 0;
-    const freeWashTotal = parseFloat(saloonFreeAmount) + parseFloat(fourWheelFreeAmount);
-
-    const netSales = cashPayments + cardPayments + tapPayments + bankPayments + creditPayments + freeWashTotal;
-    const itemsCost = parseFloat(itemsCostResult[0]?.total || 0);
-    const servicesCost = parseFloat(servicesCostResult[0]?.total || 0);
-    const totalCost = itemsCost + servicesCost;
-    const totalProfit = netSales - totalCost;
-
+    const pl = profitLoss.summary;
     const fourWheelOrders = vehicleTypeResult.find(item => item.vehicle_type === '4x4')?.order_count || 0;
     const saloonOrders = vehicleTypeResult.find(item => item.vehicle_type === 'Saloon')?.order_count || 0;
     const pendingSaloonCount = pendingVehiclesResult.find(item => item.vehicleType === 'Saloon')?.count || 0;
     const pending4x4Count = pendingVehiclesResult.find(item => item.vehicleType === '4x4')?.count || 0;
 
     res.json({
-      period,
+      period: { start_date: startDate, end_date: endDate },
       summary: {
-        total_card_payments: cardPayments,
-        total_cash_payments: cashPayments,
-        total_tap_payments: tapPayments,
-        total_bank_payments: bankPayments,
-        total_credit_payments: creditPayments,
-        net_sales: netSales,
-        total_cost: totalCost,
-        total_profit: totalProfit,
+        // Cash/Card received = direct sales + credit recoveries (same as Business Summary)
+        total_card_payments: pl.total_card_and_recovery,
+        total_cash_payments: pl.total_cash_and_recovery,
+        total_tap_payments: pl.tap_sales,
+        total_bank_payments: pl.bank_transfer_sales + pl.bank_recovery,
+        total_credit_payments: pl.credit_sales,
+        net_sales: pl.net_sales,
+        total_cost: pl.total_cost,
+        total_profit: pl.net_profit,
         four_wheel_orders: parseInt(fourWheelOrders || 0),
         saloon_orders: parseInt(saloonOrders || 0),
         completed_services: parseInt(servicesResult[0]?.completed_services || 0),
@@ -286,10 +284,12 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
         pending_vip_count: parseInt(pendingVipResult[0]?.count || 0)
       },
       top_customers: topCustomersResult || [],
-      top_services: topServicesResult || [],
-      sales_by_day: salesByDayResult || [],
+      top_services: (topServicesResult || []).map(s => ({ ...s, total_revenue: parseFloat(s.total_revenue || 0) })),
+      sales_by_day: (salesByDayResult || []).map(d => ({ date: d.date, sales: parseFloat(d.sales || 0) })),
       category_revenue: categoryRevenueResult || [],
-      recent_feedback: feedbackResult || []
+      recent_feedback: feedbackResult || [],
+      recent_orders: recentOrdersResult || [],
+      new_customers: newCustomersResult || []
     });
   } catch (error) {
     console.error('Dashboard analytics error:', error);
@@ -392,7 +392,8 @@ const buildDailySummaryData = async ({ date } = {}) => {
         COUNT(CASE WHEN s.status = 'in_progress' THEN 1 END) as in_progress_services
      FROM services s
      JOIN orders o ON s.order_id = o.id
-     WHERE DATE(s.created_at) = ? AND (o.is_deleted = 0 OR o.is_deleted IS NULL) AND o.status != 'cancelled'`,
+     WHERE DATE(s.created_at) = ? AND (o.is_deleted = 0 OR o.is_deleted IS NULL) AND o.status != 'cancelled'
+       AND (s.is_deleted = 0 OR s.is_deleted IS NULL)`,
     [targetDate]
   );
 
@@ -989,8 +990,8 @@ const getPaymentTypeReport = asyncHandler(async (req, res) => {
   if (format === 'excel') {
     const workbook = XLSX.utils.book_new();
     
-    // Payment Methods sheet
-    if (paymentBreakdown.length > 0) {
+    // Payment Methods sheet (always added so the workbook is never empty)
+    {
       const paymentData = [
         ['Method', 'Transactions', 'Completed', 'Pending', 'Failed', 'Total Amount (AED)'],
         ...paymentBreakdown.map(pm => [
@@ -1102,7 +1103,7 @@ const getCustomerWiseReport = asyncHandler(async (req, res) => {
   const reportData = await buildCustomerWiseData({ start_date, end_date });
   const customerReport = reportData.customers;
 
-  if (format === 'excel' && customerReport.length > 0) {
+  if (format === 'excel') {
     const workbook = XLSX.utils.book_new();
     
     const customerData = [
@@ -1190,7 +1191,7 @@ const getSupplierPaymentReport = asyncHandler(async (req, res) => {
   const reportData = await buildSupplierData({ start_date, end_date });
   const supplierPayments = reportData.suppliers;
 
-  if (format === 'excel' && supplierPayments.length > 0) {
+  if (format === 'excel') {
     const workbook = XLSX.utils.book_new();
     
     const supplierData = [
@@ -1308,8 +1309,8 @@ const getPurchasesReport = asyncHandler(async (req, res) => {
       XLSX.utils.book_append_sheet(workbook, categorySheet, 'Category Summary');
     }
 
-    // Items sheet
-    if (purchases.length > 0) {
+    // Items sheet (always added so the workbook is never empty)
+    {
       const itemsData = [
         ['Product ID', 'Product Name', 'Category', 'Supplier', 'Quantity Sold', 'Order Count', 'Average Price', 'Min Price', 'Max Price', 'Total Revenue'],
         ...purchases.map(item => [
@@ -1640,6 +1641,7 @@ const buildStockData = async ({ start_date, end_date } = {}) => {
     LEFT JOIN order_items oi ON p.id = oi.product_id
     LEFT JOIN orders o ON oi.order_id = o.id
     WHERE p.category != 'Services'
+      AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
     GROUP BY p.id
     ORDER BY p.name ASC
   `;

@@ -548,7 +548,7 @@ function generatePDFReport(tab, data, params, outputPath) {
         currentY = drawRow('Closed At', formatDate(report.closed_at), currentY);
         currentY = drawRow('Opening Balance', `AED ${parseFloat(report.opening_balance).toFixed(3)}`, currentY);
         currentY = drawRow('Closing Balance (System)', report.closing_balance ? `AED ${parseFloat(report.closing_balance).toFixed(3)}` : 'N/A', currentY);
-        currentY = drawRow('Closed Amount (Actual)', report.closed_amount ? `AED ${parseFloat(report.closed_amount).toFixed(3)}` : 'N/A', currentY);
+        currentY = drawRow('Closed Amount (Actual)', report.closed_amount !== null && report.closed_amount !== undefined ? `AED ${parseFloat(report.closed_amount).toFixed(3)}` : 'N/A', currentY);
         if (report.closed_amount !== null && report.closing_balance !== null) {
           const diff = report.closed_amount - report.closing_balance;
           currentY = drawRow('Difference', `AED ${parseFloat(diff).toFixed(3)}`, currentY, true);
