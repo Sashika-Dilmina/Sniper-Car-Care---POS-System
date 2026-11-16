@@ -7,7 +7,7 @@ const { buildFeedbackUrl, formatPhoneNumber } = require('../utils/customerLinkUt
 // @route   GET /api/services
 // @access  Private
 const getServices = asyncHandler(async (req, res) => {
-  const { vehicle_type, status } = req.query;
+  const { vehicle_type, status, limit } = req.query;
   let query = `
     SELECT s.*, 
            c.name as customer_name,
@@ -31,6 +31,10 @@ const getServices = asyncHandler(async (req, res) => {
   }
 
   query += ' ORDER BY s.created_at DESC';
+
+  if (limit && !isNaN(limit)) {
+    query += ` LIMIT ${parseInt(limit, 10)}`;
+  }
 
   const [services] = await pool.query(query, params);
 
@@ -154,6 +158,12 @@ const updateServiceStatus = asyncHandler(async (req, res) => {
         'UPDATE orders SET status = "completed", service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP), service_started_at = COALESCE(service_started_at, created_at, CURRENT_TIMESTAMP) WHERE id = ? AND status IN ("pending", "processing")',
         [service.order_id]
       );
+      try {
+        const { awardLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
+        await awardLoyaltyStampsForOrder(pool, service.order_id);
+      } catch (lErr) {
+        console.error('[ServiceController] Error awarding loyalty stamps:', lErr.message);
+      }
     }
   }
 

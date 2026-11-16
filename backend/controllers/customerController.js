@@ -117,7 +117,39 @@ const getCustomer = asyncHandler(async (req, res) => {
     [id]
   );
 
-  res.json({ customer: { ...customer, linked_vehicles: linkedVehicles }, orders });
+  // Fetch fresh Bathaque Loyalty info if customer has bathaque_id
+  let bathaqueLoyalty = null;
+  if (customer.bathaque_id) {
+    try {
+      const { getBathaqueLoyalty } = require('../utils/bathaqueLoyalty');
+      bathaqueLoyalty = await getBathaqueLoyalty(pool, customer.bathaque_id);
+    } catch (bErr) {
+      console.error('[Customer] Error fetching bathaque loyalty:', bErr.message);
+    }
+  }
+
+  if (!bathaqueLoyalty) {
+    bathaqueLoyalty = {
+      bathaque_id: customer.bathaque_id,
+      wash_stamps: customer.wash_stamps || 0,
+      total_washes: customer.bathaque_total_washes || 0,
+      free_washes_earned: customer.bathaque_free_washes_earned || 0,
+      free_washes_redeemed: customer.bathaque_free_washes_redeemed || 0,
+      is_eligible_for_free: (customer.wash_stamps || 0) >= 5,
+      is_free_eligible: (customer.wash_stamps || 0) >= 5
+    };
+  }
+
+  // Ensure customer has both flat and nested properties
+  customer.wash_stamps = bathaqueLoyalty.wash_stamps;
+  customer.bathaque_total_washes = bathaqueLoyalty.total_washes;
+  customer.bathaque_free_washes_earned = bathaqueLoyalty.free_washes_earned;
+  customer.bathaque_free_washes_redeemed = bathaqueLoyalty.free_washes_redeemed;
+  customer.bathaque_loyalty = bathaqueLoyalty;
+  customer.linked_vehicles = linkedVehicles;
+  customer.linked_bathaque_vehicles = linkedVehicles;
+
+  res.json({ customer, orders });
 });
 
 // Helper to parse Plate string into Emirate, Code and Plate Number

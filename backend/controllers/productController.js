@@ -27,6 +27,11 @@ const getProducts = asyncHandler(async (req, res) => {
     params.push(searchTerm, searchTerm);
   }
 
+  if (req.query.is_active !== undefined) {
+    query += ' AND is_active = ?';
+    params.push(req.query.is_active === '1' || req.query.is_active === 1 || req.query.is_active === true || req.query.is_active === 'true' ? 1 : 0);
+  }
+
   query += ' ORDER BY created_at DESC';
 
   const [products] = await pool.query(query, params);

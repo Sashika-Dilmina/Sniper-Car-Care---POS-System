@@ -71,7 +71,7 @@ const getRegisterReport = asyncHandler(async (req, res) => {
   const openedAt = register.opened_at;
   const closedAt = register.closed_at || new Date();
 
-  // Query Cash Payments from regular sales
+  // Query Cash Payments from regular direct sales (excluding credit recoveries)
   const [cashSalesRows] = await pool.query(
     `SELECT COALESCE(SUM(p.amount), 0) as total 
      FROM payments p 
@@ -79,6 +79,7 @@ const getRegisterReport = asyncHandler(async (req, res) => {
      WHERE p.created_at >= ? AND p.created_at <= ? 
        AND p.method = 'cash' 
        AND p.status = 'completed' 
+       AND (p.is_credit_recovery = 0 OR p.is_credit_recovery IS NULL)
        AND o.payment_status IN ('paid', 'free')
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]
@@ -93,14 +94,15 @@ const getRegisterReport = asyncHandler(async (req, res) => {
   const cashRecoveries = parseFloat(cashRecoveriesRows[0].total);
   const totalCashPayments = cashSales + cashRecoveries;
 
-  // Query Card Payments from regular sales
+  // Query Card Payments from regular direct sales (excluding credit recoveries)
   const [cardSalesRows] = await pool.query(
     `SELECT COALESCE(SUM(p.amount), 0) as total 
      FROM payments p 
      JOIN orders o ON p.order_id = o.id 
      WHERE p.created_at >= ? AND p.created_at <= ? 
-       AND (p.method = 'card' OR p.method = 'visa') 
+       AND (p.method = 'card' OR p.method = 'visa' OR p.method = 'mastercard' OR p.method = 'master_card') 
        AND p.status = 'completed' 
+       AND (p.is_credit_recovery = 0 OR p.is_credit_recovery IS NULL)
        AND o.payment_status IN ('paid', 'free')
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]
@@ -311,6 +313,7 @@ const closeRegister = asyncHandler(async (req, res) => {
      WHERE p.created_at >= ? AND p.created_at <= ? 
        AND p.method = 'cash' 
        AND p.status = 'completed' 
+       AND (p.is_credit_recovery = 0 OR p.is_credit_recovery IS NULL)
        AND o.payment_status IN ('paid', 'free')
        AND o.status != 'cancelled'`,
     [openedAt, closedAt]

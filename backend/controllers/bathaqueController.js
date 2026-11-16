@@ -44,7 +44,8 @@ const checkBathaque = asyncHandler(async (req, res) => {
     is_free_eligible: loyalty.is_free_eligible,
     stamps_needed: loyalty.stamps_needed,
     customers_count: customers.length,
-    customers
+    customers,
+    loyalty
   });
 });
 

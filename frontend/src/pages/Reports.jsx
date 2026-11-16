@@ -205,8 +205,9 @@ const Reports = () => {
         const start = new Date(creditStartDate + 'T00:00:00');
         const end = new Date(creditEndDate + 'T23:59:59');
         const filtered = (response.data.credits || []).filter(c => {
-          const date = new Date(c.created_at);
-          return date >= start && date <= end;
+          const created = new Date(c.created_at);
+          const cleared = c.last_payment_date ? new Date(c.last_payment_date) : null;
+          return (created >= start && created <= end) || (cleared && cleared >= start && cleared <= end);
         });
         setCreditReport(filtered);
       } else {
@@ -623,53 +624,74 @@ const Reports = () => {
     @media print {
       @page {
         size: auto;
-        margin: 10mm !important;
+        margin: 6mm 6mm !important;
       }
       aside, nav, .no-print, button, input, select, header {
         display: none !important;
+      }
+      *, *::before, *::after {
+        box-sizing: border-box !important;
       }
       body, html {
         background: white !important;
         color: black !important;
         width: 100% !important;
+        max-width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
+        overflow: visible !important;
       }
-      main {
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-      .print-card {
+      main, #root, .min-h-screen, div[class*="ml-"] {
         margin: 0 !important;
         padding: 0 !important;
-        page-break-after: avoid !important;
-        break-after: avoid !important;
-      }
-      .print-full-width {
         width: 100% !important;
         max-width: 100% !important;
+        overflow: visible !important;
+      }
+      .overflow-x-auto, [class*="overflow-"] {
+        overflow: visible !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      .print-card, .print-full-width, .bg-white, .shadow, .rounded-lg, .rounded-xl, .rounded-2xl {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
         box-shadow: none !important;
         border: none !important;
-        padding: 0 !important;
       }
-      h1, h2, h3, h4, p, td, th {
+      h1, h2, h3, h4, p, td, th, span, div {
         color: black !important;
       }
+      /* Ensure table takes exactly 100% of printable paper width and columns never crop */
       table {
         width: 100% !important;
+        max-width: 100% !important;
+        table-layout: fixed !important;
         border-collapse: collapse !important;
-        margin-top: 15px !important;
+        margin-top: 8px !important;
+        page-break-inside: auto !important;
+      }
+      tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
       th, td {
-        border: 1px solid #ccc !important;
-        padding: 6px 10px !important;
+        border: 1px solid #d1d5db !important;
+        padding: 3px 4px !important;
         text-align: left !important;
-        font-size: 10pt !important;
+        font-size: 7.5pt !important;
+        line-height: 1.15 !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        white-space: normal !important;
       }
       th {
         background-color: #f3f4f6 !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        font-weight: 700 !important;
+        font-size: 7.5pt !important;
       }
     }
   `;
@@ -966,13 +988,13 @@ const Reports = () => {
               <button
                 onClick={fetchPaymentTypeReport}
                 disabled={paymentLoading}
-                className="flex-1 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-semibold"
               >
                 {paymentLoading ? 'Loading...' : 'Generate Report'}
               </button>
               <button
                 onClick={downloadPaymentTypeExcel}
-                className="flex-1 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 font-semibold"
                 title="Download as Excel"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -980,52 +1002,100 @@ const Reports = () => {
                 </svg>
                 Download Excel
               </button>
+              <button
+                onClick={handlePrint}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 font-semibold"
+                title="Print Report"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print Report
+              </button>
             </div>
           </div>
 
           {paymentReport && (
             <div className="space-y-6">
-              {paymentReport.payment_methods && paymentReport.payment_methods.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Payment Methods Breakdown</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left">Method</th>
-                          <th className="px-4 py-2 text-right">Transactions</th>
-                          <th className="px-4 py-2 text-right">Completed</th>
-                          <th className="px-4 py-2 text-right">Pending</th>
-                          <th className="px-4 py-2 text-right">Failed</th>
-                          <th className="px-4 py-2 text-right">Total Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paymentReport.payment_methods.map((pm, idx) => {
-                          const displayMethod = (m) => {
-                            if (m === 'saloon_free') return 'Saloon Free Wash';
-                            if (m === '4x4_free') return '4x4 Free Wash';
-                            if (m === 'tap') return 'TAP';
-                            return m.charAt(0).toUpperCase() + m.slice(1);
-                          };
-                          return (
-                          <tr key={idx} className="border-b">
-                            <td className="px-4 py-2 font-semibold">{displayMethod(pm.method)}</td>
-                            <td className="px-4 py-2 text-right">{pm.transaction_count}</td>
-                            <td className="px-4 py-2 text-right">{pm.completed_count}</td>
-                            <td className="px-4 py-2 text-right">{pm.pending_count}</td>
-                            <td className="px-4 py-2 text-right">{pm.failed_count}</td>
-                            <td className="px-4 py-2 text-right font-semibold">
-                              AED {parseFloat(pm.total_amount || 0).toLocaleString()}
+              <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 border rounded-2xl shadow-sm space-y-6 text-black print-full-width">
+                {/* Header for Screen & Print with Date Range */}
+                <div className="text-center space-y-1 border-b pb-6">
+                  <h2 className="text-2xl font-black uppercase tracking-wide">Payment Type Report</h2>
+                  <p className="text-sm font-bold text-gray-600">Business Location: Main Branch</p>
+                  <p className="text-xs text-gray-500 font-mono">
+                    Date Range: {paymentStartDate ? paymentStartDate.split('-').reverse().join('-') : 'All'} TO {paymentEndDate ? paymentEndDate.split('-').reverse().join('-') : (paymentStartDate ? paymentStartDate.split('-').reverse().join('-') : 'All')}
+                  </p>
+                </div>
+
+                {paymentReport.payment_methods && paymentReport.payment_methods.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Payment Methods Breakdown</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left">Method</th>
+                            <th className="px-4 py-2 text-right">Transactions</th>
+                            <th className="px-4 py-2 text-right">Completed</th>
+                            <th className="px-4 py-2 text-right">Pending</th>
+                            <th className="px-4 py-2 text-right">Failed</th>
+                            <th className="px-4 py-2 text-right">Total Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paymentReport.payment_methods.map((pm, idx) => {
+                            const displayMethod = (m) => {
+                              if (m === 'cash') return 'Cash';
+                              if (m === 'card') return 'Card';
+                              if (m === 'credit') return 'Credit';
+                              if (m === 'tap') return 'TAP';
+                              if (m === 'bank_transfer') return 'Bank Transfer';
+                              if (m === 'saloon_free') return 'Saloon Free Wash';
+                              if (m === '4x4_free') return '4x4 Free Wash';
+                              if (m === 'cash_recovery') return 'Cash Recovery';
+                              if (m === 'card_recovery') return 'Card Recovery';
+                              if (m === 'bank_recovery') return 'Bank Recovery';
+                              return m.charAt(0).toUpperCase() + m.slice(1);
+                            };
+                            return (
+                              <tr key={idx} className="border-b">
+                                <td className="px-4 py-2 font-semibold">{displayMethod(pm.method)}</td>
+                                <td className="px-4 py-2 text-right">{pm.transaction_count}</td>
+                                <td className="px-4 py-2 text-right">{pm.completed_count}</td>
+                                <td className="px-4 py-2 text-right">{pm.pending_count}</td>
+                                <td className="px-4 py-2 text-right">{pm.failed_count}</td>
+                                <td className="px-4 py-2 text-right font-semibold">
+                                  AED {parseFloat(pm.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                          <tr>
+                            <td className="px-4 py-2.5 text-left">Total</td>
+                            <td className="px-4 py-2.5 text-right">
+                              {paymentReport.payment_methods.reduce((s, pm) => s + (parseInt(pm.transaction_count) || 0), 0)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              {paymentReport.payment_methods.reduce((s, pm) => s + (parseInt(pm.completed_count) || 0), 0)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              {paymentReport.payment_methods.reduce((s, pm) => s + (parseInt(pm.pending_count) || 0), 0)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              {paymentReport.payment_methods.reduce((s, pm) => s + (parseInt(pm.failed_count) || 0), 0)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-black text-indigo-700">
+                              AED {paymentReport.payment_methods.reduce((s, pm) => s + (parseFloat(pm.total_amount) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                        </tfoot>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1335,6 +1405,15 @@ const Reports = () => {
             >
               {plLoading ? 'Generating...' : 'Generate P&L'}
             </button>
+            {plReport && plReport.summary && (
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-black transition font-bold flex items-center gap-2"
+              >
+                🖨️ Print Report
+              </button>
+            )}
           </div>
 
           {plReport && plReport.summary && (
@@ -1397,6 +1476,18 @@ const Reports = () => {
                         <span className="text-gray-900">Total Profit</span>
                         <span className={`font-mono text-base ${plReport.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {parseFloat(plReport.summary.net_profit || 0).toFixed(3)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t border-dashed pt-2 mt-2 notranslate" translate="no">
+                        <span className="text-gray-800">Total Cash Sales + Cash Recover =</span>
+                        <span className="font-mono text-gray-900 font-extrabold">
+                          {(parseFloat(plReport.summary.cash_sales || 0) + parseFloat(plReport.summary.cash_recovery || 0)).toFixed(3)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold py-1 notranslate" translate="no">
+                        <span className="text-gray-800">Total Card Sales + Card Recover =</span>
+                        <span className="font-mono text-gray-900 font-extrabold">
+                          {(parseFloat(plReport.summary.card_sales || 0) + parseFloat(plReport.summary.card_recovery || 0)).toFixed(3)}
                         </span>
                       </div>
                     </div>
@@ -2099,10 +2190,29 @@ const Reports = () => {
             >
               {creditLoading ? 'Generating...' : 'Generate Report'}
             </button>
+            <button
+              onClick={handlePrint}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 font-bold"
+              title="Print Credit Report"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Report
+            </button>
           </div>
 
           {creditReport && (
             <div className="space-y-6">
+              {/* Header for Print */}
+              <div className="text-center space-y-1 border-b pb-4 mb-4 hidden print:block">
+                <h2 className="text-xl font-bold uppercase tracking-wide">Customer Credit Report</h2>
+                <p className="text-xs font-semibold text-gray-600">Business Location: Main Branch</p>
+                <p className="text-xs text-gray-500 font-mono">
+                  Date Range: {creditStartDate ? creditStartDate.split('-').reverse().join('-') : 'All'} TO {creditEndDate ? creditEndDate.split('-').reverse().join('-') : (creditStartDate ? creditStartDate.split('-').reverse().join('-') : 'All')}
+                </p>
+              </div>
+
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
@@ -2126,37 +2236,50 @@ const Reports = () => {
               </div>
 
               {/* Credits List Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full text-left print:table-fixed">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Date</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Customer</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500">Plate</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Total Credit</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Recovered</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Remaining</th>
-                      <th className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Status</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[11%]">Date Granted</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[11%]">Cleared Date</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[18%]">Customer</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 w-[15%]">Plate</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right w-[11%]">Total Credit</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right w-[11%]">Recovered</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-right w-[11%]">Remaining</th>
+                      <th className="px-2 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 text-center w-[12%]">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {creditReport.length > 0 ? (
                       creditReport.map((c) => (
                         <tr key={c.id} className="hover:bg-gray-50/50">
-                          <td className="px-4 py-2 text-sm text-gray-600">{new Date(c.created_at).toLocaleDateString()}</td>
-                          <td className="px-4 py-2 text-sm font-semibold text-gray-800">{c.customer_name}</td>
-                          <td className="px-4 py-2 text-sm font-mono text-gray-700">{c.vehicle_plate}</td>
-                          <td className="px-4 py-2 text-sm font-bold text-right text-gray-900">
+                          <td className="px-2 py-1.5 text-sm text-gray-600 print:text-[7.5pt]">{new Date(c.created_at).toLocaleDateString('en-GB')}</td>
+                          <td className="px-2 py-1.5 text-sm text-gray-600 print:text-[7.5pt]">
+                            {c.last_payment_date ? (
+                              <div className="flex flex-col">
+                                <span>{new Date(c.last_payment_date).toLocaleDateString('en-GB')}</span>
+                                {c.last_payment_method && (
+                                  <span className="text-[10px] text-gray-400 uppercase font-mono print:text-[6.5pt]">{c.last_payment_method}</span>
+                                )}
+                              </div>
+                            ) : (
+                              c.status === 'fully_paid' ? new Date(c.updated_at).toLocaleDateString('en-GB') : '-'
+                            )}
+                          </td>
+                          <td className="px-2 py-1.5 text-sm font-semibold text-gray-800 print:text-[7.5pt] break-words">{c.customer_name}</td>
+                          <td className="px-2 py-1.5 text-sm font-mono text-gray-700 print:text-[7.5pt] break-words">{c.vehicle_plate}</td>
+                          <td className="px-2 py-1.5 text-sm font-bold text-right text-gray-900 print:text-[7.5pt]">
                             AED {parseFloat(c.amount || 0).toFixed(2)}
                           </td>
-                          <td className="px-4 py-2 text-sm text-right text-green-600">
-                            AED {parseFloat(c.amount - c.remaining_amount || 0).toFixed(2)}
+                          <td className="px-2 py-1.5 text-sm text-right text-green-600 font-semibold print:text-[7.5pt]">
+                            AED {parseFloat(c.total_recovered_amount || (c.amount - c.remaining_amount) || 0).toFixed(2)}
                           </td>
-                          <td className="px-4 py-2 text-sm font-bold text-right text-red-600">
+                          <td className="px-2 py-1.5 text-sm font-bold text-right text-red-600 print:text-[7.5pt]">
                             AED {parseFloat(c.remaining_amount || 0).toFixed(2)}
                           </td>
-                          <td className="px-4 py-2 text-sm text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                          <td className="px-2 py-1.5 text-sm text-center print:text-[7.5pt]">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize print:px-1 print:py-0 print:text-[6.5pt] ${
                               c.status === 'fully_paid' ? 'bg-green-100 text-green-800' :
                               c.status === 'partially_paid' ? 'bg-yellow-100 text-yellow-800' :
                               'bg-red-100 text-red-800'
@@ -2168,7 +2291,7 @@ const Reports = () => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="7" className="text-center py-6 text-gray-500 text-sm">
+                        <td colSpan="8" className="text-center py-6 text-gray-500 text-sm">
                           No credit records found in this range.
                         </td>
                       </tr>
@@ -2304,6 +2427,10 @@ const Reports = () => {
                     <span>{selectedRegisterReport.cash_payments.sale.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
+                    <span>Cash Recovery</span>
+                    <span>{(selectedRegisterReport.cash_payments?.recovery || 0).toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span>Card Sale</span>
                     <span>{selectedRegisterReport.card_payments.sale.toFixed(3)}</span>
                   </div>
@@ -2389,6 +2516,10 @@ const Reports = () => {
             <div className="flex justify-between">
               <span>Cash Sale</span>
               <span>{selectedRegisterReport.cash_payments.sale.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Cash Recovery</span>
+              <span>{(selectedRegisterReport.cash_payments?.recovery || 0).toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
               <span>Card Sale</span>

@@ -160,6 +160,13 @@ const Orders = () => {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, activeTab]);
+
   const filteredOrders = orders.filter((order) => {
     const hasProducts = order.items && order.items.some(item => item.category === 'Accessories' || item.category === 'Spare Parts' || item.category === 'Car Freshner' || item.category === 'Acce');
     if (activeTab === 'products') return hasProducts;
@@ -171,6 +178,31 @@ const Orders = () => {
     if (activeTab === '4x4') return isOrder4x4;
     return !isOrder4x4;
   });
+
+  const totalPages = Math.ceil(filteredOrders.length / pageSize) || 1;
+  const paginatedOrders = filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const getPaidLabel = (order) => {
+    const rawMethod = order.payment_method || (order.payments && order.payments[0]?.method) || '';
+    if (!rawMethod) return 'Paid';
+
+    const formatted = rawMethod
+      .split(',')
+      .map(m => {
+        const clean = m.trim().toLowerCase();
+        if (clean === 'cash') return 'Cash';
+        if (clean === 'card' || clean === 'mastercard') return 'Card';
+        if (clean === 'tap' || clean === 'apple_pay' || clean === 'samsung_pay') return 'Tap';
+        if (clean === 'bank_transfer') return 'Bank Transfer';
+        if (clean === 'free') return 'Free';
+        if (clean === 'credit') return 'Credit';
+        return m.trim().charAt(0).toUpperCase() + m.trim().slice(1);
+      })
+      .filter(Boolean)
+      .join(', ');
+
+    return formatted ? `Paid(${formatted})` : 'Paid';
+  };
 
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
@@ -307,8 +339,8 @@ const Orders = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {filteredOrders.length > 0 ? (
-              filteredOrders.map((order) => {
+            {paginatedOrders.length > 0 ? (
+              paginatedOrders.map((order) => {
                 const serviceTime = calculateServiceTime(order);
                 const serviceTimeColor = getServiceTimeColor(serviceTime);
                 const isCompleted = order.status === 'completed';
@@ -462,7 +494,7 @@ const Orders = () => {
                           </span>
                         ) : (
                           <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 font-semibold">
-                            Paid
+                            {getPaidLabel(order)}
                           </span>
                         )
                       ) : (
@@ -473,8 +505,10 @@ const Orders = () => {
                               'bg-red-100 text-red-800'
                           }`}>
                           {order.payment_status === 'paid' 
-                            ? `Paid (${(order.payment_method || order.method || 'Cash').charAt(0).toUpperCase() + (order.payment_method || order.method || 'Cash').slice(1)})` 
-                            : order.payment_status}
+                            ? getPaidLabel(order) 
+                            : order.payment_status === 'free'
+                            ? 'Free'
+                            : (order.payment_status ? order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1) : 'Pending')}
                         </span>
                       )}
                     </td>
@@ -539,6 +573,34 @@ const Orders = () => {
             )}
           </tbody>
         </table>
+
+        {/* Pagination Controls */}
+        {filteredOrders.length > pageSize && (
+          <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-gray-500">
+              Showing <span className="font-bold text-gray-800">{(currentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-gray-800">{Math.min(currentPage * pageSize, filteredOrders.length)}</span> of <span className="font-bold text-gray-800">{filteredOrders.length}</span> orders
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-gray-600 px-2 font-medium">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Delete Confirmation Modal with Required Reason */}
