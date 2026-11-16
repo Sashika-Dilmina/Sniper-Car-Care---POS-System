@@ -21,7 +21,11 @@ const Reports = () => {
   }, [tabParam, user]);
 
   // Daily Summary State
-  const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
+  // Use the local calendar date (toISOString() is UTC and shows yesterday before 4 AM in the UAE)
+  const [dailyDate, setDailyDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [dailyReport, setDailyReport] = useState(null);
   const [dailyLoading, setDailyLoading] = useState(false);
 

@@ -285,7 +285,7 @@ const Dashboard = () => {
         <div className="text-center">
           <p className="text-gray-600 mb-4">No analytics data available</p>
           <button
-            onClick={fetchAnalytics}
+            onClick={() => fetchAnalytics()}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Retry

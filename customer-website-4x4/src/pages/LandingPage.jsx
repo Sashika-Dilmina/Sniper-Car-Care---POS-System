@@ -623,6 +623,13 @@ const LandingPage = () => {
             vehicle_plate: response.data.customer.vehicle_plate || vehiclePlate,
             notes: ''
           });
+          // Auto-scroll to services section so the customer can tap a service immediately
+          setTimeout(() => {
+            const servicesSection = document.getElementById('services');
+            if (servicesSection) {
+              servicesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }, 600);
         }
       } catch (error) {
         console.log('Customer not found or error:', error.message);
