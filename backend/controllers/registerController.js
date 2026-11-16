@@ -68,6 +68,15 @@ const getRegisterReport = asyncHandler(async (req, res) => {
     register = rows[0];
   }
 
+  res.json({
+    success: true,
+    report: await buildRegisterReport(register)
+  });
+});
+
+// Builds the register session report. Shared by the on-screen report and the PDF export
+// so both always show the same figures.
+const buildRegisterReport = async (register) => {
   const openedAt = register.opened_at;
   const closedAt = register.closed_at || new Date();
 
@@ -212,9 +221,7 @@ const getRegisterReport = asyncHandler(async (req, res) => {
   // Formula: Opening Balance + Cash Payments - Cash Expenses
   const amountInCashDrawer = parseFloat(register.opening_balance) + totalCashPayments - cashExpenses;
 
-  res.json({
-    success: true,
-    report: {
+  return {
       register_id: register.id,
       status: register.status,
       opened_at: register.opened_at,
@@ -244,9 +251,8 @@ const getRegisterReport = asyncHandler(async (req, res) => {
       total_sales: totalSales,
       amount_in_cash_drawer: amountInCashDrawer,
       notes: register.notes
-    }
-  });
-});
+  };
+};
 
 // @desc    Close register
 // @route   POST /api/registers/close
@@ -369,5 +375,6 @@ module.exports = {
   openRegister,
   getRegisterReport,
   closeRegister,
-  getRegistersList
+  getRegistersList,
+  buildRegisterReport
 };

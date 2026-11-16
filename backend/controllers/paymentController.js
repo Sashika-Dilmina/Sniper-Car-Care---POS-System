@@ -231,10 +231,11 @@ const processManualPayment = asyncHandler(async (req, res) => {
         });
       }
 
-      // Update order total to 0.00 and payment_status to 'free'
+      // Update order total to 0.00 and payment_status to 'free'.
+      // Keep the original value in discount (assigned before total is zeroed) so reports show the free-wash value.
       await connection.query(
-        `UPDATE orders 
-         SET bathaque_id = ?, total = 0.00, payment_status = 'free', 
+        `UPDATE orders
+         SET bathaque_id = ?, discount = COALESCE(discount, 0) + IF(payment_status = 'free', 0, COALESCE(total, 0)), total = 0.00, payment_status = 'free',
              status = IF(status = 'cancelled', status, 'completed'),
              service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) 
          WHERE id = ?`,
