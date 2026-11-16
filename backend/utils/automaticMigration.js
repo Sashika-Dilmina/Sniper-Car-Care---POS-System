@@ -64,6 +64,39 @@ async function runSoftDeleteMigrations() {
     }
   }
 
+  // payments.is_credit_recovery: required by Reports, Register report and credit repayments.
+  // Mirrors database/migration_add_is_credit_recovery.sql (column + one-time backfill).
+  try {
+    const [recoveryCols] = await pool.query(`
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'payments'
+        AND COLUMN_NAME = 'is_credit_recovery'
+    `);
+
+    if (recoveryCols.length === 0) {
+      console.log('[Migration] Adding is_credit_recovery to table: payments...');
+      await pool.query(`
+        ALTER TABLE payments
+        ADD COLUMN is_credit_recovery TINYINT(1) NOT NULL DEFAULT 0
+      `);
+      // Backfill: mark historical payments that were recorded for credit repayments
+      const [backfill] = await pool.query(`
+        UPDATE payments p
+        JOIN customer_credits cc ON p.order_id = cc.order_id
+        JOIN credit_payments cp ON cp.credit_id = cc.id
+          AND cp.amount_paid = p.amount
+          AND cp.payment_method = p.method
+          AND ABS(TIMESTAMPDIFF(SECOND, cp.payment_date, p.created_at)) <= 15
+        SET p.is_credit_recovery = 1
+      `);
+      console.log(`[Migration] Added is_credit_recovery to payments (backfilled ${backfill.affectedRows} rows).`);
+    }
+  } catch (err) {
+    console.error('[Migration] Failed to add is_credit_recovery column to payments:', err.message);
+  }
+
   // Update ENUM definition or category names for products table if needed
   try {
     await pool.query(`
