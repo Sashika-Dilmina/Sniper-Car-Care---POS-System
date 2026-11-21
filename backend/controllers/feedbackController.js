@@ -136,12 +136,33 @@ const deleteFeedback = asyncHandler(async (req, res) => {
   res.json({ message: 'Feedback deleted successfully' });
 });
 
+// @desc    Get latest public feedback (top 3)
+// @route   GET /api/feedback/public/latest
+// @access  Public
+const getPublicLatestFeedback = asyncHandler(async (req, res) => {
+  const [feedback] = await pool.query(`
+    SELECT f.id, 
+           COALESCE(NULLIF(TRIM(f.customer_name), ''), NULLIF(TRIM(c.name), ''), 'Valued Customer') as customer_name, 
+           COALESCE(NULLIF(TRIM(c.vehicle_type), ''), 'Saloon') as vehicle_type, 
+           f.rating, 
+           COALESCE(NULLIF(TRIM(f.comment), ''), 'High quality service and great care! ⭐⭐⭐⭐⭐') as comment, 
+           f.created_at 
+    FROM feedback f
+    LEFT JOIN customers c ON f.customer_id = c.id
+    ORDER BY (CASE WHEN f.comment IS NOT NULL AND TRIM(f.comment) != '' THEN 0 ELSE 1 END), f.created_at DESC 
+    LIMIT 3
+  `);
+
+  res.json({ success: true, feedback });
+});
+
 module.exports = {
   getFeedback,
   getFeedbackById,
   createFeedback,
   updateFeedbackStatus,
-  deleteFeedback
+  deleteFeedback,
+  getPublicLatestFeedback
 };
 
 

@@ -55,8 +55,8 @@ const login = asyncHandler(async (req, res) => {
   // Check for user
   const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
   
-  if (users.length === 0) {
-    return res.status(401).json({ message: 'Invalid credentials' });
+  if (users.length === 0 || users[0].is_deleted === 1) {
+    return res.status(401).json({ message: 'Invalid credentials or account is deactivated' });
   }
 
   const user = users[0];
