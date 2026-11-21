@@ -68,113 +68,135 @@ const getRegisterReport = asyncHandler(async (req, res) => {
     register = rows[0];
   }
 
+  res.json({
+    success: true,
+    report: await buildRegisterReport(register)
+  });
+});
+
+// Builds the register session report. Shared by the on-screen report, the PDF export
+// and register closing so all of them always show the same figures.
+const buildRegisterReport = async (register) => {
   const openedAt = register.opened_at;
   const closedAt = register.closed_at || new Date();
 
-  // Query Cash Payments from regular sales
-  const [cashSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cash" AND status = "completed"',
-    [openedAt, closedAt]
-  );
-  const cashSales = parseFloat(cashSalesRows[0].total);
+  // A payment counts when it was completed during the session on an order that is not
+  // cancelled/deleted. The order's payment_status is deliberately NOT checked: cash taken
+  // on a partially paid order or on a split payment (part cash, part credit) is still in the drawer.
+  const VALID_ORDER = `o.status != 'cancelled' AND o.payment_status != 'cancelled' AND (o.is_deleted = 0 OR o.is_deleted IS NULL)`;
+  const NOT_RECOVERY = '(p.is_credit_recovery = 0 OR p.is_credit_recovery IS NULL)';
 
-  // Query Cash Credit Recoveries
-  const [cashRecoveriesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_date >= ? AND payment_date <= ? AND payment_method = "cash"',
-    [openedAt, closedAt]
-  );
-  const cashRecoveries = parseFloat(cashRecoveriesRows[0].total);
+  const sumPayments = async (methods) => {
+    const [rows] = await pool.query(
+      `SELECT COALESCE(SUM(p.amount), 0) as total
+       FROM payments p
+       JOIN orders o ON p.order_id = o.id
+       WHERE p.created_at >= ? AND p.created_at <= ?
+         AND p.method IN (?)
+         AND p.status = 'completed'
+         AND ${NOT_RECOVERY}
+         AND ${VALID_ORDER}`,
+      [openedAt, closedAt, methods]
+    );
+    return parseFloat(rows[0].total);
+  };
+
+  // Credit recoveries received during the session (by payment method)
+  const sumRecoveries = async (method) => {
+    const [rows] = await pool.query(
+      `SELECT COALESCE(SUM(cp.amount_paid), 0) as total
+       FROM credit_payments cp
+       JOIN customer_credits cc ON cp.credit_id = cc.id
+       LEFT JOIN orders o ON cc.order_id = o.id
+       WHERE cp.payment_date >= ? AND cp.payment_date <= ?
+         ${method ? 'AND cp.payment_method = ?' : ''}
+         AND (o.id IS NULL OR (o.status != 'cancelled' AND (o.is_deleted = 0 OR o.is_deleted IS NULL)))`,
+      method ? [openedAt, closedAt, method] : [openedAt, closedAt]
+    );
+    return parseFloat(rows[0].total);
+  };
+
+  const sumExpenses = async (cashOnly) => {
+    const [rows] = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) as total FROM expenses
+       WHERE created_at >= ? AND created_at <= ?
+         AND (is_deleted = 0 OR is_deleted IS NULL)
+         ${cashOnly ? "AND payment_method = 'cash'" : ''}`,
+      [openedAt, closedAt]
+    );
+    return parseFloat(rows[0].total);
+  };
+
+  const [
+    cashSales,
+    cardSales,
+    chequeSales,
+    bankSales,
+    otherSales,
+    cashRecoveries,
+    cardRecoveries,
+    creditRecoveries,
+    totalExpenses,
+    cashExpenses,
+    [freeWashRows],
+    [creditSalesRows]
+  ] = await Promise.all([
+    sumPayments(['cash']),
+    sumPayments(['card', 'visa', 'mastercard', 'master_card', 'master']),
+    sumPayments(['cheque']),
+    sumPayments(['bank_transfer']),
+    sumPayments(['apple_pay', 'samsung_pay', 'tap', 'tap_payments']),
+    sumRecoveries('cash'),
+    sumRecoveries('card'),
+    sumRecoveries(null),
+    sumExpenses(false),
+    sumExpenses(true),
+    // Free washes original amount
+    pool.query(
+      `SELECT COALESCE(SUM(o.discount), 0) as total
+       FROM payments p
+       INNER JOIN orders o ON p.order_id = o.id
+       WHERE p.created_at >= ? AND p.created_at <= ?
+         AND p.method = 'free'
+         AND p.status = 'completed'
+         AND ${VALID_ORDER}`,
+      [openedAt, closedAt]
+    ),
+    // Credit sales granted during the session
+    pool.query(
+      `SELECT COALESCE(SUM(cc.amount), 0) as total
+       FROM customer_credits cc
+       JOIN orders o ON cc.order_id = o.id
+       WHERE cc.created_at >= ? AND cc.created_at <= ?
+         AND o.status != 'cancelled'
+         AND (o.is_deleted = 0 OR o.is_deleted IS NULL)`,
+      [openedAt, closedAt]
+    )
+  ]);
+
+  const freeWashAmount = parseFloat(freeWashRows[0].total);
+  const creditSales = parseFloat(creditSalesRows[0].total);
   const totalCashPayments = cashSales + cashRecoveries;
-
-  // Query Card Payments from regular sales
-  const [cardSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND (method = "card" OR method = "visa") AND status = "completed"',
-    [openedAt, closedAt]
-  );
-  const cardSales = parseFloat(cardSalesRows[0].total);
-
-  // Query Card Credit Recoveries
-  const [cardRecoveriesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_date >= ? AND payment_date <= ? AND payment_method = "card"',
-    [openedAt, closedAt]
-  );
-  const cardRecoveries = parseFloat(cardRecoveriesRows[0].total);
   const totalCardPayments = cardSales + cardRecoveries;
 
-  // Query Cheque Payments
-  const [chequeSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cheque" AND status = "completed"',
-    [openedAt, closedAt]
-  );
-  const chequeSales = parseFloat(chequeSalesRows[0].total);
+  // Total Sales = everything sold during the session (direct payments + credit granted + free washes).
+  // Credit recoveries are money for sales made earlier, so they are not sales of this session.
+  const totalSales = cashSales + cardSales + bankSales + chequeSales + otherSales + creditSales + freeWashAmount;
 
-  // Query Bank Transfer
-  const [bankSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "bank_transfer" AND status = "completed"',
-    [openedAt, closedAt]
-  );
-  const bankSales = parseFloat(bankSalesRows[0].total);
-
-  // Query Other Payments (apple_pay, samsung_pay, tap)
-  const [otherSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method IN ("apple_pay", "samsung_pay", "tap") AND status = "completed"',
-    [openedAt, closedAt]
-  );
-  const otherSales = parseFloat(otherSalesRows[0].total);
-
-  // Query Free Washes original amount
-  const [freeWashRows] = await pool.query(
-    'SELECT COALESCE(SUM(o.discount), 0) as total FROM payments p INNER JOIN orders o ON p.order_id = o.id WHERE p.created_at >= ? AND p.created_at <= ? AND p.method = "free" AND p.status = "completed"',
-    [openedAt, closedAt]
-  );
-  const freeWashAmount = parseFloat(freeWashRows[0].total);
-
-  // Query Credit Sales
-  const [creditSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM customer_credits WHERE created_at >= ? AND created_at <= ?',
-    [openedAt, closedAt]
-  );
-  const creditSales = parseFloat(creditSalesRows[0].total);
-
-  // Query Credit Recoveries (Total paid for credits during the session)
-  const [creditRecoveriesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_date >= ? AND payment_date <= ?',
-    [openedAt, closedAt]
-  );
-  const creditRecoveries = parseFloat(creditRecoveriesRows[0].total);
-
-  // Query Expenses (total expenses)
-  const [totalExpensesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE created_at >= ? AND created_at <= ?',
-    [openedAt, closedAt]
-  );
-  const totalExpenses = parseFloat(totalExpensesRows[0].total);
-
-  // Query Cash Expenses
-  const [cashExpensesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE created_at >= ? AND created_at <= ? AND payment_method = "cash"',
-    [openedAt, closedAt]
-  );
-  const cashExpenses = parseFloat(cashExpensesRows[0].total);
-
-  // Calculate Total Sales
-  // Formula: Cash + Card + Bank Transfer + Cheque + Other Payments + (Credit Sales - Credit Recovery) + Free Wash Amount - Sales Return (Sales Return is 0)
-  const totalSales = totalCashPayments + totalCardPayments + bankSales + chequeSales + otherSales + (creditSales - creditRecoveries) + freeWashAmount;
-
-  // Amount in Cash Drawer
-  // Formula: Opening Balance + Cash Payments - Cash Expenses
+  // Amount in Cash Drawer = Opening Balance + all cash received (sales + recoveries) - cash expenses
   const amountInCashDrawer = parseFloat(register.opening_balance) + totalCashPayments - cashExpenses;
 
-  res.json({
-    success: true,
-    report: {
+  const toNumberOrNull = (v) => (v === null || v === undefined ? null : parseFloat(v));
+
+  return {
       register_id: register.id,
       status: register.status,
       opened_at: register.opened_at,
       closed_at: register.closed_at,
       opening_balance: parseFloat(register.opening_balance),
-      closing_balance: register.closing_balance ? parseFloat(register.closing_balance) : null,
-      closed_amount: register.closed_amount ? parseFloat(register.closed_amount) : null,
+      closing_balance: toNumberOrNull(register.closing_balance),
+      // 0 is a valid amount handed back by staff, so only null/undefined means "not closed"
+      closed_amount: toNumberOrNull(register.closed_amount),
       cash_payments: {
         total: totalCashPayments,
         sale: cashSales,
@@ -197,9 +219,8 @@ const getRegisterReport = asyncHandler(async (req, res) => {
       total_sales: totalSales,
       amount_in_cash_drawer: amountInCashDrawer,
       notes: register.notes
-    }
-  });
-});
+  };
+};
 
 // @desc    Close register
 // @route   POST /api/registers/close
@@ -219,11 +240,19 @@ const closeRegister = asyncHandler(async (req, res) => {
 
   const register = rows[0];
 
-  // Check for any pending or processing saloon or 4x4 vehicles (excluding VIP) on the date when the register session was opened
-  const [pendingVehicles] = await pool.query(
-    `SELECT COUNT(*) as count 
+  // Check for any unsettled saloon or 4x4 vehicles / orders (excluding VIP bookings)
+  // Both service (status = 'completed') AND payment (payment_status IN ('paid', 'credit', 'free')) must be completed before closing register.
+  const [unsettledOrders] = await pool.query(
+    `SELECT o.id, o.status, o.payment_status, c.vehicle_plate
      FROM orders o
-     WHERE o.status IN ('pending', 'processing') 
+     LEFT JOIN customers c ON o.customer_id = c.id
+     WHERE o.status != 'cancelled' 
+       AND o.payment_status != 'cancelled'
+       AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
+       AND (
+         (o.payment_status != 'credit' AND o.status != 'completed') 
+         OR o.payment_status NOT IN ('paid', 'credit', 'free')
+       )
        AND o.vip_booking_id IS NULL
        AND NOT EXISTS (
          SELECT 1 
@@ -231,44 +260,26 @@ const closeRegister = asyncHandler(async (req, res) => {
          JOIN products p ON oi.product_id = p.id 
          WHERE oi.order_id = o.id AND (p.category = 'VIP' OR LOWER(p.name) LIKE '%vip%')
        )
-       AND DATE(o.created_at) = DATE(?)
-       AND (
-         EXISTS (SELECT 1 FROM services s WHERE s.order_id = o.id)
-         OR
-         EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id AND p.category = 'Services')
-       )`,
-    [register.opened_at]
+       AND (o.created_at >= ? OR DATE(o.created_at) = DATE(?))
+     ORDER BY o.id ASC`,
+    [register.opened_at, register.opened_at]
   );
-  if (pendingVehicles[0].count > 0) {
+
+  if (unsettledOrders.length > 0) {
+    const orderDetails = unsettledOrders
+      .slice(0, 5)
+      .map(o => `#${o.id}${o.vehicle_plate ? ` (${o.vehicle_plate})` : ''} [Service: ${o.status}, Payment: ${o.payment_status}]`)
+      .join(', ');
+    const moreCount = unsettledOrders.length > 5 ? ` and ${unsettledOrders.length - 5} more` : '';
     return res.status(400).json({ 
-      message: `Cannot close register. There are still ${pendingVehicles[0].count} pending/processing vehicles that must be completed first.` 
+      message: `Cannot close register. There are ${unsettledOrders.length} order(s) pending completion or payment: ${orderDetails}${moreCount}. Both service and payment must be completed before closing register.` 
     });
   }
 
-  const openedAt = register.opened_at;
-  const closedAt = new Date();
-
-  // Compute stats to save closing balance
-  const [cashSalesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE created_at >= ? AND created_at <= ? AND method = "cash" AND status = "completed"',
-    [openedAt, closedAt]
-  );
-  const cashSales = parseFloat(cashSalesRows[0].total);
-
-  const [cashRecoveriesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount_paid), 0) as total FROM credit_payments WHERE payment_date >= ? AND payment_date <= ? AND payment_method = "cash"',
-    [openedAt, closedAt]
-  );
-  const cashRecoveries = parseFloat(cashRecoveriesRows[0].total);
-  const totalCashPayments = cashSales + cashRecoveries;
-
-  const [cashExpensesRows] = await pool.query(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE created_at >= ? AND created_at <= ? AND payment_method = "cash"',
-    [openedAt, closedAt]
-  );
-  const cashExpenses = parseFloat(cashExpensesRows[0].total);
-
-  const amountInCashDrawer = parseFloat(register.opening_balance) + totalCashPayments - cashExpenses;
+  // Compute the closing balance with the same builder the register report uses,
+  // so the saved closing balance always matches the printed statement.
+  const sessionReport = await buildRegisterReport({ ...register, closed_at: new Date() });
+  const amountInCashDrawer = sessionReport.amount_in_cash_drawer;
 
   // Update register row
   await pool.query(
@@ -304,5 +315,6 @@ module.exports = {
   openRegister,
   getRegisterReport,
   closeRegister,
-  getRegistersList
+  getRegistersList,
+  buildRegisterReport
 };

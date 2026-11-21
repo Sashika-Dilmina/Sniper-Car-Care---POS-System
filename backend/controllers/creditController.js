@@ -5,16 +5,20 @@ const asyncHandler = require('../utils/asyncHandler');
 // @route   GET /api/credits
 // @access  Private (Admin & Staff)
 const getCustomerCredits = asyncHandler(async (req, res) => {
-  const { status, search } = req.query;
+  const { status, search, start_date, end_date } = req.query;
   let query = `
     SELECT cc.*, 
-           c.name as customer_name, 
-           c.phone as customer_phone, 
-           c.vehicle_plate, 
-           c.vehicle_type
+           COALESCE(c.name, 'Customer') as customer_name, 
+           COALESCE(c.phone, 'N/A') as customer_phone, 
+           COALESCE(c.vehicle_plate, 'N/A') as vehicle_plate, 
+           COALESCE(c.vehicle_type, 'Saloon') as vehicle_type,
+           (SELECT MAX(cp.payment_date) FROM credit_payments cp WHERE cp.credit_id = cc.id) as last_payment_date,
+           (SELECT cp2.payment_method FROM credit_payments cp2 WHERE cp2.credit_id = cc.id ORDER BY cp2.payment_date DESC LIMIT 1) as last_payment_method,
+           (SELECT COALESCE(SUM(cp3.amount_paid), 0) FROM credit_payments cp3 WHERE cp3.credit_id = cc.id) as total_recovered_amount
     FROM customer_credits cc
-    JOIN customers c ON cc.customer_id = c.id
-    WHERE 1=1
+    LEFT JOIN customers c ON cc.customer_id = c.id
+    LEFT JOIN orders o ON cc.order_id = o.id
+    WHERE (o.status IS NULL OR (o.status != 'cancelled' AND (o.is_deleted = 0 OR o.is_deleted IS NULL)))
   `;
   const params = [];
 
@@ -23,16 +27,83 @@ const getCustomerCredits = asyncHandler(async (req, res) => {
     params.push(status);
   }
 
+  if (start_date && end_date) {
+    if (status === 'fully_paid') {
+      // For cleared credits, allow filtering by cleared/last payment date OR created_at
+      query += ' AND (DATE(COALESCE((SELECT MAX(cp.payment_date) FROM credit_payments cp WHERE cp.credit_id = cc.id), cc.updated_at)) BETWEEN ? AND ? OR DATE(cc.created_at) BETWEEN ? AND ?)';
+      params.push(start_date, end_date, start_date, end_date);
+    } else {
+      query += ' AND DATE(cc.created_at) BETWEEN ? AND ?';
+      params.push(start_date, end_date);
+    }
+  }
+
   if (search) {
     query += ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.vehicle_plate LIKE ?)';
     const searchParam = `%${search}%`;
     params.push(searchParam, searchParam, searchParam);
   }
 
-  query += ' ORDER BY cc.status ASC, cc.created_at DESC';
+  if (status === 'fully_paid') {
+    query += ' ORDER BY COALESCE((SELECT MAX(cp.payment_date) FROM credit_payments cp WHERE cp.credit_id = cc.id), cc.updated_at) DESC, cc.created_at DESC';
+  } else {
+    query += ' ORDER BY cc.status ASC, cc.created_at DESC';
+  }
 
   const [credits] = await pool.query(query, params);
   res.json({ success: true, count: credits.length, credits });
+});
+
+// @desc    Get all credit recovery transactions
+// @route   GET /api/credits/recoveries
+// @access  Private (Admin & Staff)
+const getCreditRecoveries = asyncHandler(async (req, res) => {
+  const { start_date, end_date, search, payment_method } = req.query;
+  let query = `
+    SELECT cp.*,
+           cc.order_id,
+           cc.customer_id,
+           cc.amount as original_credit_amount,
+           cc.remaining_amount,
+           cc.status as credit_status,
+           COALESCE(c.name, 'Customer') as customer_name,
+           COALESCE(c.phone, 'N/A') as customer_phone,
+           COALESCE(c.vehicle_plate, 'N/A') as vehicle_plate,
+           COALESCE(c.vehicle_type, 'Saloon') as vehicle_type
+    FROM credit_payments cp
+    JOIN customer_credits cc ON cp.credit_id = cc.id
+    LEFT JOIN customers c ON cc.customer_id = c.id
+    LEFT JOIN orders o ON cc.order_id = o.id
+    WHERE (o.status IS NULL OR (o.status != 'cancelled' AND (o.is_deleted = 0 OR o.is_deleted IS NULL)))
+  `;
+  const params = [];
+
+  if (start_date && end_date) {
+    query += ' AND DATE(cp.payment_date) BETWEEN ? AND ?';
+    params.push(start_date, end_date);
+  } else if (start_date) {
+    query += ' AND DATE(cp.payment_date) >= ?';
+    params.push(start_date);
+  } else if (end_date) {
+    query += ' AND DATE(cp.payment_date) <= ?';
+    params.push(end_date);
+  }
+
+  if (payment_method && payment_method !== 'all') {
+    query += ' AND cp.payment_method = ?';
+    params.push(payment_method);
+  }
+
+  if (search) {
+    query += ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.vehicle_plate LIKE ?)';
+    const searchParam = `%${search}%`;
+    params.push(searchParam, searchParam, searchParam);
+  }
+
+  query += ' ORDER BY cp.payment_date DESC';
+
+  const [recoveries] = await pool.query(query, params);
+  res.json({ success: true, count: recoveries.length, recoveries });
 });
 
 // @desc    Create a customer credit record
@@ -45,10 +116,33 @@ const createCustomerCredit = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Customer ID, Order ID, and amount are required' });
   }
 
-  // Insert customer credit record
+  const creditAmt = parseFloat(amount);
+
+  // 1. Insert customer credit record
   const [result] = await pool.query(
     'INSERT INTO customer_credits (customer_id, order_id, amount, remaining_amount, status) VALUES (?, ?, ?, ?, ?)',
-    [customer_id, order_id, parseFloat(amount), parseFloat(amount), 'unpaid']
+    [customer_id, order_id, creditAmt, creditAmt, 'unpaid']
+  );
+
+  // 2. Clean up any stale pending payments for this order
+  await pool.query('DELETE FROM payments WHERE order_id = ? AND status = "pending"', [order_id]);
+
+  // 3. Record completed payment entry with method 'credit'
+  const [existingPayment] = await pool.query('SELECT id FROM payments WHERE order_id = ? AND method = "credit"', [order_id]);
+  if (existingPayment.length > 0) {
+    await pool.query('UPDATE payments SET amount = ?, status = "completed" WHERE id = ?', [creditAmt, existingPayment[0].id]);
+  } else {
+    await pool.query('INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, "credit", "completed")', [order_id, creditAmt]);
+  }
+
+  // 4. Update order payment status to credit and mark completed
+  await pool.query(
+    `UPDATE orders 
+     SET payment_status = 'credit', 
+         status = IF(status = 'cancelled', status, 'completed'),
+         service_completed_at = COALESCE(service_completed_at, CURRENT_TIMESTAMP) 
+     WHERE id = ?`,
+    [order_id]
   );
 
   const [newCredit] = await pool.query('SELECT * FROM customer_credits WHERE id = ?', [result.insertId]);
@@ -94,13 +188,26 @@ const recoverCreditPayment = asyncHandler(async (req, res) => {
       [newRemaining, newStatus, id]
     );
 
-    // 4. Insert into the main payments table to link the payment to the order
+    // 4. Insert into the main payments table to link the real payment (cash/card/etc.) to the order, marked as credit recovery
     await connection.query(
-      'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)',
+      'INSERT INTO payments (order_id, amount, method, status, is_credit_recovery) VALUES (?, ?, ?, ?, 1)',
       [credit.order_id, payAmt, payment_method, 'completed']
     );
 
-    // 5. If fully paid, update the order's payment status to 'paid'
+    // 5. Adjust or delete the 'credit' placeholder in payments to ensure total payments match order total
+    const [creditPlaceholders] = await connection.query(
+      'SELECT id, amount FROM payments WHERE order_id = ? AND method = "credit" ORDER BY id ASC LIMIT 1',
+      [credit.order_id]
+    );
+    if (creditPlaceholders.length > 0) {
+      if (newRemaining <= 0) {
+        await connection.query('DELETE FROM payments WHERE id = ?', [creditPlaceholders[0].id]);
+      } else {
+        await connection.query('UPDATE payments SET amount = ? WHERE id = ?', [newRemaining, creditPlaceholders[0].id]);
+      }
+    }
+
+    // 6. If fully paid, update the order's payment status to 'paid'
     if (newRemaining === 0) {
       await connection.query(
         "UPDATE orders SET payment_status = 'paid' WHERE id = ?",
@@ -138,6 +245,7 @@ const getCreditHistory = asyncHandler(async (req, res) => {
 
 module.exports = {
   getCustomerCredits,
+  getCreditRecoveries,
   createCustomerCredit,
   recoverCreditPayment,
   getCreditHistory

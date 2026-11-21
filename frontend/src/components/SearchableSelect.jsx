@@ -23,8 +23,9 @@ const SearchableSelect = ({ options, value, onChange, placeholder, disabled }) =
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [value]);
 
-  const filteredOptions = options.filter(option =>
-    option.toLowerCase().includes(search.toLowerCase())
+  const safeOptions = Array.isArray(options) ? options : [];
+  const filteredOptions = safeOptions.filter(option =>
+    String(option || '').toLowerCase().includes(String(search || '').toLowerCase())
   );
 
   const handleSelect = (option) => {
@@ -44,7 +45,8 @@ const SearchableSelect = ({ options, value, onChange, placeholder, disabled }) =
         onFocus={() => setIsOpen(true)}
         placeholder={placeholder || 'Search code...'}
         disabled={disabled}
-        className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 font-bold text-sm bg-white"
+        className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 font-bold text-sm bg-white notranslate"
+        translate="no"
       />
       
       {isOpen && !disabled && (
@@ -54,9 +56,10 @@ const SearchableSelect = ({ options, value, onChange, placeholder, disabled }) =
               <div
                 key={index}
                 onClick={() => handleSelect(option)}
-                className={`px-4 py-2 text-sm cursor-pointer hover:bg-primary-50 transition-colors ${
+                className={`px-4 py-2 text-sm cursor-pointer hover:bg-primary-50 transition-colors notranslate ${
                   option === value ? 'bg-primary-100 text-primary-900 font-bold' : 'text-gray-700'
                 }`}
+                translate="no"
               >
                 {option}
               </div>

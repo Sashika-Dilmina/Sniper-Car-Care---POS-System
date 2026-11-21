@@ -6,7 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 // @access  Public
 const getProducts = asyncHandler(async (req, res) => {
   const { category, vehicle_type } = req.query;
-  let query = 'SELECT * FROM products WHERE 1=1';
+  let query = 'SELECT * FROM products WHERE (is_deleted = 0 OR is_deleted IS NULL) AND (is_active = 1 OR is_active IS NULL)';
   const params = [];
 
   if (category) {
@@ -15,13 +15,35 @@ const getProducts = asyncHandler(async (req, res) => {
   }
 
   if (vehicle_type) {
-    query += ' AND (vehicle_type = ? OR vehicle_type = "Both")';
+    // Return main services for this vehicle type.
+    // Exclude extra services and retail products from the customer website main grid.
+    query += ' AND category NOT IN ("Extra Service", "Saloon Extra Service", "4x4 Extra Service", "Car Freshner", "Acce", "Accessories")';
+    query += ' AND (vehicle_type = ? OR vehicle_type = "Both" OR vehicle_type IS NULL)';
     params.push(vehicle_type);
   }
 
   query += ' ORDER BY category ASC, name ASC';
 
   const [products] = await pool.query(query, params);
+
+  res.json({ products });
+});
+
+// @desc    Get extra services for customer site popup
+// @route   GET /api/public/extra-services
+// @access  Public
+const getExtraServices = asyncHandler(async (req, res) => {
+  const { vehicle_type } = req.query;
+  
+  let targetCategory = 'Saloon Extra Service';
+  if (vehicle_type === '4x4') {
+    targetCategory = '4x4 Extra Service';
+  }
+
+  const [products] = await pool.query(
+    'SELECT * FROM products WHERE (is_deleted = 0 OR is_deleted IS NULL) AND (is_active = 1 OR is_active IS NULL) AND (category = ? OR category = "Extra Service") ORDER BY name ASC',
+    [targetCategory]
+  );
 
   res.json({ products });
 });
@@ -43,6 +65,7 @@ const getProduct = asyncHandler(async (req, res) => {
 
 module.exports = {
   getProducts,
+  getExtraServices,
   getProduct
 };
 

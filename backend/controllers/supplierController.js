@@ -85,13 +85,17 @@ const updateSupplier = asyncHandler(async (req, res) => {
 // @access  Private (Admin)
 const deleteSupplier = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { reason } = req.body;
 
   const [suppliers] = await pool.query('SELECT id FROM suppliers WHERE id = ?', [id]);
   if (suppliers.length === 0) {
     return res.status(404).json({ success: false, message: 'Supplier not found' });
   }
 
-  await pool.query('DELETE FROM suppliers WHERE id = ?', [id]);
+  await pool.query(
+    'UPDATE suppliers SET is_deleted = 1, delete_reason = ? WHERE id = ?',
+    [reason || 'No reason specified', id]
+  );
   res.json({ success: true, message: 'Supplier deleted successfully' });
 });
 

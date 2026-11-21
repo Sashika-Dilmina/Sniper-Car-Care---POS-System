@@ -68,9 +68,9 @@ const Products = () => {
   }, []);
 
   useEffect(() => {
-    // Check for low stock products and show alert
-    const lowStockProducts = products.filter(product => product.stock <= 5 && product.stock > 0);
-    const outOfStockProducts = products.filter(product => product.stock === 0);
+    // Check for low stock products and show alert (only for physical products)
+    const lowStockProducts = products.filter(product => product.stock !== undefined && product.stock !== null && product.stock <= 5 && product.stock > 0);
+    const outOfStockProducts = products.filter(product => product.stock !== undefined && product.stock !== null && product.stock <= 0);
 
     if (lowStockProducts.length > 0) {
       toast.error(`⚠️ Low Stock Alert: ${lowStockProducts.length} product(s) have 5 or fewer items in stock!`, {
@@ -87,10 +87,17 @@ const Products = () => {
     }
   }, [products]);
 
+  const isProductCategory = (cat) => {
+    if (!cat) return false;
+    const c = cat.trim().toLowerCase();
+    return c === 'car freshner' || c === 'car freshener' || c === 'acce' || c === 'accessories';
+  };
+
   const fetchProducts = async () => {
     try {
       const response = await axios.get('/api/products');
-      const filtered = (response.data.products || []).filter(p => p.category !== 'Services');
+      // Strictly filter to retail products (Car Freshner & Acce). Exclude all services and extra services.
+      const filtered = (response.data.products || []).filter(p => isProductCategory(p.category));
       setProducts(filtered);
     } catch (error) {
       toast.error('Failed to load products');
@@ -102,9 +109,11 @@ const Products = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const stockVal = formData.stock === '' ? 0 : parseInt(formData.stock, 10);
+
     // Validate stock is not negative
-    if (formData.stock < 0) {
-      toast.error('Stock cannot be negative');
+    if (isNaN(stockVal) || stockVal < 0) {
+      toast.error('Stock count cannot be negative');
       return;
     }
 
@@ -119,12 +128,19 @@ const Products = () => {
       return;
     }
 
+    const payload = {
+      ...formData,
+      stock: stockVal,
+      price: parseFloat(formData.price) || 0,
+      purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0
+    };
+
     try {
       if (editingProduct) {
-        await axios.put(`/api/products/${editingProduct.id}`, formData);
+        await axios.put(`/api/products/${editingProduct.id}`, payload);
         toast.success('Product updated successfully');
       } else {
-        await axios.post('/api/products', formData);
+        await axios.post('/api/products', payload);
         toast.success('Product created successfully');
       }
       setShowModal(false);
@@ -152,18 +168,28 @@ const Products = () => {
       category: product.category,
       price: product.price,
       purchase_price: product.purchase_price || '',
-      stock: product.stock,
+      stock: product.stock !== undefined && product.stock !== null ? product.stock : 0,
       image_url: product.image_url || ''
     });
     setShowModal(true);
   };
 
+  const handleToggleActive = async (product) => {
+    try {
+      await axios.patch(`/api/products/${product.id}/toggle-active`);
+      toast.success(`Product ${product.is_active === 0 ? 'activated' : 'deactivated'}`);
+      fetchProducts();
+    } catch (error) {
+      toast.error('Failed to toggle active status');
+    }
+  };
+
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this product?')) return;
+    if (!window.confirm('Are you sure you want to permanently delete this product?')) return;
 
     try {
       await axios.delete(`/api/products/${id}`);
-      toast.success('Product deleted successfully');
+      toast.success('Product permanently deleted successfully');
       fetchProducts();
     } catch (error) {
       toast.error('Failed to delete product');
@@ -214,8 +240,8 @@ const Products = () => {
     product.category?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const lowStockProducts = filteredProducts.filter(product => product.stock <= 5 && product.stock > 0);
-  const outOfStockProducts = filteredProducts.filter(product => product.stock === 0);
+  const lowStockProducts = filteredProducts.filter(product => product.stock !== undefined && product.stock !== null && product.stock <= 5 && product.stock > 0);
+  const outOfStockProducts = filteredProducts.filter(product => product.stock !== undefined && product.stock !== null && product.stock <= 0);
 
   return (
     <div className="space-y-6">
@@ -328,7 +354,7 @@ const Products = () => {
           <tbody className="divide-y divide-gray-200">
             {filteredProducts.length > 0 ? (
               filteredProducts.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
+                <tr key={product.id} className={`hover:bg-gray-50 ${product.is_deleted === 1 ? 'opacity-60 bg-red-50/20' : ''}`}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {product.image_url ? (
                       <img
@@ -353,6 +379,11 @@ const Products = () => {
                       <p className="font-semibold">{product.name}</p>
                       {product.description && (
                         <p className="text-sm text-gray-500">{product.description}</p>
+                      )}
+                      {product.is_deleted === 1 && (
+                        <span className="block text-xs text-red-500 font-medium italic mt-0.5">
+                          Deleted (Reason: {product.delete_reason})
+                        </span>
                       )}
                     </div>
                   </td>
@@ -386,8 +417,18 @@ const Products = () => {
                       )}
                     </div>
                   </td>
-                  {user?.role === 'admin' && (
                     <td className="px-6 py-4 whitespace-nowrap space-x-2">
+                      <button
+                        onClick={() => handleToggleActive(product)}
+                        className={`text-xs font-semibold px-2 py-1 rounded transition ${
+                          product.is_active !== 0
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                        title={product.is_active !== 0 ? 'Visible on website (Click to hide)' : 'Hidden from website (Click to show)'}
+                      >
+                        {product.is_active !== 0 ? '👁️ Active' : '👁️‍🗨️ Inactive'}
+                      </button>
                       <button
                         onClick={() => handleEdit(product)}
                         className="text-primary-600 hover:underline"
@@ -401,7 +442,6 @@ const Products = () => {
                         Delete
                       </button>
                     </td>
-                  )}
                 </tr>
               ))
             ) : (
@@ -513,6 +553,21 @@ const Products = () => {
                   <option value="Car Freshner">Car Freshner</option>
                   <option value="Acce">Acce</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Stock Count
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="1"
+                  value={formData.stock}
+                  onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                  className="w-full px-4 py-2 border rounded-lg"
+                  placeholder="Enter available stock quantity (e.g. 20)"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
