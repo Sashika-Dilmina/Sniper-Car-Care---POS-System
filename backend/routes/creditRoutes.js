@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getCustomerCredits,
+  getCreditRecoveries,
   createCustomerCredit,
   recoverCreditPayment,
   getCreditHistory
@@ -13,6 +14,9 @@ router.use(protect);
 router.route('/')
   .get(getCustomerCredits)
   .post(createCustomerCredit);
+
+router.route('/recoveries')
+  .get(getCreditRecoveries);
 
 router.route('/:id/recover')
   .post(recoverCreditPayment);

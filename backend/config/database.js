@@ -11,8 +11,11 @@ const poolConfig = {
   database: process.env.DB_NAME || 'sniper_car_care',
   port: parseInt(process.env.DB_PORT) || 3306,
   waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+  connectionLimit: 25,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  timezone: 'Z'
 };
 
 // Only add password if it's not empty (some MySQL setups reject empty string in pools)

@@ -5,12 +5,14 @@ const {
   getFeedbackById,
   createFeedback,
   updateFeedbackStatus,
-  deleteFeedback
+  deleteFeedback,
+  getPublicLatestFeedback
 } = require('../controllers/feedbackController');
 const { protect, authorize } = require('../middleware/auth');
 
-// Public route for submitting feedback
+// Public routes for submitting and fetching top feedback
 router.post('/', createFeedback);
+router.get('/public/latest', getPublicLatestFeedback);
 
 // Admin-only routes
 router.use(protect);
