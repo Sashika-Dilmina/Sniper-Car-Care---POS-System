@@ -109,12 +109,15 @@ const Products = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const stockVal = formData.stock === '' ? 0 : parseInt(formData.stock, 10);
+    let stockVal = 0;
+    if (!editingProduct) {
+      stockVal = formData.stock === '' ? 0 : parseInt(formData.stock, 10);
 
-    // Validate stock is not negative
-    if (isNaN(stockVal) || stockVal < 0) {
-      toast.error('Stock count cannot be negative');
-      return;
+      // Validate stock is not negative
+      if (isNaN(stockVal) || stockVal < 0) {
+        toast.error('Stock count cannot be negative');
+        return;
+      }
     }
 
     // Validate price is not negative
@@ -130,10 +133,15 @@ const Products = () => {
 
     const payload = {
       ...formData,
-      stock: stockVal,
       price: parseFloat(formData.price) || 0,
       purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0
     };
+
+    if (editingProduct) {
+      delete payload.stock;
+    } else {
+      payload.stock = stockVal;
+    }
 
     try {
       if (editingProduct) {
@@ -560,14 +568,26 @@ const Products = () => {
                 </label>
                 <input
                   type="number"
-                  required
+                  required={!editingProduct}
+                  disabled={Boolean(editingProduct)}
                   min="0"
                   step="1"
                   value={formData.stock}
-                  onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg"
+                  onChange={(e) => {
+                    if (!editingProduct) {
+                      setFormData({ ...formData, stock: e.target.value });
+                    }
+                  }}
+                  className={`w-full px-4 py-2 border rounded-lg ${
+                    editingProduct ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+                  }`}
                   placeholder="Enter available stock quantity (e.g. 20)"
                 />
+                {editingProduct && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Stock count cannot be edited in Edit Product.
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

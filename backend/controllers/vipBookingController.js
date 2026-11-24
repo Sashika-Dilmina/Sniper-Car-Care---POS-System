@@ -349,7 +349,7 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
       
       try {
         const [orderRows] = await db.query(
-          `SELECT o.id, o.total, o.payment_status, o.customer_id, vc.phone as vip_phone 
+          `SELECT o.id, o.total, o.discount, o.payment_status, o.customer_id, vc.phone as vip_phone 
            FROM orders o
            JOIN vip_bookings vb ON o.vip_booking_id = vb.id
            JOIN vip_customers vc ON vb.vip_customer_id = vc.id
@@ -409,7 +409,7 @@ exports.updateVIPBooking = asyncHandler(async (req, res) => {
             }
           }
 
-          if (targetCustomerId && parseFloat(order.total) > 0) {
+          if (targetCustomerId && parseFloat(order.total) > 0 && !(parseFloat(order.discount || 0) > 0)) {
             const [custRows] = await db.query('SELECT province FROM customers WHERE id = ?', [targetCustomerId]);
             const isExemptEmirate = custRows.length > 0 && (custRows[0].province === 'Garage' || custRows[0].province === 'Sniper car care');
             if (!isExemptEmirate) {

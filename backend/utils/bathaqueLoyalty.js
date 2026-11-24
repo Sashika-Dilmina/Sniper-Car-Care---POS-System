@@ -88,11 +88,13 @@ async function incrementBathaqueStamp(connOrPool, bathaqueId) {
   let totalWashes = Number(rows[0].total_washes) || 0;
   let freeEarned = Number(rows[0].free_washes_earned) || 0;
   let freeWashEarnedThisTime = false;
+  let stampIncremented = false;
 
   totalWashes += 1;
 
   if (stamps < 5) {
     stamps += 1;
+    stampIncremented = true;
     if (stamps === 5) {
       freeEarned += 1;
       freeWashEarnedThisTime = true;
@@ -110,6 +112,46 @@ async function incrementBathaqueStamp(connOrPool, bathaqueId) {
     total_washes: totalWashes,
     free_washes_earned: freeEarned,
     free_wash_earned_now: freeWashEarnedThisTime,
+    stamp_incremented: stampIncremented,
+    is_free_eligible: stamps >= 5
+  };
+}
+
+async function decrementBathaqueStamp(connOrPool, bathaqueId, options = {}) {
+  const { connection, cleanId } = resolveDbAndId(connOrPool, bathaqueId);
+  if (!cleanId) return null;
+
+  const [rows] = await connection.query(
+    'SELECT wash_stamps, total_washes, free_washes_earned FROM bathaque_loyalty WHERE bathaque_id = ? FOR UPDATE',
+    [cleanId]
+  );
+
+  if (rows.length === 0) return null;
+
+  let stamps = Number(rows[0].wash_stamps) || 0;
+  let totalWashes = Number(rows[0].total_washes) || 0;
+  let freeEarned = Number(rows[0].free_washes_earned) || 0;
+
+  totalWashes = Math.max(0, totalWashes - 1);
+
+  if (options.decrementStamp !== false && stamps > 0) {
+    const wasFive = stamps === 5;
+    stamps = Math.max(0, stamps - 1);
+    if ((options.decrementFreeEarned || (options.stampCode === 1 && wasFive)) && freeEarned > 0) {
+      freeEarned = Math.max(0, freeEarned - 1);
+    }
+  }
+
+  await connection.query(
+    'UPDATE bathaque_loyalty SET wash_stamps = ?, total_washes = ?, free_washes_earned = ? WHERE bathaque_id = ?',
+    [stamps, totalWashes, freeEarned, cleanId]
+  );
+
+  return {
+    bathaque_id: cleanId,
+    wash_stamps: stamps,
+    total_washes: totalWashes,
+    free_washes_earned: freeEarned,
     is_free_eligible: stamps >= 5
   };
 }
@@ -196,7 +238,13 @@ async function awardLoyaltyStampsForOrder(connOrPool, orderId) {
       return;
     }
 
-    // 2. If order has eligible service and total > 0 (paid wash), increment stamp!
+    // 1.5. Do NOT award wash stamp if a discount was applied to this order
+    if (parseFloat(order.discount || 0) > 0) {
+      console.log(`[Bathaque] Skipping loyalty wash stamp for order ${orderId}: discount (${order.discount}) applied.`);
+      return;
+    }
+
+    // 2. If order has eligible service and total > 0 (paid wash without discount), increment stamp!
     if (parseFloat(order.total) > 0) {
       const [servicesList] = await connection.query(
         'SELECT service_name FROM services WHERE order_id = ?',
@@ -270,22 +318,35 @@ async function awardLoyaltyStampsForOrder(connOrPool, orderId) {
 
       if (hasEligibleService) {
         const isExemptEmirate = emirate === 'Garage' || emirate === 'Sniper car care';
+        let stampCode = 1;
         if (!isExemptEmirate) {
           if (targetBathaqueId) {
-            await incrementBathaqueStamp(connection, targetBathaqueId);
+            const bResult = await incrementBathaqueStamp(connection, targetBathaqueId);
+            if (bResult && bResult.free_wash_earned_now) {
+              stampCode = 2;
+            } else if (bResult && !bResult.stamp_incremented) {
+              stampCode = 3;
+            }
           }
           if (targetCustomerId) {
             try {
               const { ensureLoyaltyRow, incrementWashStamp } = require('./loyaltyStamps');
               await ensureLoyaltyRow(connection, targetCustomerId);
-              await incrementWashStamp(connection, targetCustomerId);
+              const lResult = await incrementWashStamp(connection, targetCustomerId);
+              if (!targetBathaqueId && lResult) {
+                if (lResult.free_wash_earned) {
+                  stampCode = 2;
+                } else if (!lResult.stamp_incremented) {
+                  stampCode = 3;
+                }
+              }
             } catch (lErr) {
               console.error('[Loyalty] Error incrementing loyalty stamp:', lErr.message);
             }
           }
         }
         try {
-          await connection.query('UPDATE orders SET loyalty_stamped = 1 WHERE id = ?', [orderId]);
+          await connection.query('UPDATE orders SET loyalty_stamped = ? WHERE id = ?', [stampCode, orderId]);
         } catch (stampErr) {
           // column may not exist yet in older schema
         }
@@ -296,10 +357,74 @@ async function awardLoyaltyStampsForOrder(connOrPool, orderId) {
   }
 }
 
+async function revokeLoyaltyStampsForOrder(connOrPool, orderId) {
+  const { connection } = resolveDbAndId(connOrPool);
+  if (!orderId) return;
+
+  try {
+    const [orders] = await connection.query(
+      `SELECT o.*, c.bathaque_id as cust_bathaque_id, c.province as cust_emirate
+       FROM orders o
+       LEFT JOIN customers c ON o.customer_id = c.id
+       WHERE o.id = ?`,
+      [orderId]
+    );
+    if (orders.length === 0) return;
+    const order = orders[0];
+
+    const stampCode = Number(order.loyalty_stamped) || 0;
+    if (!stampCode) {
+      return;
+    }
+
+    // Never revoke a free wash redemption
+    if (order.payment_status === 'free' || parseFloat(order.total) === 0) {
+      return;
+    }
+
+    const targetBathaqueId = order.bathaque_id || order.cust_bathaque_id;
+    const targetCustomerId = order.customer_id || order.customer_id_ref;
+    const emirate = order.emirate || order.cust_emirate;
+    const isExemptEmirate = emirate === 'Garage' || emirate === 'Sniper car care';
+
+    if (!isExemptEmirate) {
+      const shouldDecrementStamp = stampCode !== 3;
+      const shouldDecrementFreeEarned = stampCode === 2;
+
+      if (targetBathaqueId) {
+        await decrementBathaqueStamp(connection, targetBathaqueId, {
+          decrementStamp: shouldDecrementStamp,
+          decrementFreeEarned: shouldDecrementFreeEarned,
+          stampCode
+        });
+      }
+      if (targetCustomerId && shouldDecrementStamp) {
+        try {
+          const { decrementWashStamp } = require('./loyaltyStamps');
+          await decrementWashStamp(connection, targetCustomerId);
+        } catch (lErr) {
+          console.error('[Loyalty] Error decrementing loyalty stamp:', lErr.message);
+        }
+      }
+    }
+
+    try {
+      await connection.query('UPDATE orders SET loyalty_stamped = 0 WHERE id = ?', [orderId]);
+    } catch (stampErr) {
+      // column may not exist yet in older schema
+    }
+    console.log(`[Bathaque] Revoked loyalty wash stamp for order ${orderId} because discount was applied.`);
+  } catch (err) {
+    console.error('[Bathaque] Error revoking loyalty stamps for order:', err.message);
+  }
+}
+
 module.exports = {
   ensureBathaqueLoyalty,
   getBathaqueLoyalty,
   incrementBathaqueStamp,
+  decrementBathaqueStamp,
   redeemBathaqueFreeWash,
-  awardLoyaltyStampsForOrder
+  awardLoyaltyStampsForOrder,
+  revokeLoyaltyStampsForOrder
 };

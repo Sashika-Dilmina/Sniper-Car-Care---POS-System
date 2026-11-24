@@ -3,7 +3,7 @@ const pool = require('../config/database');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendReson8Message } = require('../services/reson8Service');
 const { formatPhoneNumber, buildFeedbackUrl } = require('../utils/customerLinkUtils');
-const { getBathaqueLoyalty, redeemBathaqueFreeWash } = require('../utils/bathaqueLoyalty');
+const { getBathaqueLoyalty, redeemBathaqueFreeWash, revokeLoyaltyStampsForOrder } = require('../utils/bathaqueLoyalty');
 
 // @desc    Create payment intent
 // @route   POST /api/payments/create-intent
@@ -201,6 +201,11 @@ const processManualPayment = asyncHandler(async (req, res) => {
           'UPDATE orders SET total = ?, discount = ? WHERE id = ?',
           [newTotal, newDiscount, order_id]
         );
+
+        // Orders with a discount must not receive a wash stamp (revoke if already stamped on completion)
+        if (method !== 'free') {
+          await revokeLoyaltyStampsForOrder(connection, order_id);
+        }
       }
     }
 
