@@ -313,21 +313,34 @@ function generatePDFReport(tab, data, params, outputPath) {
         }
       }
       else if (tab === 'stock') {
-        const headers = ['Product Name', 'Category', 'Stock', 'Cost Price', 'Selling Price', 'Status'];
+        const totalStock = data.reduce((sum, item) => sum + parseInt(item.current_stock || 0, 10), 0);
+        const totalSold = data.reduce((sum, item) => sum + parseInt(item.quantity_sold || 0, 10), 0);
+        const totalCostVal = data.reduce((sum, item) => sum + parseFloat(item.stock_cost_value || (item.current_stock * item.cost_price) || 0), 0);
+        const totalSalesVal = data.reduce((sum, item) => sum + parseFloat(item.sales_revenue || 0), 0);
+
+        doc.fillColor('#111827').fontSize(9.5).font('Helvetica-Bold')
+          .text(`Products: ${data.length}  |  Stock Units: ${totalStock}  |  Units Sold: ${totalSold}  |  Stock Cost: AED ${totalCostVal.toFixed(2)}  |  Sales: AED ${totalSalesVal.toFixed(2)}`, 50, currentY);
+        currentY += 18;
+
+        const headers = ['Product Name', 'In', 'Sold', 'Stock', 'Cost Price', 'Stock Value', 'Sales', 'Status'];
         const cols = [
-          { name: 'Product Name', key: 'name', x: 50, w: 160 },
-          { name: 'Category', key: 'cat', x: 220, w: 90 },
-          { name: 'Stock', key: 'stock', x: 320, w: 40, align: 'center' },
-          { name: 'Cost Price', key: 'cost', x: 370, w: 60, align: 'right' },
-          { name: 'Selling Price', key: 'sell', x: 440, w: 60, align: 'right' },
-          { name: 'Status', key: 'status', x: 510, w: 45 }
+          { name: 'Product Name', key: 'name', x: 50, w: 145 },
+          { name: 'In', key: 'inQty', x: 200, w: 28, align: 'center' },
+          { name: 'Sold', key: 'sold', x: 232, w: 30, align: 'center' },
+          { name: 'Stock', key: 'stock', x: 266, w: 34, align: 'center' },
+          { name: 'Cost Price', key: 'cost', x: 304, w: 58, align: 'right' },
+          { name: 'Stock Value', key: 'stockVal', x: 366, w: 66, align: 'right' },
+          { name: 'Sales', key: 'sales', x: 436, w: 64, align: 'right' },
+          { name: 'Status', key: 'status', x: 505, w: 45 }
         ];
         const rows = data.map(item => ({
           name: item.name,
-          cat: item.category,
+          inQty: item.quantity_purchased || 0,
+          sold: item.quantity_sold || 0,
           stock: item.current_stock,
           cost: `AED ${parseFloat(item.cost_price || 0).toFixed(2)}`,
-          sell: `AED ${parseFloat(item.selling_price || 0).toFixed(2)}`,
+          stockVal: `AED ${parseFloat(item.stock_cost_value ?? (item.current_stock * (item.cost_price || 0))).toFixed(2)}`,
+          sales: `AED ${parseFloat(item.sales_revenue || 0).toFixed(2)}`,
           status: item.current_stock === 0 ? 'Out' : (item.current_stock <= 5 ? 'Low' : 'Good')
         }));
         currentY = drawTableHeaders(headers, cols, currentY);

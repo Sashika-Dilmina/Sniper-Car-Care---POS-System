@@ -1522,6 +1522,9 @@ const getReportPDF = asyncHandler(async (req, res) => {
     }
     reportData = await buildProfitLossData({ start_date, end_date });
   } else if (tab === 'stock') {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required for Stock Report' });
+    }
     reportData = await buildStockData({ start_date, end_date });
   } else if (tab === 'payment') {
     reportData = await buildPaymentTypeData({ start_date, end_date });
@@ -1610,42 +1613,188 @@ const getReportPDF = asyncHandler(async (req, res) => {
 // @route   GET /api/analytics/reports/stock
 // @access  Private (Admin)
 const buildStockData = async ({ start_date, end_date } = {}) => {
-  let dateFilter = '';
-  const params = [];
+  const effectiveStart = start_date || end_date || null;
+  const effectiveEnd = end_date || start_date || null;
+  const hasDateFilter = Boolean(effectiveStart && effectiveEnd);
 
-  if (start_date && end_date) {
-    dateFilter = 'AND DATE(o.created_at) BETWEEN ? AND ?';
-    params.push(start_date, end_date);
-  }
-
-  const query = `
+  // 1. Fetch only real, active retail stock products (exclude deleted/test items and all services)
+  const [products] = await pool.query(`
     SELECT
       p.id,
       p.name,
       p.category,
-      p.stock AS current_stock,
+      p.stock,
       p.price AS selling_price,
       p.purchase_price AS cost_price,
-      COALESCE(SUM(CASE WHEN o.payment_status IN ('paid', 'credit') AND o.status != 'cancelled' AND (o.is_deleted = 0 OR o.is_deleted IS NULL) ${dateFilter} THEN oi.quantity ELSE 0 END), 0) AS quantity_sold,
-      CASE 
-        WHEN p.stock = 0 THEN 'Out of Stock'
-        WHEN p.stock <= 5 THEN 'Low Stock'
-        ELSE 'Good'
-      END AS stock_status,
-      CASE 
-        WHEN p.stock <= 5 THEN (5 - p.stock)
-        ELSE 0
-      END AS quantity_short
+      DATE_FORMAT(p.created_at, '%Y-%m-%d') AS created_date
     FROM products p
-    LEFT JOIN order_items oi ON p.id = oi.product_id
-    LEFT JOIN orders o ON oi.order_id = o.id
-    WHERE p.category != 'Services'
-    GROUP BY p.id
+    WHERE (p.is_deleted = 0 OR p.is_deleted IS NULL)
+      AND LOWER(TRIM(p.category)) IN ('car freshner', 'car freshener', 'acce', 'accessories')
     ORDER BY p.name ASC
-  `;
+  `);
 
-  const [stockData] = await pool.query(query, params);
-  return stockData;
+  if (products.length === 0) {
+    return [];
+  }
+
+  const productIds = products.map((p) => p.id);
+
+  // 2. Fetch real product sales (period + post-period to compute exact historical stock balances)
+  let salesQuery;
+  let salesParams;
+  if (hasDateFilter) {
+    salesQuery = `
+      SELECT
+        oi.product_id,
+        COALESCE(SUM(CASE WHEN DATE(o.created_at) BETWEEN ? AND ? THEN oi.quantity ELSE 0 END), 0) AS period_qty,
+        COALESCE(SUM(CASE WHEN DATE(o.created_at) BETWEEN ? AND ? THEN
+          (oi.quantity * oi.price) -
+          IF(o.discount > 0 AND (o.total + o.discount) > 0,
+             o.discount * ((oi.quantity * oi.price) / (o.total + o.discount)),
+             0)
+        ELSE 0 END), 0) AS period_revenue,
+        COALESCE(SUM(CASE WHEN DATE(o.created_at) > ? THEN oi.quantity ELSE 0 END), 0) AS after_end_qty
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      WHERE oi.product_id IN (?)
+        AND o.status != 'cancelled'
+        AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
+      GROUP BY oi.product_id
+    `;
+    salesParams = [effectiveStart, effectiveEnd, effectiveStart, effectiveEnd, effectiveEnd, productIds];
+  } else {
+    salesQuery = `
+      SELECT
+        oi.product_id,
+        COALESCE(SUM(oi.quantity), 0) AS period_qty,
+        COALESCE(SUM(
+          (oi.quantity * oi.price) -
+          IF(o.discount > 0 AND (o.total + o.discount) > 0,
+             o.discount * ((oi.quantity * oi.price) / (o.total + o.discount)),
+             0)
+        ), 0) AS period_revenue,
+        0 AS after_end_qty
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      WHERE oi.product_id IN (?)
+        AND o.status != 'cancelled'
+        AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
+      GROUP BY oi.product_id
+    `;
+    salesParams = [productIds];
+  }
+
+  // 3. Fetch real product purchases (stock-in) from purchases table
+  let purchasesQuery;
+  let purchasesParams;
+  if (hasDateFilter) {
+    purchasesQuery = `
+      SELECT
+        LOWER(TRIM(item_name)) AS norm_name,
+        COALESCE(SUM(CASE WHEN DATE(purchase_date) BETWEEN ? AND ? THEN quantity ELSE 0 END), 0) AS period_qty,
+        COALESCE(SUM(CASE WHEN DATE(purchase_date) BETWEEN ? AND ? THEN total_price ELSE 0 END), 0) AS period_cost,
+        COALESCE(SUM(CASE WHEN DATE(purchase_date) > ? THEN quantity ELSE 0 END), 0) AS after_end_qty
+      FROM purchases
+      WHERE (is_deleted = 0 OR is_deleted IS NULL)
+        AND LOWER(TRIM(category)) = 'product'
+      GROUP BY LOWER(TRIM(item_name))
+    `;
+    purchasesParams = [effectiveStart, effectiveEnd, effectiveStart, effectiveEnd, effectiveEnd];
+  } else {
+    purchasesQuery = `
+      SELECT
+        LOWER(TRIM(item_name)) AS norm_name,
+        COALESCE(SUM(quantity), 0) AS period_qty,
+        COALESCE(SUM(total_price), 0) AS period_cost,
+        0 AS after_end_qty
+      FROM purchases
+      WHERE (is_deleted = 0 OR is_deleted IS NULL)
+        AND LOWER(TRIM(category)) = 'product'
+      GROUP BY LOWER(TRIM(item_name))
+    `;
+    purchasesParams = [];
+  }
+
+  const [[salesRows], [purchaseRows]] = await Promise.all([
+    pool.query(salesQuery, salesParams),
+    pool.query(purchasesQuery, purchasesParams)
+  ]);
+
+  const salesByProductId = new Map();
+  for (const row of salesRows) {
+    salesByProductId.set(row.product_id, row);
+  }
+
+  const purchasesByName = new Map();
+  for (const row of purchaseRows) {
+    purchasesByName.set(row.norm_name, row);
+  }
+
+  const results = [];
+
+  for (const p of products) {
+    const sales = salesByProductId.get(p.id) || {};
+    const normName = (p.name || '').trim().toLowerCase();
+    const purch = purchasesByName.get(normName) || {};
+
+    const liveStock = Math.max(0, parseInt(p.stock || 0, 10));
+    const quantitySold = parseInt(sales.period_qty || 0, 10);
+    const salesRevenue = parseFloat(sales.period_revenue || 0);
+    const quantityPurchased = parseInt(purch.period_qty || 0, 10);
+    const purchaseCost = parseFloat(purch.period_cost || 0);
+
+    const soldAfterEnd = hasDateFilter ? parseInt(sales.after_end_qty || 0, 10) : 0;
+    const purchasedAfterEnd = hasDateFilter ? parseInt(purch.after_end_qty || 0, 10) : 0;
+
+    // When a date filter is applied, only include products with real activity (sold, purchased, or added) in that date range
+    if (hasDateFilter) {
+      const createdInRange = p.created_date && p.created_date >= effectiveStart && p.created_date <= effectiveEnd;
+      if (quantitySold === 0 && quantityPurchased === 0 && !createdInRange) {
+        continue;
+      }
+    }
+
+    const closingStock = hasDateFilter
+      ? Math.max(0, liveStock + soldAfterEnd - purchasedAfterEnd)
+      : liveStock;
+
+    const openingStock = hasDateFilter
+      ? Math.max(0, closingStock + quantitySold - quantityPurchased)
+      : Math.max(0, liveStock + quantitySold - quantityPurchased);
+
+    const costPrice = parseFloat(p.cost_price || 0);
+    const sellingPrice = parseFloat(p.selling_price || 0);
+    const stockCostValue = Number((closingStock * costPrice).toFixed(2));
+    const stockSellingValue = Number((closingStock * sellingPrice).toFixed(2));
+    const netSalesRevenue = Number(salesRevenue.toFixed(2));
+    const salesProfit = Number((salesRevenue - (quantitySold * costPrice)).toFixed(2));
+
+    const stockStatus = closingStock === 0 ? 'Out of Stock' : (closingStock <= 5 ? 'Low Stock' : 'Good');
+    const quantityShort = closingStock <= 5 ? (5 - closingStock) : 0;
+
+    results.push({
+      id: p.id,
+      name: (p.name || '').trim(),
+      category: p.category,
+      live_stock: liveStock,
+      opening_stock: openingStock,
+      quantity_purchased: quantityPurchased,
+      purchase_cost: Number(purchaseCost.toFixed(2)),
+      quantity_sold: quantitySold,
+      current_stock: closingStock,
+      cost_price: costPrice,
+      selling_price: sellingPrice,
+      stock_cost_value: stockCostValue,
+      stock_selling_value: stockSellingValue,
+      sales_revenue: netSalesRevenue,
+      sales_profit: salesProfit,
+      stock_status: stockStatus,
+      quantity_short: quantityShort,
+      created_date: p.created_date
+    });
+  }
+
+  return results;
 };
 
 // @desc    Get Stock report
@@ -1653,11 +1802,28 @@ const buildStockData = async ({ start_date, end_date } = {}) => {
 // @access  Private (Admin)
 const getStockReport = asyncHandler(async (req, res) => {
   const { start_date, end_date } = req.query;
-  const stockData = await buildStockData({ start_date, end_date });
+  const effectiveStart = start_date || end_date || null;
+  const effectiveEnd = end_date || start_date || null;
+  const stockData = await buildStockData({ start_date: effectiveStart, end_date: effectiveEnd });
+
+  const summary = {
+    total_products: stockData.length,
+    total_stock_items: stockData.reduce((sum, item) => sum + item.current_stock, 0),
+    out_of_stock_items: stockData.filter((item) => item.current_stock === 0).length,
+    low_stock_items: stockData.filter((item) => item.current_stock > 0 && item.current_stock <= 5).length,
+    total_units_purchased: stockData.reduce((sum, item) => sum + item.quantity_purchased, 0),
+    total_units_sold: stockData.reduce((sum, item) => sum + item.quantity_sold, 0),
+    total_stock_cost_value: Number(stockData.reduce((sum, item) => sum + item.stock_cost_value, 0).toFixed(2)),
+    total_stock_selling_value: Number(stockData.reduce((sum, item) => sum + item.stock_selling_value, 0).toFixed(2)),
+    total_sales_revenue: Number(stockData.reduce((sum, item) => sum + item.sales_revenue, 0).toFixed(2)),
+    total_sales_profit: Number(stockData.reduce((sum, item) => sum + item.sales_profit, 0).toFixed(2))
+  };
 
   res.json({
     success: true,
-    period: { start_date: start_date || 'All Time', end_date: end_date || 'All Time' },
+    filtered: Boolean(effectiveStart && effectiveEnd),
+    period: { start_date: effectiveStart || 'All Time', end_date: effectiveEnd || 'All Time' },
+    summary,
     stock: stockData
   });
 });

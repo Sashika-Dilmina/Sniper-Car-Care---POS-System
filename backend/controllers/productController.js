@@ -81,17 +81,18 @@ const updateProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { name, description, category, price, stock, image_url, supplier_id, vehicle_type, purchase_price, is_active } = req.body;
 
-  const [products] = await pool.query('SELECT id, stock FROM products WHERE id = ?', [id]);
+  const [products] = await pool.query('SELECT id, stock, purchase_price FROM products WHERE id = ?', [id]);
   if (products.length === 0) {
     return res.status(404).json({ message: 'Product not found' });
   }
 
   const activeVal = is_active !== undefined ? (is_active ? 1 : 0) : 1;
   const finalStock = stock !== undefined ? stock : products[0].stock;
+  const finalPurchasePrice = purchase_price !== undefined ? purchase_price : (products[0].purchase_price || 0.00);
 
   await pool.query(
     'UPDATE products SET name = ?, description = ?, category = ?, price = ?, stock = ?, image_url = ?, supplier_id = ?, vehicle_type = ?, purchase_price = ?, is_active = ?, is_deleted = 0 WHERE id = ?',
-    [name, description, category, price, finalStock, image_url || null, supplier_id || null, vehicle_type || 'Both', purchase_price || 0.00, activeVal, id]
+    [name, description, category, price, finalStock, image_url || null, supplier_id || null, vehicle_type || 'Both', finalPurchasePrice, activeVal, id]
   );
 
   const [updated] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);

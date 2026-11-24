@@ -126,7 +126,7 @@ const Products = () => {
       return;
     }
 
-    if (formData.purchase_price < 0) {
+    if (user?.role === 'admin' && formData.purchase_price < 0) {
       toast.error('Purchase price cannot be negative');
       return;
     }
@@ -134,8 +134,13 @@ const Products = () => {
     const payload = {
       ...formData,
       price: parseFloat(formData.price) || 0,
-      purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0
     };
+
+    if (user?.role === 'admin') {
+      payload.purchase_price = formData.purchase_price ? parseFloat(formData.purchase_price) : 0;
+    } else {
+      delete payload.purchase_price;
+    }
 
     if (editingProduct) {
       delete payload.stock;
@@ -351,7 +356,9 @@ const Products = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Image</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Price</th>
+              {user?.role === 'admin' && (
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Price</th>
+              )}
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Selling Price</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
               {user?.role === 'admin' && (
@@ -400,9 +407,11 @@ const Products = () => {
                       {product.category}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    AED {parseFloat(product.purchase_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </td>
+                  {user?.role === 'admin' && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      AED {parseFloat(product.purchase_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
                     AED {parseFloat(product.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </td>
@@ -454,7 +463,7 @@ const Products = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="6" className="px-6 py-12 text-center">
+                <td colSpan={user?.role === 'admin' ? 7 : 6} className="px-6 py-12 text-center">
                   <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                   </svg>
@@ -589,21 +598,23 @@ const Products = () => {
                   </p>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Purchase Price
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={formData.purchase_price}
-                    onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg"
-                  />
-                </div>
+              <div className={`grid ${user?.role === 'admin' ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+                {user?.role === 'admin' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Purchase Price
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      value={formData.purchase_price}
+                      onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Selling Price

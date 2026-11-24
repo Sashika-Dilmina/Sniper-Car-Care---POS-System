@@ -65,6 +65,7 @@ const Reports = () => {
   const [stockStartDate, setStockStartDate] = useState('');
   const [stockEndDate, setStockEndDate] = useState('');
   const [stockReport, setStockReport] = useState(null);
+  const [stockReportMeta, setStockReportMeta] = useState({ filtered: false, period: null, summary: null });
   const [stockLoading, setStockLoading] = useState(false);
 
   // Commission Report State
@@ -174,10 +175,10 @@ const Reports = () => {
       if (!printRegisterId) {
         setSelectedRegisterReport(null);
       }
-    } else if (activeTab === 'stock') {
+    } else if (activeTab === 'stock' && user?.role === 'admin') {
       fetchStockReport();
     }
-  }, [activeTab, printRegisterId]);
+  }, [activeTab, printRegisterId, user?.role]);
 
   // Daily Business Summary
   const fetchDailySummary = async () => {
@@ -309,16 +310,27 @@ const Reports = () => {
     }
   };
 
-  // Stock Report
-  const fetchStockReport = async () => {
+  // Stock Report (Admin Only)
+  const fetchStockReport = async (overrideStart = undefined, overrideEnd = undefined) => {
+    if (user?.role !== 'admin') return;
     setStockLoading(true);
     try {
+      const sDate = overrideStart !== undefined ? overrideStart : stockStartDate;
+      const eDate = overrideEnd !== undefined ? overrideEnd : stockEndDate;
+      const effectiveStart = sDate || eDate;
+      const effectiveEnd = eDate || sDate;
+
       let url = '/api/analytics/reports/stock';
-      if (stockStartDate && stockEndDate) {
-        url += `?start_date=${stockStartDate}&end_date=${stockEndDate}`;
+      if (effectiveStart && effectiveEnd) {
+        url += `?start_date=${effectiveStart}&end_date=${effectiveEnd}`;
       }
       const response = await axios.get(url);
       setStockReport(response.data.stock || []);
+      setStockReportMeta({
+        filtered: Boolean(response.data.filtered),
+        period: response.data.period || null,
+        summary: response.data.summary || null
+      });
     } catch (err) {
       toast.error('Failed to generate stock report');
     } finally {
@@ -510,9 +522,11 @@ const Reports = () => {
         params.append('start_date', plStartDate);
         params.append('end_date', plEndDate);
       } else if (activeTab === 'stock') {
-        if (stockStartDate && stockEndDate) {
-          params.append('start_date', stockStartDate);
-          params.append('end_date', stockEndDate);
+        const effectiveStart = stockStartDate || stockEndDate;
+        const effectiveEnd = stockEndDate || stockStartDate;
+        if (effectiveStart && effectiveEnd) {
+          params.append('start_date', effectiveStart);
+          params.append('end_date', effectiveEnd);
         }
       } else if (activeTab === 'payment') {
         if (!paymentStartDate || !paymentEndDate) {
@@ -1997,8 +2011,8 @@ const Reports = () => {
         </div>
       )}
 
-      {/* Stock Report */}
-      {activeTab === 'stock' && (
+      {/* Stock Report (Admin Only) */}
+      {activeTab === 'stock' && user?.role === 'admin' && (
         <div className="bg-white p-6 rounded-lg shadow space-y-6">
           <div className="flex justify-between items-center border-b pb-4 no-print">
             <h2 className="text-xl font-bold text-gray-800">Stock Inventory Report</h2>
@@ -2028,7 +2042,7 @@ const Reports = () => {
 
           <div className="mb-4 flex flex-col sm:flex-row gap-4 items-end bg-gray-50 p-4 rounded-xl border no-print">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date (for sales count)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <input
                 type="date"
                 value={stockStartDate}
@@ -2037,7 +2051,7 @@ const Reports = () => {
               />
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">End Date (for sales count)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
               <input
                 type="date"
                 value={stockEndDate}
@@ -2045,118 +2059,225 @@ const Reports = () => {
                 className="w-full px-4 py-2 border rounded-lg bg-white"
               />
             </div>
-            <button
-              onClick={fetchStockReport}
-              disabled={stockLoading}
-              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-bold"
-            >
-              {stockLoading ? 'Generating...' : 'Generate Report'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => fetchStockReport()}
+                disabled={stockLoading}
+                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-bold"
+              >
+                {stockLoading ? 'Generating...' : 'Generate Report'}
+              </button>
+              {(stockStartDate || stockEndDate || stockReportMeta.filtered) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStockStartDate('');
+                    setStockEndDate('');
+                    fetchStockReport('', '');
+                  }}
+                  disabled={stockLoading}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-semibold text-sm"
+                >
+                  Clear (All Time)
+                </button>
+              )}
+            </div>
           </div>
 
-          {stockReport && (
-            <div className="space-y-6 print-full-width">
-              {/* Report Header for printing */}
-              <div className="hidden print:block text-center border-b pb-4">
-                <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
-                <h2 className="text-base font-bold text-gray-650">Stock Inventory & Sales Report</h2>
-                <p className="text-xs text-gray-450 mt-1">
-                  Sales Period: {stockStartDate && stockEndDate ? `${stockStartDate} to ${stockEndDate}` : 'All Time'}
-                </p>
-                <p className="text-xs text-gray-450">Generated At: {new Date().toLocaleString()}</p>
-              </div>
+          {stockReport && (() => {
+            const totalStockUnits = stockReport.reduce((sum, item) => sum + parseInt(item.current_stock || 0, 10), 0);
+            const outOfStockCount = stockReport.filter(item => parseInt(item.current_stock || 0, 10) === 0).length;
+            const lowStockCount = stockReport.filter(item => parseInt(item.current_stock || 0, 10) <= 5 && parseInt(item.current_stock || 0, 10) > 0).length;
+            const totalUnitsSold = stockReport.reduce((sum, item) => sum + parseInt(item.quantity_sold || 0, 10), 0);
+            const totalUnitsPurchased = stockReport.reduce((sum, item) => sum + parseInt(item.quantity_purchased || 0, 10), 0);
+            const totalStockCostValue = stockReport.reduce((sum, item) => sum + parseFloat(item.stock_cost_value ?? (parseInt(item.current_stock || 0, 10) * parseFloat(item.cost_price || 0))), 0);
+            const totalStockSellingValue = stockReport.reduce((sum, item) => sum + parseFloat(item.stock_selling_value ?? (parseInt(item.current_stock || 0, 10) * parseFloat(item.selling_price || 0))), 0);
+            const totalSalesRevenue = stockReport.reduce((sum, item) => sum + parseFloat(item.sales_revenue || 0), 0);
+            const totalSalesProfit = stockReport.reduce((sum, item) => sum + parseFloat(item.sales_profit ?? (parseFloat(item.sales_revenue || 0) - (parseInt(item.quantity_sold || 0, 10) * parseFloat(item.cost_price || 0)))), 0);
+            const periodLabel = stockReportMeta.filtered && stockReportMeta.period
+              ? (stockReportMeta.period.start_date === stockReportMeta.period.end_date
+                ? stockReportMeta.period.start_date
+                : `${stockReportMeta.period.start_date} to ${stockReportMeta.period.end_date}`)
+              : 'All Time (Current Live Inventory)';
 
-              {/* Summary Metrics */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl text-center">
-                  <span className="text-xs text-gray-500 uppercase font-black">Total Stock Items</span>
-                  <p className="text-2xl font-black text-blue-700 mt-1">
-                    {stockReport.reduce((sum, item) => sum + parseInt(item.current_stock || 0), 0)}
-                  </p>
+            return (
+              <div className="space-y-6 print-full-width">
+                {/* Report Header for printing */}
+                <div className="hidden print:block text-center border-b pb-4">
+                  <h1 className="text-2xl font-black uppercase tracking-wide">SNIPER CAR CARE</h1>
+                  <h2 className="text-base font-bold text-gray-650">Stock Inventory & Sales Report</h2>
+                  <p className="text-xs text-gray-450 mt-1">Period: {periodLabel}</p>
+                  <p className="text-xs text-gray-450">Generated At: {new Date().toLocaleString()}</p>
                 </div>
-                <div className="bg-red-50/50 border border-red-100 p-4 rounded-xl text-center">
-                  <span className="text-xs text-gray-500 uppercase font-black">Out of Stock Items</span>
-                  <p className="text-2xl font-black text-red-700 mt-1">
-                    {stockReport.filter(item => parseInt(item.current_stock || 0) === 0).length}
-                  </p>
-                </div>
-                <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl text-center">
-                  <span className="text-xs text-gray-500 uppercase font-black">Low Stock Items (≤5)</span>
-                  <p className="text-2xl font-black text-amber-700 mt-1">
-                    {stockReport.filter(item => parseInt(item.current_stock || 0) <= 5 && parseInt(item.current_stock || 0) > 0).length}
-                  </p>
-                </div>
-                <div className="bg-green-50/50 border border-green-100 p-4 rounded-xl text-center">
-                  <span className="text-xs text-gray-500 uppercase font-black">Total Units Sold (Period)</span>
-                  <p className="text-2xl font-black text-green-700 mt-1">
-                    {stockReport.reduce((sum, item) => sum + parseInt(item.quantity_sold || 0), 0)}
-                  </p>
-                </div>
-              </div>
 
-              {/* Table of Details */}
-              <div className="overflow-x-auto border rounded-xl shadow-sm bg-white">
-                <table className="w-full text-xs text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-100 border-b font-bold text-gray-700">
-                      <th className="p-3">Product ID</th>
-                      <th className="p-3">Product Name</th>
-                      <th className="p-3">Category</th>
-                      <th className="p-3 text-right">Cost Price (AED)</th>
-                      <th className="p-3 text-right">Selling Price (AED)</th>
-                      <th className="p-3 text-right">Qty Sold</th>
-                      <th className="p-3 text-right">Qty Remaining (Stock)</th>
-                      <th className="p-3 text-center">Status</th>
-                      <th className="p-3 text-right">Shortage Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {stockReport.length > 0 ? (
-                      stockReport.map((item) => (
-                        <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="p-3 font-mono text-gray-500">#{item.id}</td>
-                          <td className="p-3 font-bold text-gray-800">{item.name}</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-slate-100 text-slate-700">
-                              {item.category}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right font-mono text-gray-650">
-                            {parseFloat(item.cost_price || 0).toFixed(2)}
-                          </td>
-                          <td className="p-3 text-right font-mono text-gray-900 font-semibold">
-                            {parseFloat(item.selling_price || 0).toFixed(2)}
-                          </td>
-                          <td className="p-3 text-right font-semibold text-green-600">{item.quantity_sold}</td>
-                          <td className={`p-3 text-right font-extrabold ${parseInt(item.current_stock || 0) === 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                            {item.current_stock}
-                          </td>
-                          <td className="p-3 text-center">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
-                              item.stock_status === 'Out of Stock' ? 'bg-red-100 text-red-800' :
-                              item.stock_status === 'Low Stock' ? 'bg-amber-100 text-amber-800' :
-                              'bg-green-100 text-green-800'
-                            }`}>
-                              {item.stock_status}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right font-bold text-red-650">
-                            {item.quantity_short > 0 ? `${item.quantity_short} units` : '-'}
+                {/* Active filter info badge */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600 bg-slate-50 px-4 py-2.5 rounded-lg border no-print">
+                  <span>
+                    Showing <strong>{stockReport.length}</strong> real product(s) · Period: <strong>{periodLabel}</strong>
+                  </span>
+                  {stockReportMeta.filtered && (
+                    <span className="text-primary-700 font-semibold">
+                      Filtered: displaying only items with sales, purchases, or additions in this date range
+                    </span>
+                  )}
+                </div>
+
+                {/* Quantity Summary Metrics */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl text-center">
+                    <span className="text-xs text-gray-500 uppercase font-black">Total Stock Units</span>
+                    <p className="text-2xl font-black text-blue-700 mt-1">{totalStockUnits}</p>
+                  </div>
+                  <div className="bg-red-50/50 border border-red-100 p-4 rounded-xl text-center">
+                    <span className="text-xs text-gray-500 uppercase font-black">Out of Stock Items</span>
+                    <p className="text-2xl font-black text-red-700 mt-1">{outOfStockCount}</p>
+                  </div>
+                  <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl text-center">
+                    <span className="text-xs text-gray-500 uppercase font-black">Low Stock Items (≤5)</span>
+                    <p className="text-2xl font-black text-amber-700 mt-1">{lowStockCount}</p>
+                  </div>
+                  <div className="bg-green-50/50 border border-green-100 p-4 rounded-xl text-center">
+                    <span className="text-xs text-gray-500 uppercase font-black">Total Units Sold</span>
+                    <p className="text-2xl font-black text-green-700 mt-1">{totalUnitsSold}</p>
+                  </div>
+                </div>
+
+                {/* Financial Stock Value Summary Metrics */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl text-center">
+                    <span className="text-xs text-gray-500 uppercase font-black">Stock Value (Cost)</span>
+                    <p className="text-xl font-black text-slate-800 mt-1">
+                      AED {totalStockCostValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="bg-indigo-50/60 border border-indigo-100 p-4 rounded-xl text-center">
+                    <span className="text-xs text-gray-500 uppercase font-black">Stock Value (Selling)</span>
+                    <p className="text-xl font-black text-indigo-700 mt-1">
+                      AED {totalStockSellingValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="bg-emerald-50/60 border border-emerald-100 p-4 rounded-xl text-center">
+                    <span className="text-xs text-gray-500 uppercase font-black">Sales Revenue</span>
+                    <p className="text-xl font-black text-emerald-700 mt-1">
+                      AED {totalSalesRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="bg-teal-50/60 border border-teal-100 p-4 rounded-xl text-center">
+                    <span className="text-xs text-gray-500 uppercase font-black">Sales Profit</span>
+                    <p className={`text-xl font-black mt-1 ${totalSalesProfit >= 0 ? 'text-teal-700' : 'text-red-600'}`}>
+                      AED {totalSalesProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Table of Details */}
+                <div className="overflow-x-auto border rounded-xl shadow-sm bg-white">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100 border-b font-bold text-gray-700">
+                        <th className="p-3">ID</th>
+                        <th className="p-3">Product Name</th>
+                        <th className="p-3">Category</th>
+                        <th className="p-3 text-right">Cost Price (AED)</th>
+                        <th className="p-3 text-right">Selling Price (AED)</th>
+                        {stockReportMeta.filtered && (
+                          <th className="p-3 text-right">Opening</th>
+                        )}
+                        <th className="p-3 text-right">Stock In</th>
+                        <th className="p-3 text-right">Qty Sold</th>
+                        <th className="p-3 text-right">Qty Remaining</th>
+                        <th className="p-3 text-right">Stock Value (Cost)</th>
+                        <th className="p-3 text-right">Sales Total (AED)</th>
+                        <th className="p-3 text-center">Status</th>
+                        <th className="p-3 text-right">Shortage Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {stockReport.length > 0 ? (
+                        stockReport.map((item) => {
+                          const remStock = parseInt(item.current_stock || 0, 10);
+                          const costVal = parseFloat(item.stock_cost_value ?? (remStock * parseFloat(item.cost_price || 0)));
+                          const salesVal = parseFloat(item.sales_revenue || 0);
+                          return (
+                            <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="p-3 font-mono text-gray-500">#{item.id}</td>
+                              <td className="p-3 font-bold text-gray-800">{item.name}</td>
+                              <td className="p-3">
+                                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-slate-100 text-slate-700">
+                                  {item.category}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-mono text-gray-650">
+                                {parseFloat(item.cost_price || 0).toFixed(2)}
+                              </td>
+                              <td className="p-3 text-right font-mono text-gray-900 font-semibold">
+                                {parseFloat(item.selling_price || 0).toFixed(2)}
+                              </td>
+                              {stockReportMeta.filtered && (
+                                <td className="p-3 text-right font-mono text-gray-600">
+                                  {item.opening_stock ?? 0}
+                                </td>
+                              )}
+                              <td className="p-3 text-right font-semibold text-blue-600">
+                                {item.quantity_purchased || 0}
+                              </td>
+                              <td className="p-3 text-right font-semibold text-green-600">
+                                {item.quantity_sold || 0}
+                              </td>
+                              <td className={`p-3 text-right font-extrabold ${remStock === 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                                {remStock}
+                              </td>
+                              <td className="p-3 text-right font-mono text-slate-700 font-semibold">
+                                {costVal.toFixed(2)}
+                              </td>
+                              <td className="p-3 text-right font-mono text-emerald-700 font-semibold">
+                                {salesVal.toFixed(2)}
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
+                                  item.stock_status === 'Out of Stock' ? 'bg-red-100 text-red-800' :
+                                  item.stock_status === 'Low Stock' ? 'bg-amber-100 text-amber-800' :
+                                  'bg-green-100 text-green-800'
+                                }`}>
+                                  {item.stock_status}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-bold text-red-650">
+                                {item.quantity_short > 0 ? `${item.quantity_short} units` : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={stockReportMeta.filtered ? 13 : 12} className="p-6 text-center text-gray-400">
+                            {stockReportMeta.filtered
+                              ? 'No stock activity (sales, purchases, or new items) found for the selected date range.'
+                              : 'No active stock products registered in the database.'}
                           </td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="9" className="p-6 text-center text-gray-400">
-                          No stock items registered in the database.
-                        </td>
-                      </tr>
+                      )}
+                    </tbody>
+                    {stockReport.length > 0 && (
+                      <tfoot className="bg-gray-100 border-t-2 border-gray-300 font-extrabold text-gray-900">
+                        <tr>
+                          <td colSpan={stockReportMeta.filtered ? 6 : 5} className="p-3 text-right uppercase tracking-wider">
+                            Totals ({stockReport.length} products)
+                          </td>
+                          <td className="p-3 text-right text-blue-700">{totalUnitsPurchased}</td>
+                          <td className="p-3 text-right text-green-700">{totalUnitsSold}</td>
+                          <td className="p-3 text-right">{totalStockUnits}</td>
+                          <td className="p-3 text-right font-mono">AED {totalStockCostValue.toFixed(2)}</td>
+                          <td className="p-3 text-right font-mono text-emerald-700">AED {totalSalesRevenue.toFixed(2)}</td>
+                          <td colSpan="2" className="p-3"></td>
+                        </tr>
+                      </tfoot>
                     )}
-                  </tbody>
-                </table>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
